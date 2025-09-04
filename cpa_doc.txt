@@ -1,0 +1,1564 @@
+﻿AdW der DDR                                
+               Institut fuer Informatik                  Berlin, den 11.09.86 
+               und Rechentechnik                         RN/SE/IMPL-SB/001 
+               Abt.Systementwicklung 
+                
+                
+                
+                
+                           Beschreibung des Betriebssystems CP/A 
+                               fuer Buerocomputer und PC 1715 
+                
+               1. Ueberblick 
+                
+               Das  Betriebssystem CP/A wurde am Institut fuer Informatik und  
+               Rechentechnik  der  AdW der DDR als Hilfsmittel zur  Software- 
+               Entwicklung  und zur Unterstuetzung von  Schreibarbeiten  ent- 
+               wickelt.  Es ist mit dem Betriebssystem CP/M kompatibel,  d.h.  
+               saemtliche  fuer  dieses Betriebssystem  vorhandene  Anwender- 
+               Software kann unveraendert benutzt werden.  CP/A ist fuer Bue- 
+               rocomputer vom Typ A5120 und A5130 bzw. hardwaremaessig aequi- 
+               valenten Anlagen (z.B.  K8924, K8927) sowie fuer PC 1715 gene- 
+               rierbar. 
+                
+               Folgende Konfigurationen werden unterstuetzt: 
+               - 32..64 K Byte RAM, 
+               - evtl.  vorhandene  OSS-Speichererweiterung  (48K)  als  RAM- 
+                 Floppy 'M:', 
+                 Nichtexistenz bei Kaltstart automatisch erkannt, 
+               - Bildschirm  24 x 80 oder 16 x 64, 
+                 bei Kaltstart auf Buerocomputer automatisch, 
+                 auf PC1715 halbautomatisch erkannt, 
+                 Steuerzeichen SCP-kompatibel 
+               - Tastaturen K7604/06,  K7634,  K7636 und K7637  bzw.  PC1715- 
+                 Tastatur, 
+                 untersch.  Tastaturen  bei  A51xx bei Kaltstart  automatisch  
+                 erkannt, 
+               - Disketten 5" (40 und 80 Track;  DD, SS) sowie 8" (SD, SS) 
+                 mit 2-Prozessor-CPU-Karte K2526 als Ansteuerung, 
+                 bzw. PC1715 5" (40 und 80 Track; DD; SS und DS), 
+                 mehrere  physische  Formate (u.a.  SCP komatibel),  die  bei  
+                 LOGIN automatisch erkannt werden, 
+               - Drucker: 
+                 1152, 1157, K63xx (PIO1, PIO2, IFSS, AFS-Anschluss); 
+                 1154 (PIO-Spezialanschluss); 
+                 1156 (PIO-Spezialanschluss FZB Muencheberg); 
+                 bei PC1715 serielle Drucker an Printer/V.24/IFSS A/IFSS B. 
+                  
+               Sonstige Peripherie (z.B.  Lochstreifen, Kassetten) wird durch  
+               spezielle Dienstprogramme auf Anwenderniveau unterstuetzt,  da  
+               ihre Nutzung i.a. nicht staendig erfolgt. 
+                
+               CP/A zeichnet sich aus durch 
+               - einheitliche Nutzeroberflaeche fuer die verschiedenen Buero- 
+                 computer-Typen  und  PC1715,  so dass ein  Wechsel  zwischen  
+                 diesen Geraeten relativ problemlos ist, 
+               - leichte    Anpassbarkeit    an   gewuenschte   Hardware- und  
+                 Software-Konfigurationen    (Neuuebersetzung des als  Quell- 
+                 text verfuegbaren Betriebssystemteils BIOS, der entsprechend  
+                 dem  Leistungsumfang  in  seiner  Groesse  verschieden  sein  
+                 kann!;   Linken gemeinsam mit den restlichen  Systembestand- 
+                 teilen), 
+               - Ausnutzung der Hardware-Moeglichkeiten des Rechners und  der  
+                 angeschlossenen Peripherie, 
+               - automatische   Anpassung  an  wichtige   Hardwarekomponenten  
+                 (Tastatur, Bildschirm) beim Laden des Systems, 
+ 
+
+
+
+               - keinerlei  Notwendigkeit zu Veraenderungen am  Buerocomputer  
+                 (z.B.   Lade-PROM,  sowohl  mit  altem  als auch  mit  neuem  
+                 (SCP)Lade-PROM ladbar),  womit der Rechner auch fuer  andere  
+                 Anwendungen einsetzbar bleibt, 
+               - einfache Struktur,  die aufgrund weniger,  fest  definierter  
+                 Schnittstellen  sowohl eine einfache Bedienung als auch fle- 
+                 xible Erweiterungen zulaesst. 
+                
+               Das  Betriebssystem CP/A besteht aus den drei Hauptteilen BIOS  
+               (Basic  Input/Output  System),   BDOS  (Basic  Disk  Operating  
+               System) und CCP (Console Command Processor),  die dem Anwender  
+               als Quelltext (BIOS) bzw.  als Link-Eingaben (BDOS,  CCP) fuer  
+               die Systemgenerierung zur Verfuegung stehen. 
+                
+                
+               2. Kaltstart des Systems  
+                
+               Vom  Kaltstart-Loader des jeweiligen Rechnersystems  wird  auf  
+               allen  Diskettenlaufwerden  nach einer bestimmten Kennung  ge- 
+               sucht.  Die  erste  passenden  Diskette  wird  als  Kaltstart- 
+               Diskette  benutzt  und die sogenannten Systemspuren  von  dort  
+               geladen.   Die  Kaltstartdisketten fuer A51xx und PC1715  sind  
+               nicht kompatibel. 
+               Das  Betriebssystem  CP/A  befindet sich  auf  der  Kaltstart- 
+               Diskette als File mit dem (festen) Namen @OS.COM. 
+               Beim  Berocomputer besitzt die Kaltstart-Diskette  neben  zwei  
+               speziellen  Systemspuren auf Spur 0 und 1 ein  Bibliotheksver- 
+               zeichnis  ab Spur 2.  Beim PC1715 ist der Systemlader im  Ver- 
+               zeichnis  versteckt,  so  dass auch  Kaltstartdisketten  keine  
+               Systemspuren haben (Verzeichnis ab Spur 0). 
+               Die Kaltstartdiskette kann nach dem Kaltstart wie andere  Dis- 
+               ketten  benutzt  werden.  In der Regel enthaelt sie  Standard- 
+               Programme und das Abrechnungssystem.  
+                
+               Die Systemdatei @OS.COM kann mit PIP (o.ae. Software) kopiert,  
+               mittels ZSID und SAVE modifiziert worden sein oder auch direkt  
+               eine Link-Ausgabe darstellen.  Sie wird wie eine normale Datei  
+               behandelt  und  kann beim Buerocomputer auf  der  Diskette  ab  
+               einer beliebigen Stelle (u.U. auch gestreut) gespeichert sein,  
+               beim  PC1715 muss sie die erste Datei nach dem Verzeichnis und  
+               dicht gespeichert sein. 
+               Beim  Buerocomputer  steht in den Systemspuren  lediglich  ein  
+               Boot-System,  dass zum Laden des eigentlichen Systems aus  dem  
+               File @OS.COM dient. 
+                
+               Beim  PC1715 erfolgt nach dem Starten des Systems eine automa- 
+               tische Erkennung vorhandener Diskettenlaufwerke. Dazu wird der  
+               Kopf  jedes  Laufwerks auf Spur 0 positioniert,  was  bei  wei  
+               innen stehendem Kopf zu entsprechenden (normalen!) Geraeuschen  
+               fuehren kann. 
+                
+               Nach  dem  Kaltstart wird i.a.  das Programm ACCOUNT  (Abrech- 
+               nungssystem)  von  der Kaltstartdiskette  geladen  und  ausge- 
+               fuehrt. Bei der Systemgenerierung kann jedoch auch ein anderes  
+               Kommando (auch ein leeres oder der Aufruf von SUBMIT fuer eine  
+               ganze  Kommandofolge) als Standardprogramm vereinbart  werden.  
+               Die  Ausuehrung  dieses Programms kann  nach  einem  Kaltstart  
+               infolge eines Systemzusammenbruchs, wo eine Neuanmeldung durch  
+               ACCOUNT nicht sinnvoll ist, durch Betaetigen der STOP- und der  
+               ^C-Taste  (siehe  Tastaturbelegung) waehrend des  Ladevorgangs  
+               unterdrueckt werden. 
+                
+                
+              
+ 
+ 
+ 
+ 
+ 
+ 
+
+
+
+               3. Systemmodifikation 
+                
+               Eine  Modifikation  des Systems ist leicht mittels  ZSID  oder  
+               gleichwertigen Debuggern moeglich: 
+                
+                    ZSID @OS.COM 
+                    ... 
+                    ... 
+                    ^C 
+                    SAVE xx @OS.COM 
+                    Kaltstart  
+                
+               Ist eine Neuuebersetzung erforderlich, so laeuft die Aenderung  
+               wie folgt ab (s: sei das Laufwerk mit Systemprogrammen): 
+                
+               a) fuer Buerocomputer 
+                    (( Modifikation des BIOS-Quelltextes BIOS.MAC)) 
+                    s:M80 BIOS.ERL=BIOS 
+                    s:LINKMT @OS=CPABAS,CCP,BDOS,BIOS/P:xxxx 
+                    ((Kaltstart)) 
+                
+               b) fuer PC1715 
+                    (( Modifikation des BIOS-Quelltextes BIOP.MAC)) 
+                    s:M80 BIOP.ERL=BIOP 
+                    s:LINKMT @OS=CPPBAS,CCP,BDOS,BIOP/P:xxxx 
+                    ((Kaltstart)) 
+                
+                
+               Die Adresse "xxxx" wird vom Assemblerschritt ausgegeben! 
+                
+               LINKMT ist der zum Pascal-Paket gehoerige Linker und erfordert  
+               den  File-Typ .ERL fuer die Link-Eingabe.  Dieser Linker  wird  
+               hier benutzt, weil er im Gegensatz zu L80 bei Programmadressen  
+               groesser 100H keine Fuellbytes erzeugt.   
+               Die  Basisadresse  xxxx ist wegen  des  vorgelagerten  Records  
+               CPxBAS  um  80H kleiner als die gewuenschte Adresse vom CCP.  
+                 
+               Das CCP wird beim Warmstart aus einem Hauptspeicherbereich (im  
+               BIOS) kopiert,  das BDOS wird in der Regel nicht durch  Anwen- 
+               dersoftware zerstoert, da es die gesamte Logik fuer die Arbeit  
+               mit Disketten enthaelt.  Dadurch entfaellt beim Warmstart jeg- 
+               liche  Notwendigkeit des Ladens,  wodurch dieser  beschleunigt  
+               wird  und Systemspuren nur auf der Kaltstartdiskette erforder- 
+               lich  sind,  auf allen anderen koennen sie mit zur  Datenspei- 
+               cherung benutzt werden (0 Systemspuren). 
+               Fuer  spezielle  Anforderungen an  einen  grossen  TPA-Bereich  
+               existieren  auch Varianten zum Nachladen des CCP bei Warmstart  
+               ohne CCP-Kopie im BIOS. 
+               Hat ein Anwenderprogramm auch das BDOS zerstoert (TPA dann  um  
+               0E00h - d.h.  3,5 K - groesser),  so muss es den Kaltstartein- 
+               gang  des BIOS benutzen.  Hierdurch wird ein  Kaltstartvorgang  
+               vom  BIOS simuliert,  d.h.  es wird wie bei einem ersten Kalt- 
+               start eine Systemdiskette in den Laufwerken gesucht. 
+               Die  Laenge des Gesamtsystems haengt sehr stark vom gewuensch- 
+               ten Leistungsumfang ab, fuer Spezialzwecke koennen auch "Mini- 
+               versionen" mit ca. 7K BIOS (ca. 53,5K TPA) generiert werden. 
+                
+                
+              
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+
+
+               4. Diskettenstruktur 
+                
+               4.1. Standard-Format 
+                
+               Es  werden sowohl 5 1/4"- als auch 8"-Disketten mit 128  Bytes  
+               je Sektor und 26 Sektoren je Spur unterstuetzt. 
+                
+               CP/A  gestattet auf Nicht-Kaltstart-Disketten die Nutzung  der  
+               Systemspuren, mit Systemspuren beginnen sie beim Buerocomputer  
+               erst ab Spur 2 (allgemeiner CP/M-Standard) bzw. Spur 3 (allge- 
+               meiner  SCP-Standard) und haben damit eine  geringere  Kapazi- 
+               taet.  
+                
+                
+               4.2. Sonstige Diskettenformate 
+                
+               Sowohl international als auch national haben sich verschiedene  
+               Diskettenformate  als sogenannte "Hausformate" einzelner CP/M- 
+               kompatibler Betriebssysteme herausgebildet.  CP/A unterstuetzt  
+               folgende  Diskettenformate,  die im BIOS automatisch  bei  der  
+               erstmaligen  Benutzung  einer Diskette (LOGIN-Bit in  Reg.  E,  
+               Bit 0 bei BIOS-Entry SELDSK =0) erkannt werden  (entsprechende  
+               Laufwerke vorausgesetzt): 
+                
+                                                     single sided 
+               Disk-  Sektoren      Sektor-  BDOS-     Systemsp.  Gesamt- 
+               Typ    pro Spur      laenge   Blocklng. /Direintr. kapazitaet 
+               ______________________________________________________________ 
+ 
+               5"      26             128      1K        2/64      123K 
+               DD,SS   26             128      1K        0/64      130K 
+               40 Sp.  16             256      2K        3/64      148K 
+                        9             512      1K        2/64      171K 
+                        9             512      1K        0/64      180K 
+                        5            1024      1K        2/64      190K 
+                        5            1024      1K        0/64      200K 
+                
+               5"      26             128      2K        2/128     252K (K) 
+               DD,SS   26             128      2K        0/128     260K 
+               80 Sp.  16             256      2K        3/128     308K (K) 
+                        9             512      2K        2/128     350K (*) 
+                        9             512      2K        0/128     360K 
+                        5            1024      2K        2/128     390K (*) 
+                        5            1024      2K        0/128     400K 
+                
+                  
+               5"      26             128      2K        0/128     260K (*) 
+               DD,DS   16             256      2K        4/128     304K (*) 
+               40 Sp.   9             512      2K        0/128     360K (*) 
+                        5            1024      2K        0/128     400K (*) 
+ 
+ 
+               5"      26             128      2K        0/128     520K (*) 
+               DD,DS   16             256      2K        4/128     624K (*) 
+               80 Sp.   9             512      2K        0/128     720K (*) 
+                        5            1024      2K        0/192     800K (*) 
+                
+                
+               (*)  Diese  Variante  wird vom CP/A-Kaltstartsystem  fuer  den  
+               Buerocomputer  in  den  Systemspuren  nicht  unterstuetzt,  da  
+               es vom Anwender nicht konfiguriert werden kann und ein eindeu- 
+               tiges  (automatisches)  Unterscheiden  von  40- und  80-Track- 
+               Laufwerken  fuer die Bestimmung der BDOS-Blockgroesse (1K  bei  
+               40-,  2K  bei 80-Track-Laufwerken) nur mit groesserem  Aufwand  
+               moeglich  waere.  Daher  muessen Kaltstartdisketten  fuer  80- 
+               Track-Laufwerke ein mit (K) gekennzeichnetes Format verwenden. 
+ 
+ 
+ 
+  
+
+
+
+               8"      26             128      1K        2/64      243K 
+               SD,SS   26             128      1K        0/64      250K 
+                       16             256      2K        3/64      296K 
+                        9             512      2K        2/128     336K 
+                        9             512      2K        0/128     346K 
+                        4            1024      2K        3/64      296K 
+                        4            1024      2K        0/64      308K 
+                
+               Die  Angabe  der Kapazitaet erfolgt einschliesslich  der  Ver- 
+               zeichnisgroesse  von 2K (64 Directory-Eintraege) bzw.  4K (128  
+               Directory-Eintraege) bzw.  6K (192 Directory-Entraege).  Haben  
+               die Disketten weniger Directory-Eintraege,  so ist Lesen  ohne  
+               Einschraenkung  und auch Schreiben moeglich,  jedoch wird i.a.  
+               nicht die volle Diskettenkapazitaet nutzbar, da das erste File  
+               auf der Diskette als Directory interpretiert wird. 
+                
+               Bei Nutzung von DS-Formaten wird die Rueckseite in den Steuer- 
+               bloecken des BIOS als extra Spur behandelt,  daher haben diese  
+               Disketten  beim  Protokollieren  des Formates  doppelt  soviel  
+               logische Spuren wie physische. 
+                
+               Unter CP/A haben Systemspuren (daran erkannt,  dass der  dezi- 
+               male  Wert  des Bytes 0 in Spur 0,  Sektor 1 nicht  E5h,  aber  
+               groesser  als 31 ist - der groesste moegliche Nutzer in  einem  
+               evtl.  dort befindlichen CP/M-Directory-Eintrag ist 31!) keine  
+               weitere  Bedeutung und dienen nur zum Erkennen  des  Formates.  
+               CP/A  legt  seine Systemspuren fuer den  Buerocomputer  grund- 
+               saetzlich  im  Format  26*128 an (leider notwendig  wegen  der  
+               Kaltstart-Version  0.6 auf einigen  aelteren  A51xx-Geraeten),  
+               auch wenn die restlichen Spuren ein anderes Format haben (i.a.  
+               wird man fuer 40 Track, SS das 190K-Format benutzen). 
+               Bei  SCP-Disketten  (Sektorlaenge 256) werden unabhaengig  vom  
+               Inhalt der 0.  Spur immer  Systemspuren angenommen. Es koennen  
+               u.a.  damit direkt Disketten bearbeitet werden,  die unter dem  
+               Robotron-Betriebssystem SCP erzeugt wurden  bzw.  weiterverar- 
+               beitet werden sollen.  
+                               
+               Die angegebenen Diskettenformate werden durch das CP/A-Dienst- 
+               programm  FORMAT erzeugt.  Defekte Spuren werden  uebergangen.   
+               Mit  Hilfe  des  CP/M-Dienstprogramms  POWER  kann  dann  eine    
+               Dummy-Datei erzeugt werden,  in der alle fehlerhaften Sektoren  
+               zu einer Pseudodatei zusammengefasst werden,  womit diese fuer  
+               die weitere Nutzung ausgeschlossen sind. 
+ 
+               Eine  neu  formatierte  Diskette,  zukuenftige  Systemdiskette  
+               besitzt zunaechst keine Systemspuren. 
+                
+               Beim Buerocomputer koennen diese mit Hilfe des CP/M-Dienstpro- 
+               gramms  SYSGEN oder des CP/A-Dienstprogramms FORMAT von  einer  
+               bereits vorhandenen Kaltstartdiskette uebertragen werden. 
+                
+               Beim  PC1715 geschieht das Anlegen einer neuen  Systemdiskette  
+               auf  eine  formatierte und leere Diskette durch  Kopieren  von  
+               '@OS.COM' von LW A nach B durch das Kommando: 
+                
+                    CPA1715G B: 
+                
+               Die     allgemeine     Aufrufform     von     CPA1715G     ist 
+  
+                 "CPA1715G z: quellfile", 
+                
+               wobei  z das Ziel-Laufwerk und quellfile der Name  des  Quell- 
+               System-Files  ist,  z.B.  "CPA1715G B: C:@OS54K.COM".  Auf der  
+               neuen Systemdiskette ist der File-Name des Systems unabhaengig  
+               vom Quell-Namen immer @OS.COM. 
+                
+               Bei  einer spaeteren Modifizierung des Files @OS.COM darf sich  
+               beim  PC1715  die Laenge nicht aendern,  andernfalls muss  die  
+               gesamte Systemdiskette neu angelegt werden! 
+                
+
+
+
+               Danach koennen sowohl beim Buerocomputer als auch beim  PC1715  
+               auf  die angelegte Kaltstartdiskette weitere Programme kopiert  
+               werden (z.B. FORMAT, ZSID, POWER...).  
+                
+               Einige  Formate benutzen einen nichtkonstanten physischen Sek- 
+               torabstand,  der der Standard-Puffergroesse von 1K (es  werden  
+               ja  bei  Sektorlaengen <1K  i.a.  mehrere  aufeinanderfolgende  
+               Sektoren  gepuffert) sowie der Laufwerks- und Verarbeitungsge- 
+               schwindigkeit angepasst ist und das Lesen bzw. Schreiben einer  
+               Spur  mit weniger Umdrehungen erlaubt.   Bei Formaten  mit  26  
+               Sektoren  zu  128  Bytes wird der in  CP/M  uebliche  logische  
+               Sektorversatz von 6 angewendet. 
+                
+               Neben   dem  Formatieren  von  Disketten  erlaubt  das   CP/A- 
+               Dienstprogramm FORMAT[P] auch das Kopieren von Disketten. 
+               Die  Quelldisketten koennen dabei einen beliebigen  physischen  
+               (auch nichtkonstanten) Sektorabstand haben, der sich insbeson- 
+               dere  von dem der Zieldiskette unterscheiden kann.  Damit  ist  
+               z.B. durch Kopieren bereits vorhandener Disketten mit konstan- 
+               tem physischen Sektorabstand nachtraeglich eine Beschleunigung  
+               des Zugriffs zu erreichen. 
+                
+               Fuer  spezielle  Untersuchungen kann mit Hilfe von FORMAT  das  
+               Diskettenformat unabhaengig von den standardmaessig  vorhande- 
+               nen definiert werden. 
+                
+               Ein Uebertragen von Files zwischen Disketten unterschiedlichen  
+               Formats geschieht unter CP/A i.a. problemlos durch die automa- 
+               tische  Formaterkennung des beim Formatieren festgelegten Dis- 
+               kettenformates.  Dies trifft auch fuer 80 Track,  DS Laufwerke  
+               des PC1715 zu;  es koennen hiermit auch 40 Track, SS Disketten  
+               vom  Buerocomputer gelesen und geschrieben werden  (indem  nur  
+               jede  zweite Spur benutzt wird).  Treten dabei Diskettenfehler  
+               auf,  so  sollte  man den Vorgang auf einem  anderen  Laufwerk  
+               wiederholen,  da sich auf Grund der engen Toleranzen bei einer  
+               80-spurigen Benutzung einer Diskette geringe Justierfehler der  
+               Laufwerke  stoerend bemerkbar machen  koennen.  Im  Extremfall  
+               sind  auch die Disketten zu wechseln,  wenn sie schon auf sehr  
+               vielen unterschiedlichen Laufwerken beschrieben wurden. 
+                 
+                 
+               4.3. Fehlermeldungen 
+                
+               Bei  aufgetretenen Fehlern bei der Arbeit mit Disketten werden  
+               vom  BIOS  nach  erfolgloser Fehlerkorrektur  unabhaengig  von  
+               einer evtl. folgenden BDOS-Meldung folgende Fehler detailliert  
+               ausgewiesen,   um  einen  Laufwerks- oder   Datentraegerdefekt  
+               fruehzeitig und genauer zu lokalisieren: 
+                
+               Kurzkennzeichen               Bedeutung 
+                 C                 CRC-Error (Daten nicht lesbar) 
+                 D                 Device-Error (Geraet existiert nicht) 
+                 F                 Fault Adapter (zu langs. Datenuebertrag.) 
+                 L                 Length-Error (unzulaessiges Spurformat) 
+                 S                 Sector not found (meist falsches Format) 
+                 T                 Track not found (Spur nicht auffindbar) 
+                 U                 Undefined (keine Adressmarken auffindbar) 
+                 W                 Write protected (schreibgeschuetzt) 
+                
+                
+               Die Fehlermeldung lautet beim Buerocomputer: 
+                   BIOS Disk x-Error "y", track (hex):zz 
+               wobei x=R fuer Read (Lesen) und x=W fuer Write (Schreiben),  y  
+               das  oben  angegebene Kurzkennzeichen und zz die  hexadezimale  
+               physikalische Spurnummer, bei der der Fehler auftrat, angeben. 
+                
+ 
+ 
+ 
+ 
+
+
+
+               Beim  PC1715  lautet die Fehlermeldung  (stark  verkuerzt,  da  
+               nicht mehr Platz in der Statuszeile): 
+                   xy;T,S,Se=zz,d,ss 
+               wobei  x,y,zz  die gleiche Bedeutung  wie  beim  Buerocomputer  
+               haben,  d  gibt die Diskettenseite (0 o.  1) und ss den physi- 
+               schen Sektor an. 
+                
+                
+               5. Besonderheiten des BIOS 
+                
+               Das  BIOS kann entsprechend der Hardware-Konfiguration und der  
+               geplanten  Betriebsweise in verschiedenen Varianten  generiert  
+               werden. Saemtliche Angaben dazu befinden sich als kommentierte  
+               EQU-Anweisungen  am  Anfang des  BIOS-Quelltextes.  Es  folgen  
+               daher nur Erlaeuterungen zu im BIOS enthaltenen Sonderfunktio- 
+               nen. 
+                
+                
+               5.0. I/O-Byte (nur PC1715) 
+                
+               Fuer  die  zeichenorientiert arbeitenden  Geraete  werden  die  
+               Moeglichkeiten  des I/O-Bytes von CP/M (Hauptspeicherplatz  3)  
+               in folgender Weise unterstuetzt: 
+ 
+ 
+                         i7 i6     i5 i4     i3 i2     i1 i0 
+                         LST:      PUN:      RDR:      CON: 
+                
+               00        TTY:      CRT:      KBD:      KBD:/CRT: 
+               01        CRT:      DUM:      DUM:      KBD:/DUM: 
+               10        LPT:      LST:      DUM:      RDR:/PUN: 
+               11        DUM:      UC1:      UC1:      UC1:/UC1: 
+                
+               KBD:      Tastatur 
+               CRT:      Bildschirm 
+               DUM:      Dummy-Geraet, 
+                         liefert 1Ah (EOF) bei Eingabe, 
+                         Hexadezimal-Ausgabe auf CRT: bei Ausgabe, 
+                         Status (Ein- und Ausgabe) immer bereit 
+               TTY:      Standard-Drucker (wahlweise, sonst auf DUM:) 
+               LPT:      weiterer Drucker (wahlweise, sonst auf DUM:) 
+               UC1:      (SIO-)Geraet  zur Datenfernuebertragung  (wahlweise,  
+                         sonst auf DUM:) 
+                         Abbildung auf die CON:-Schnittstelle,  da diese eine  
+                         Status-Routine  fuer die Empfangsbereitschaft unter- 
+                         stuetzt. 
+                         Die BIOS-Funktionen CONIN/CONOUT bzw. READER/PUNCHER  
+                         warten  bis  zur  Empfangs- bzw.   Sendebereitschaft  
+                         eines Zeichens. Eine Statusabfrage fuer die Sendebe- 
+                         reitschaft existiert fuer UC1: nicht. 
+                
+               Die  Standardbelegung  des I/O-Bytes nach Kaltstart  ist  00h,  
+               davon  abweichende  Belegungen koennen direkt oder  ueber  die  
+               bekannten  CP/M-Programme wie STAT gesetzt  werden.  Fuer  den  
+               LST:-Kanal existiert ausserdem im Stop-Zustand eine  besondere  
+               Taste zum Umschalten der Geraetezuordnung. 
+                
+          
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+       
+
+
+
+               5.1. Bildschirm, Tastatur 
+                 
+                
+               Bildschirm 
+                
+               Die Bildschirm-Steuerzeichen sind SCP-kompatibel, zusaetzlich  
+               existieren einige Erweiterungen: 
+                
+ 
+               Steuerzeichen  Wirkung 
+               -------------------------------------------------------------- 
+               00h            NOP (keine Wirkung) 
+               01h            Cursor links oben (home) 
+               07h            akustisches  Zeichen an  Tastatur  (i.a.  nicht  
+                              vorh.,  dann  Blinken  der Lampen  neben  Stop- 
+                              Taste bzw. der Statuszeile beim PC1715) 
+               08h            Cursor zurueck 
+               0ah            Linefeed (neue Zeile) 
+               0ch            Bildschirm  loeschen (verzoegert zum Lesen  der  
+                              zuletzt ausgegebenen Bildschirmzeilen),  Cursor  
+                              links oben 
+               0dh            Carriage Return (an Zeilenanfang) 
+               0eh            Umschalten auf 2. Zeichensatz (nur PC1715) 
+               0fh            Umschalten auf 1. Zeichensatz (nur PC1715) 
+               14h            Rest des Bildschirms loeschen 
+               15h            Cursor nach rechts 
+               16h            Rest der Zeile loeschen 
+               18h            Zeile loeschen, Cursor an Zeiilenanfang 
+               1ah            Cursor eine Zeile hoch 
+               1bh            Einleitung  Cursorpositionierfolge,  die naech- 
+                              sten beiden Bytes beinhalten Zeile und  Spalte,  
+                              Offset 00h oder 80h 
+               7fh            Delete (streichen Zeichen links vom Kursor) 
+               82h (auch 02h) Cursor an (Standard) 
+               83h (auch 03h) Cursor aus 
+               84h (auch 04h) normal    hell, nicht invers 
+               85h (auch 05h) normal    hell,       invers 
+               86h (auch 06h) intensiv  hell, nicht invers 
+               87h            intensiv  hell,       invers 
+                
+               Wurde im BIOS die Variante mit dem international sehr verbrei- 
+               teten Terminaltyp ADM3a/ADM31 (und kompatiblen) generiert,  so  
+               werden zusaetzlich folgende Steuerzeichen akzeptiert: 
+                
+               1bh,3dh bzw.   Einleitung  Cursorpositionierfolge,  die naech- 
+               1bh,59h        sten beiden Bytes beinhalten Zeile und  Spalte,  
+                              Offset 20h 
+                              Gleichzeitig  wird  das  Steuerzeichen  1ah  in  
+                              diesem  Fall  wie  0ch interpretiert  (bis  zum  
+                              naechsten Warmstart). 
+               1ch            Wirkung wie 1ah 
+      
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+           
+
+
+
+               Wurde  im BIOS die Variante mit der Moeglichkeit nutzereigener  
+               Tatendefinitionen    generiert,    so    sind    (neben    der  
+               Tastendefinition im Stop-Zustand) folgende Steuerzeichenfolgen  
+               hierfuer moeglich: 
+ 
+               1bh,1bh        Einleitung der Tastendefinition, es folgt: 
+                              <Taste>,<zugehoerige Zeichenfolge>,00h 
+                              fuer eine Tastendefinition bzw.  
+                              nur  00h  fuer das  Loeschen  aller  bisherigen  
+                              Nutzertastendefinitionen. 
+                              Fuer <Taste> gelten die Codes,  die unabhaengig  
+                              vom  Tastaturtyp  nach  der Abbildung  auf  den  
+                              logischen Tastencode vorliegen.  Fuer die  i.a.  
+                              umzudefinierenden    Tasten    S,S1,...    bzw.  
+                              REC/ENTER,PF1,...  sind dies die (tastaturunab- 
+                              haengigen!)  Codes e0h,e1h,...;  der Code  fuer  
+                              andere  Tasten ist dem BIOS-Listing zu  entneh- 
+                              men. 
+                              Bei  einem  Ueberlauf der entsprechenden  BIOS- 
+                              Tabelle  erfolgt  die  beim  Steuerzeichen  07h  
+                              beschriebene Reaktion,  die restlichen  Zeichen  
+                              erscheinen dann als direkte Bildschirmausgabe. 
+                              Die definierten Nutzertasten gelten auch  ueber  
+                              den naechsten Warmstart hinaus bis zum explizi- 
+                              ten Loeschen. 
+                
+               Nicht  definierte  Steuerzeichen fuer  den  Bildschirm  (siehe  
+               BIOS-Listing oder SCP-Dokumentation) werden auf "^" abgebildet  
+               (dies kann u.a.  bei falsch installierten CP/M-Programmen auf- 
+               treten). 
+                          
+               Statuszeile (nur PC1715) 
+                
+               Unter Ausnutzung der Hardware-Moeglichkeiten des PC1715 laesst  
+               sich  in  CP/A beim "grossen" Bildschirm  (BAB2,  24*80)  ohne  
+               Umbau und beim "kleinen" Bildschirm (BAB1,  16*24) durch  Aen- 
+               dern  der Bruecke X12 von 2:3 auf 2:1  auf dem Bildschirm eine  
+               zuaetzliche Zeile darstellen.  Diese wird zur Darstellung fol- 
+               gender Informationen angewendet: 
+                
+               - Normal-/Sonderzustand des Rechners 
+                 (Fehlerlampe  bei Buerocomputer) durch inverse/normal inten- 
+                 sive Darstellung der gesamten Statuszeile.  Insbesondere ist  
+                 hierdurch  ein  optischer Ersatz des  fehlenden  akustischen  
+                 Signals  im Fehlerfall (Steuerzeichen 07h)  moeglich,  indem  
+                 die Zeile einmal blinkt. 
+               - z.Zt  eingestellte Werte fuer Standard-Laufwerk und   Nutzer  
+                 (z.B.   "A1>"),  Pflege  jede  Sekunde  entsprechend  Haupt- 
+                 speicherplatz 4, 
+               - Speicherkapazitaet  der z.Zt.  CP/A bekannten Disketten  als  
+                 Orientierung    fuer   das   Format   der   Diskette   (z.B.  
+                 "A:800k B:800k"),  Pflege  bei jedem LOGIN durch  das  BDOS,  
+                 geloescht bei jedem Warmstart, 
+               - Wert  des  I/O-Bytes in  hexadezimaler  Form  (z.B.  "i80"),  
+                 Pflege jede Sekunde entsprechend Hauptspeicherplatz 3), 
+               - Wert des Lampenpuffers in hexadezimaler Form  (z.B.  "l80"),  
+                              Bedeutung, wenn =1: 
+                    Bit 7:    alle Zeichen an CRT: auch an LST: (hardcopy), 
+                    Bit 6:    Fehlerlampe, 
+                    Bit 5:    Druck nur auf rechter Druckerbahn 
+                    Bit 4:    Zeilenvorschub auf beiden Bahnen zugleich 
+                    Bit 3-0:  Selektor 3-0 (muss bei PC1715 im  Lampenpuffer- 
+                              byte durch Anwender gesetzt werden), 
+                 Pflege jede Sekunde entsprechend Hauptspeicherpaltz 40h, 
+               - Meldungen des BIOS, werden nach 30 Sek. geloescht, 
+               - Uhrzeit, 
+               - Kopf des Tastaturpuffers, nicht-ASCII-Zeichen als ".". 
+             
+    
+                
+
+
+
+               Die Anpassung des Bildschirmformats erfolgt beim Kaltstartvor- 
+               gang automatisch. Beim Buerocomputer wird dabei Bit 6 vom Port  
+               0Ah abgefragt (16*64,  wenn =1;  24*80, wenn =0). Da am PC1715  
+               eine  solche Hardware-Abfrage nicht moeglich ist,  erfolgt die  
+               Abfrage folgendermassen: 
+               Bei  der  Systemgenerierung  wird  ein  Bildschirmformat   als  
+               Anfangszustand  vorgegeben (i.a.  24*80).  Dies wird fuer  die  
+               Kaltstart-Meldungen  zunaechst angenommen.  Beginnt der Nutzer  
+               die Uhrzeiteingabe beim Kaltstart nicht innerhalb einer  maxi- 
+               malen Zeitspanne von 20 s,  so wird angenommen, dass der Bild- 
+               schirm  nicht lesbar ist und auf das andere Format  umgeschal- 
+               tet.  Der  gleiche  Effekt ist durch Betaetigen von ESC  statt  
+               einer Zifferntaste erreichbar.  Dies wiederholt sich  solange,  
+               bis die Uhrzeit eingegeben ist. 
+               Ein  falsches  Bildschirmformat  fuehrt  am  PC1715  hardware- 
+               bedingt zu einem nichtsynchronisiertem Monitorbild, beim rich- 
+               tigen Format wird es (wieder) stabil. 
+                
+               Um Software fuer den Buerocomputer, die sich durch Abfrage des  
+               Bits  6 im Port 0Ah dem Bildschirmformat  anpassen,  unveraen- 
+               dert auf dem PC1715 einzusetzen,  wird am PC1715 der CTC-Kanal  
+               2  mit  der Portadresse 0Ah "missbraucht" und mit  einer  ent- 
+               sprechenden  (und  sich  nicht  veraendernden)   Zeitkonstante  
+               geladen. 
+                
+                
+               Tastatur 
+                
+               Bis  zu 48 Tastatur-Zeichen (Laenge modifizierbar) werden  vom  
+               BIOS unabhaengig von der Arbeit peripherer Geraete (z.B.  Dis- 
+               kettenlaufwerke)  gepuffert,  i.a.  gehen  dadurch selbst  bei  
+               versierten Schreibkraeften keine Zeichen verloren, die Meldung  
+               "WARTE"  bei Textverarbeitungssystemen braucht nicht  beachtet  
+               zu werden. Bei Programmen, die nicht staendig den Tastaturpuf- 
+               fer leeren (wie z.B.  POWER) kann bereits die Eingabe fuer den  
+               naechsten Programmschritt "im Voraus" erfolgen. 
+               Beim  PC1715 sind die gepufferten Zeichen im rechten Teil  der  
+               Statuszeile teilweise sichtbar, Sonderzeichen <20h als Punkt. 
+                
+               Bei  der  Belegung  der Tasten mussten bei  der  Vielfalt  von  
+               Tastaturen eine Reihe von z.T.  widerspruechlichen Forderungen  
+               erfuellt  werden (die jedoch wesentlich fuer die  Nutzerakzep- 
+               tanz sind!): 
+               - Anpassung  an haeufig benutzte Funktionen bei der  Systembe- 
+                 dienung,  dem  Textverarbeitungssystem WordStar und  anderer  
+                 Standardsoftware    (Datenbank-Technik,     Tabellenkalkula- 
+                 tion...), 
+               - moeglichst  gleiche Tasten fuer gleiche Funktionen bei  ver- 
+                 schiedenen Tastaturen, 
+               - moeglichst wenig SHIFT- oder CTRL-Umschaltungen, 
+               - Wirkung der Tasten bei allen Anwendungen gleich (keine  spe- 
+                 zielle Tastenbelegung fuer WordStar o.ae.), 
+               - raeumliche   Gruppierung   von  logisch   zusammengehoerigen  
+                 Tasten, 
+               - Nutzung  der  LED-Anzeigen fuer  Systemzustaende,  die  i.a.  
+                 nicht  auf dem Bildschirm sichtbar sind  (z.B.  Insert-Modus  
+                 bei WordStar auf dem Bildschirm sichtbar,  daher LED  ander- 
+                 weitig nutzbar), 
+               - Moeglichkeit der Tasten-Umdefinition (auch Zeichenfolgen auf  
+                 einer Taste) fuer spezielle Nutzeranwendungen. 
+                
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+                
+
+
+
+               In  der  folgenden Tabelle nicht  aufgefuehrte  Tasten  werden  
+               ignoriert.  Die  Funktion  der  jeweiligen  Taste  haengt  vom  
+               Systemzustand  (CCP oder Anwendungsprogramm) ab und ist in den  
+               entsprechenden Dokumentationen nachzulesen. 
+ 
+ 
+               --------------------------------------------------------------- 
+               K76x6   ..x4      ..37   PC1715    Code bzw. Funktion 
+               --------------------------------------------------------------- 
+                
+               ^|        ^|         ^|       ^|       ^E 
+               v|,CE    v|,ERINP   v|,CE     v|,CE    ^X 
+               <-      <-        <-      <-       ^H (kann man auf ^S umdef.)  
+               ->      ->        ->      ->       ^D      
+               |<-     |<-       |<-     |<-      ^A 
+               ->|     ->|       ->|     ->|      ^F 
+               <-'     <-'       <-'     <-'      ^C 
+               '\~      '\~        '\~      '\~       ^R 
+               |<-|    |<-|      |<-|    |<-|     ^I 
+               DEL     DEL       DELCH   DEL      7fH (Streichen linkes Z.) 
+               S       REC       ENTER   S        ^B 
+               S1      PF1       PF1     F1       ^G 
+               S2      PF2       PF2     F2       ^Y 
+               S3      PF3       PF3     F3       ^T 
+               S4      PF4       PF4     F4       ^V 
+               S5      PF5       PF5     F5       ^L 
+               S6      PF6       PF6     F6       ^OD 
+               S7      PF7       PF7     F7       ^OG 
+               S8      PF8       PF8     F8       ^W 
+               S9      PF9       PF9     F9       ^Z 
+               ex. n.  PF10      PF10    F10      ^KS^QP 
+               ex. n.  PF11      PF11    F11      ^KB 
+               ex. n   PF12      PF12    F12      ^KK 
+               ex. n.  ex. n.    ex. n.  F13      ^KV 
+               DELLINE DELLINE   DELL,ESC ESC     ^[ (Escape) 
+               ex. n.  ex. n.    HLT     ex. n.   ^S (in CP/A STOP-Taste) 
+               ex. n.  ex. n.    PRINT   ex. n.   ^P (in CP/A Hardcopy-Taste) 
+               ET1     ENTER     ET1     ET       ^M (CR) 
+               ET2     RESET     ET2     ex. n.   CTRL, nochmaliges Druecken 
+                                                  hebt CTRL-Zustand auf; 
+                                                  ^Q-Prefix fuer alle Sonder- 
+                                                  tasten (WordStar ^Q-Fktnen.) 
+                                                  z.B. ^Q^F, ^Q^D oder ^Q^Y 
+               Sel     ex. n.    0..3    ex. n.   Setzen von Bit i (0..3) in 
+               0..3              unter            Hauptspeicherplatz 40H und 
+                                 LED              einschalten LED daneben; 
+                                                  Bit 0 wird als CAPS-Funkt. 
+                                                  benutzt (gross <-> klein) 
+               00      ex. n.    00      00       00 
+               000     Dzif      ex. n.  ex. n.   000 
+               M       EREOF     M       F14      Bios-Monitor 
+               CI      OFF       RESET   F15      Stop des Rechners mit LED- 
+                                                  und Signalanzeige 
+               INSMODE INSMODE   INSMD  Minus     Hardcopy Drucker ein/aus 
+                                        unter CE  LED daneben an bei "ein" 
+               INSLINE INS       INSL    INS      Synchronisieren Drucker und 
+                                                  BIOS-Druckertreiber 
+                   
+               Erlaeuterungen: 
+               --------------- 
+               Hardcopy (INS-MODE-Taste) schaltet den Drucker direkt parallel  
+               zur Bildschirmausgabe.  Zur Kontrolle dieses Zustands wird die  
+               neben  der Taste liegende Lampe angesteuert (bei PC1715  siehe  
+               Statuszeile).  Erneutes  Druecken der Taste hebt  den  Zustand  
+               wieder  auf.  Der Zustand bleibt ueber den naechsten Warmstart  
+               hinaus erhalten. 
+ 
+ 
+ 
+ 
+
+
+
+               Es  ist zu beachten,  dass nicht alle  Bildschirmsteuerzeichen  
+               vom Drucker verstanden werden,  i.a.  betrifft dies jedoch nur  
+               die  expliziten Steuerfolgen zur  Kursorpositionierung.  Diese  
+               Steuerzeichen werden bei der Druckausgabe auf "^" abgebildet. 
+               Die  ^P-Funktion  des BDOS ist  weiterhin  verfuegbar,  jedoch  
+               sollten nicht beide Funktionen zugleich aktiv sein. 
+                
+               Mit  der Taste INSLINE werden Druckertreiber und Drucker  syn- 
+               chronisiert. Sie sollte nach jeder Neueinstellung des Blattan- 
+               fangs  nach  Betaetigung  der SYN-Taste am  Drucker  gedrueckt  
+               werden. 
+                
+               Beim  Betaetigen  der  Stop-Taste  (CI/OFF/RESET/F15  je  nach  
+               Tastatur) wird der Tastaturpuffer geleert,  das gesamte System  
+               bis  zur Betaetigung einer beliebigen anderen Taste  bzw.  bis  
+               zum  Abbruch des laufenden Programms durch Warmstart (^C)  ge- 
+               stoppt  (Warteschleife in Tastatureingabe) und die Fehlerlampe  
+               eingeschaltet. Diese Reaktionen werden ggf. bis zur Beendigung  
+               zeitkritischer  Diskettentransfers  oder  des   Bildneuaufbaus  
+               verzoegert. 
+               Die  Taste  enthaelt die ^S-Funktion des BDOS in  verallgemei- 
+               nerter Form und erlaubt auch dann das Stoppen der Anlage, wenn  
+               vom  Programm  keine  Tastatureingabe  oder  Bildschirmausgabe  
+               gefordert wird. 
+               Ausserdem  sind  im Stop-Zustand die  Betaetigungen  folgender  
+               Tasten  moeglich (die waehrend des Stop-Zustandes damit   eine  
+               andere Bedeutung haben): 
+               - Hardcopy-Taste (INSM) 
+                 In  diesem Fall wird der gesamte momentane  Bildschirminhalt  
+                 auf das LIST-Geraet (i.a. Drucker) kopiert. 
+               - Taste Drucker-synchronisieren (nur PC1715) 
+                 Weiterschalten des LST:-Kanals im I/O-Byte 
+               - bei generierter Variante 2-Bahn-Drucker (nur PC1715): 
+                 Taste  S (=^B):  Umschalten auf andere Druckerbahn,  gleiche  
+                              Wirkung haben die CP/A-Druckersteuerzeichen 88h  
+                              und 89h; 
+                 Taste  F1 (=^G):  Ein-/Ausschalten  parallelen Vorschub  auf  
+                              beiden  Druckerwalzen  (fuer  breites  Papier),  
+                              gleiche Wirkung hat das  CP/A-Druckersteuerzei- 
+                              chen 8ah (ausschalten durch 88h/89h) 
+                - Monitor-Taste (M), nur wenn mit BIOS-Uhr generiert! 
+                 Die  Uhr-Anzeige auf dem Bildschirm  wird  aus- bzw.  einge- 
+                 schaltet.  Dieser  Zustand bleibt auch ueber einen Warmstart  
+                 hinweg erhalten. Die Uhr laeuft intern weiter, auch wenn die  
+                 Anzeige ausgeschaltet (bzw. bei PC1715 "eingefroren") ist. 
+               - Escape-Taste  (DELL oder ESC),  wenn Nutzer-Tastendefinition  
+                 im BIOS generiert. 
+                 In  diesem Fall sind anschliessend folgende Handlungen  fuer  
+                 eine Tastendefinition notwendig: 
+                  - Betaetigen der umzudefinierenden Taste, 
+                  - Eingabe  der zugehoerigen Zeichenfolge (einschl.  Control  
+                    und anderen schon umdefinierten Tasten, die gerade neu zu  
+                    definierende Taste enthaelt dabei die bis dahin definier- 
+                    te Zeichenfolge), 
+                  - Betaetigen von Escape zum Abschluss. 
+                 Es koennen bis auf Begrenzungen des Speicherplatzes im  BIOS  
+                 (bei Generierung definierbar) beliebig viele Tasten waehrend  
+                 der Nutzerarbeit umdefiniert werden. Eine volle Tabelle wird  
+                 durch Blinken der Fehlerlampe (und akustisches Signal,  wenn  
+                 vorhanden) angezeigt. 
+ 
+                 Soll  eine schon umdefinierte Taste erneut umdefiniert  wer- 
+                 den,  so muessen zuvor alle bis dahin erfolgten Umdefinitio- 
+                 nen  geloescht  werden  (was sich auf Grund  des  begrenzten  
+                 Tabellenplatzes ohnehin als notwendig erweisen  wird).  Dies  
+                 geschieht  im  Stopzustand durch zweimaliges Betaetigen  der  
+                 Escape-Taste hintereinander. 
+                 Eine Umdefinition von Tasten bzw. ein Loeschen der Umdefini- 
+                 tionstabelle kann auch vom Anwenderprogramm errreicht werden  
+                 (siehe Bildschirm-Steuerzeichen). 
+
+
+
+                 Als  Spezialfall einer Umdefinition sei auf die  Neubelegung  
+                 der Taste "<-" mit ^S statt ^H hingewiesen, so dass auch die  
+                 Softwarepakete,  die  als "Kursor nach links" nicht auch  ^H  
+                 sondern nur ^S verstehen, unveraendert arbeiten koennen. Das  
+                 BDOS  von  CP/A behandelt ^H und ^S  bei  der  Stringeingabe  
+                 gleichberechtigt  (durch Wegfall der ^S-Funktion zum Stoppen  
+                 moeglich geworden). POWER beispielsweise arbeitet jedoch nur  
+                 mit  ^H richtig,  daher wurde als Kaltstart-Belegung ^H  ge- 
+                 waehlt. 
+                
+               Wurde  die Monitor-Variante des BIOS generiert,  so wird  beim  
+               Betaetigen  der M-Taste der BIOS-Monitor aufgerufen  (s.  5.6;  
+               ggf.  ebenfalls verzoegert); in der Variante ohne Monitor wird  
+               die Taste ignoriert.               
+               Beim  PC1715 wird die Taste SI/S0 unterstuetzt (Umschalten des  
+               Zeichensatzes, auch ueber Bildschirm-Steuerzeichen - s.d.). 
+                
+                
+               5.2. Drucker 
+                
+               a) Buerocomputer 
+                
+               Im  BIOS  wurde als Variante fuer SD1152-Drucker  ein  Treiber  
+               integriert,  der  neben der normalen Betriebsart  den  Drucker  
+               DIABLO  1610/1620  simuliert.  Dadurch konnten alle  WordStar- 
+               Druckfunktionen  auf  der Basis von  Microspace-Schritten  des  
+               Druckwerks (1 1/2 -zeiliger Druck, Schattendruck zur Hervorhe- 
+               bung  von Textteilen) sowie eine Farbbandumschaltung  (bessere  
+               Ausnutzung einfarbiger Baender) nutzbar gemacht  werden.  Hin- 
+               weise  zur Ansteuerung sind dem BIOS-Quelltext  bzw.  entspre- 
+               chenden WordStar-Unterlagen zu entnehmen. 
+                
+               Folgende  Besonderheiten bei der Nutzung von WordStar  ergeben  
+               sich aus der Tatsache, dass der obige Druckertyp eine Schritt- 
+               weite von 1/120" fuer den Zeichenabstand besitzt,  Drucker vom  
+               Typ SD 1152 aber nur 1/60",  d.h.  im Druckertreiber  gerundet  
+               werden muss: 
+               - .CW n     n ungerade arbeitet nicht exakt 
+               - .UJ 1     Bei Microspace koennen  durch Rundungen Zeichenab- 
+                           standsaenderungen  auftreten,  die  das  Druckbild  
+                           negativ beeinflussen. 
+                
+               Weiterhin ergibt sich als Einschraenkung: 
+               - ^P<CR>    nicht  erlaubt  (Ueberdrucken von  Zeilen arbeitet  
+                           nur bei zufaelliger Druckrichtung vorwaerts exakt, 
+                           da kein Vor- und Rueckwaertsdruck in diesem Fall). 
+                
+               Die   DIABLO-Simulation  wird  durch  die   Steuerzeichenfolge  
+               '1B 34' aktiviert, alle anderen Steuerzeichenfolgen vor dieser  
+               Aktivierung  werden  normal an den Drucker gesendet,  es  sind  
+               also  auch entsprechende Programme zur direkten  Druckerbedie- 
+               nung nutzbar. 
+                
+               Bei eingeschalteter Hard-Kopie erfolgt durch das BIOS nach 120  
+               Zeichen  ein automatischer Zeilenvorschub und nach  67  Zeilen  
+               ein  automatischer  Seitenvorschub (beide Werte sind im  BIOS- 
+               Quelltext und im unteren Hauptspeicher,  siehe  5.7.2.,  modi- 
+               fizierbar).  Bei  Ausgabe von TAB-Steuerzeichen realisiert der  
+               Druckertreiber die TAB-Funktion in Schritten von 8 Zeichen. 
+                
+               Zur  besseren  Farbbandausnutzung  bewirkt  beim  SD1152  jede  
+               zweite   Betaetigung  der  Taste   "Drucker   synchronisieren"  
+               (INSLINE,  siehe  5.1.)  ein  Vertauschen der oberen  und  der  
+               unteren  Farbbandhaelfte  (schwarz und  rot).  Dieser  Zustand  
+               bleibt  bis zum naechsten Betaetigen der Taste auch ueber  den  
+               naechsten Warmstart hinaus erhalten. 
+                
+               Saemtliche  Funktionen  sind fuer Drucker  mit  PIO1/PIO2- und  
+               IFSS-Anschluss  durch entsprechende Quelltextvarianten im BIOS  
+               verfuegbar. 
+
+
+
+                              
+               b) PC1715 
+                
+               Fuer  den  PC1715  sind  die  Anschluesse  "Printer",  "V.24",  
+               "IFSS A"  und "IFSS B" (jeweils 9600 Bd) unterstuetzt,  ausge- 
+               waehlt  wird vom BIOS der im  I/O-Byte  (Hauptspeicherplatz 3,  
+               Bit 6 und 7) eingestellte Druckerausgang, siehe I/O-Byte. 
+               Um  ein  Blockieren des Rechners bei versehentlich falsch  ge- 
+               waehltem  Druckerausgang,   defektem  oder  nicht  vorhandenem  
+               Drucker  zu  vermeiden,  erfolgt im BIOS eine  time-out-Ueber- 
+               wachung  von  30  Sekunden auf  die  Empfangsbereitschaft  des  
+               Druckers.  Wird diese Zeit ueberschritten (u.U.  muss erst der  
+               Druckpuffer geleert werden ehe der Drucker wieder bereit ist),  
+               so werden nach einer BIOS-Meldung bis zum naechsten  Warmstart  
+               oder  dem Betaetigen der Taste "Drucker synchr." alle Ausgaben  
+               an dieses Geraet ignoriert. 
+                
+               Es  erfolgt  (ausser bei generierter Variante  2-Bahn-Drucker)  
+               keine Interpretation der ausgegebenen Zeichen,  so dass  statt  
+               eines Druckers auch andere Geraete mit entsprechender Schnitt- 
+               stelle (einschl.  Datenfernuebertragung, insbesondere bei UC1:  
+               - hier  erfolgt  grundsaetzlich  keine Interpretation  der  zu  
+               sendenden und zu empfangenen Zeichen und keine time-out-Ueber- 
+               wachung) angeschlossen werden koennen. 
+                
+               Es   werden  2-Bahn-Drucker  mit  der  Schnittstelle  1  (z.B.  
+               1152 IFSS)  fuer  beide Bahnen getrennt  und  parallel  unter- 
+               stuetzt.  Dazu sind in CP/A (nicht gueltig fuer SCP!) folgende  
+               Steuerzeichen definiert: 
+                
+               88h  Drucken auf linker Bahn (Standard) 
+               89h  Drucken auf rechter Bahn (absolute Position 138) 
+               8ah  Drucken auf linker und rechter Bahn (Linefeed auf beiden) 
+                
+               Die  gleiche  Wirkung wie obige Steuerzeichen kann im  Stopzu- 
+               stand durch Betaetigen der Tasten S (^B) bzw. F1 (^G) erreicht  
+               werden (siehe Abschnitt Tastatur). 
+               Der  eingestellte Zustand wird im Lampenpuffer,  Bit 5  und  4  
+               gespeichert  und  bleibt ueber den naechsten Warmstart  hinaus  
+               erhalten. 
+                
+               5.3. Zeitgeberdienste 
+                
+               5.3.1. Ueberblick 
+                
+               Unter  Ausnutzung  der beim  Buerocomputer  kaskadierten  CTC- 
+               Kanaele  2 und 3 wurden Zeittakte von 5 ms  und 1 s bereitges- 
+               tellt.  
+               Beim PC1715 sind die freien CTC-Kanaele nicht kaskadiert, hier  
+               wird als Kompromiss ein 25 ms Takt bereitgestellt,  auf dessen  
+               Basis softwaremaessig ein 1 s Takt erzeugt wird. Auf Grund von  
+               zeitkritischen  Ablaeufen am PC1715 (nur ein  Prozessor!)  von  
+               laenger als 25 ms (z.B.  Diskettentransfer von 1 KByte Sektor- 
+               laenge  ca.  40 ms) koennen 25 ms Takte verloren  gehen,  d.h.  
+               sowohl  25 ms  als auch 1 s Takt koennen ueber  laengere  Zeit  
+               hinweg "nachgehen".  
+               Im  folgenden sind im Falle des PC1715 alle "5 ms" sinngemaess  
+               (Faktor 5) durch "25 ms" zu ersetzen. 
+                
+               Der Zeittakt von 5 ms ist fuer Zeitmessungen  vorgesehen.  Die  
+               Einheit von 5 ms ist ein Kompromiss zwischen der zusaetzlichen  
+               Interruptbelastung  und dem maximal moeglichen Faktor von  256  
+               zur  Erreichung des kaskadierten 1-s-Taktes.  Bei jedem Inter- 
+               rupt  im  Abstand  von 5 ms wird ein  2-Byte-Zaehler  auf  dem  
+               Hauptspeicherplatz  TIM5CN (s.  5.7.2) zyklisch um 1  erhoeht.  
+               Der Anfangswert ist beliebig,  d.h.  es sind durch  staendiges  
+               Aktivieren/Deaktivieren  auch kumulative  Zeitmessungen  moeg- 
+               lich.  Die  maximale Messdauer betraegt fuer eine Periode  ca.  
+               327 s bei einer Genauigkeit von 5 ms.  
+                
+
+
+
+               Der 5-ms-Zeittakt ist standardmaessig aktiviert.  Nach  Rueck- 
+               kehr  aus  der Interruptreaktionsroutine des Taktes wird  beim  
+               Buerocomputer CONST aufgerufen und damit ein (nicht existiere- 
+               nder)  Tastaturinterrupt  simuliert und  eine  moeglicherweise  
+               gedrueckte Taste gelesen. 
+                
+               Der  Zeittakt  von 1 s ist zur  Realisierung  eines  Time-Out- 
+               Apparats  vorgesehen.  Bei  jedem Interrupt wird  ein  2-Byte- 
+               Zaehler auf Hauptspeicherplatz TIM1CN (s.  5.7.2) um 1 vermin- 
+               dert. Der Nulldurchgang stellt i.a. das Time-Out-Ereignis dar,  
+               muss jedoch explizit abgefragt werden (keine Unterbrechung des  
+               gerade  aktiven  Programms!).  Die  maximale  Time-Out-Groesse  
+               betraegt hierbei ca.  9.1 Std.  Ausserdem wird jede Sekunde zu  
+               der  durch TIM1RT (s.  5.7.2) definierten Routine  gesprungen,  
+               wodurch  beliebige Nutzerroutinen aktivierbar sind (alle Regi- 
+               ster frei,  Rueckkehr mit RET,  Interruptverbot muss  erhalten  
+               bleiben!). Standardmaessig wird bei jedem Warmstart die Adres- 
+               se  einer  leeren  Routine (nur RET-Befehl)  auf  TIM1RT  hin- 
+               terlegt. 
+               Auch der 1-s-Zeittakt ist standardmaessig aktiviert. 
+             
+ 
+               5.4. Speicherschutzdienste (nur fuer Buerocomputer) 
+                
+               5.4.1. Ueberblick 
+                
+               Die Speicherschutzeinrichtung basiert auf einer Einteilung des  
+               verfuegbaren  Hauptspeichers  von  64K Byte in 64  Byte  lange  
+               Abschnitte, die unabhaengig voneinander als geschuetzt gekenn- 
+               zeichnet werden koennen. Schreibbefehle in diese Bereiche sind  
+               nur  aus geschuetzten Bereichen selbst  erlaubt,  anderenfalls  
+               erfolgt eine Unterbrechung.  Gekoppelt mit dem  Speicherschutz  
+               ist  ein Schutz gegen Ausfuehrung von E/A-Befehlen  ausserhalb  
+               von  geschuetzten Bereichen (fuehrt  zu  NMI-Interrupt),  d.h.  
+               geschuetzte  Bereiche werden als privilegierte Systemprogramme  
+               betrachtet. 
+                
+               Bei  Nutzung  der  Speicherschutzeinrichtung  muss  daher  der  
+               BIOS/BDOS-Bereich  grundsaetzlich  mitgeschuetzt  werden  (vom  
+               BDOS  aus wird in Disketten-Tabellen geschrieben,  die im BIOS  
+               liegen). Alle sonstigen Programmbereiche, in denen E/A-Befehle  
+               abgearbeitet werden koennen, muessen ebenfalls unabhaengig von  
+               dem  eigentlich  gegen Ueberspeichern  zu  sichernden  Bereich  
+               geschuetzt werden. 
+                
+                
+               5.4.2. Routinen zur Realisierung 
+                
+               MPINIT 
+                
+                 Initialisierung der Speicherschutzeinrichtung und Definition  
+                 des  standardmaessig zu schuetzenden Bereichs  von  BDOS+40h  
+                 bis vor Bildschirmpuffer. 
+                
+               MPSET(i_Register_BC:_Anfangsadresse, 
+                     i_Register_DE:_Endadresse) 
+                
+                 Definition   eines  zusaetzlich  zu  schuetzenden  Bereichs.  
+                 Sind  die Adressen nicht durch 64 teilbar,  so wird die  An-  
+                 fangsadresse ab- und die Endadresse aufgerundet. 
+                
+               MPOFF 
+                
+                 Der gesamte Speicherschutz wird ausser Kraft gesetzt.  MPOFF  
+                 wird  bei  jedem  Warmstart  aufgerufen,  d.h.  der  normale  
+                 CP/A-Betrieb erfolgt ohne Speicherschutz. 
+                
+ 
+ 
+                
+
+
+
+               5.4.3. Reaktion bei Verletzen des Speicherschutzes 
+                
+               Der Schreibversuch wird unterdrueckt.  Auf dem Bildschirm  er- 
+               folgt  eine  Ausschrift  mit  Angabe der  Adresse  des  ueber- 
+               naechsten Befehls (keine sofortige Unterbrechung auf Grund der  
+               Bearbeitungszeit der Hardware).  Ist das System mit BIOS-Moni- 
+               tor  generiert,  so  wird anschliessend zu  diesem  verzweigt,  
+               andernfalls  wird das laufende Programm nicht  gestoppt  (eine  
+               Verlangsamung  der Speicherschutz-Ausschriften kann in  diesem  
+               Fall z.B. durch Hardcopy auf den Drucker erreicht werden).  
+                
+ 
+               5.4.4. Reaktion bei Verletzen des E/A-Schutzes 
+                
+               Der  E/A-Befehl  im ungeschuetzten Bereich  wird  ausgefuehrt.  
+               Anschliessend erfolgt eine NMI-Unterbrechung, d.h. es wird zur  
+               Adresse 66H verzweigt. Da diese Zelle evtl. vom auszutestenden  
+               Programm  benutzt  wird (Standard-FCB von 5CH bis  7FH),  kann  
+               hier nicht standardmaessig ein Sprung zur entsprechenden Reak- 
+               tionsroutine  hinterlegt werden.  Deshalb wurde innerhalb  des  
+               BIOS-Monitor  die  Moeglichkeit geschaffen,  auf  Adresse  66H  
+               wahlweise  
+               - einen Sprungbefehl zur Reaktionsroutine (Reaktion dann  ana- 
+                 log zu Speicherschutz, jedoch ohne Aufruf BIOS-Monitor) 
+                 oder 
+               - einen  Sprungbefehl  zu einer leeren  Reaktionsroutine  (nur  
+                 RETN) zum Ignorieren des Schutzes 
+                 oder 
+               - keinen Sprungbefehl 
+               zu hinterlegen (s.  5.6.5). Ein hinterlegter Sprungbefehl muss  
+               bis nach dem Aufruf von MPOFF dort stehen bleiben! 
+                
+                
+               5.5. Konsol-Eingabe/Ausgabe 
+                
+               Die  den alphanumerischen Tasten und den anderen  Funktionsta- 
+               sten  entsprechenden logischen Zeichenfolgen gelangen in einen  
+               Tastaturpuffer.  Die  Mehr-Zeichen-eingaben  (z.B.  "00"  oder  
+               "^KB") werden vorher aufgeloest.  CONST meldet zurueck, ob der  
+               Puffer wenigstens ein Zeichen enthaelt. 
+                
+               CONIN  uebergibt - wenn vorhanden - das erste Zeichen aus  dem  
+               Puffer.  Anderenfalls  wird auf die naechste Eingabe gewartet.  
+               Desweiteren  realisiert CONIN die Dauerfunktion fuer alle  al- 
+               phanumerischen Tasten der Tastatur K7606/7604. 
+                
+               In  CONOUT  wird  die Ausgabe des Zeichens  07h  (BELL)  durch  
+               einmaliges Blinken der Fehlerlampen realisiert. 
+                
+               5.6. BIOS-Monitor 
+                
+               Der  BIOS-Monitor  stellt - seine Generierung vorausgesetzt  -  
+               einen  Satz von residenten Funktionen bereit,  die somit  ohne  
+               Veraenderung  der Speicherplatzbelegung  staendig,  d.h.  auch  
+               waehrend der Arbeit eines Nutzerprogramms zur Verfuegung  ste- 
+               hen. 
+                
+               Die Aktivierung dieser Funktionen ist im Dialog durch Druecken  
+               der  Monitor-Taste  oder direkten Aufruf der  Prozedur  MONCAL  
+               moeglich.               
+               Der BIOS-Monitor schuetzt sich gegen rekursiven Aufruf. 
+                
+         
+ 
+ 
+ 
+ 
+ 
+ 
+        
+
+
+
+               5.6.1. Monitor-Taste 
+                
+               Die  Monitor-Taste ist gegenueber anderen Tasten der  Tastatur  
+               nicht ausgezeichnet.  Insbesondere erzeugt auch sie bei  ihrer  
+               Betaetigung am Buerocomputer keinen Interrupt,  d.h.  sie muss  
+               abgefragt werden.  Folgende zwei Methoden wurden am Burocompu- 
+               ter implementiert: 
+               
+                 -  Abfrage  bei Eingabe eines Zeichens durch das BIOS,  d.h.  
+                    nur  zu Zeitpunkten,  wo auch eine Eingabe  vom  Programm  
+                    gefordert wird und die Steuerung ohnehin im BIOS liegt; 
+                
+                 -  Abfrage im 5-ms-Zeitinterrupt, falls dieser aktiv ist.  
+                
+               Nach  Druecken der Monitor-Taste erfolgt eine  Ausschrift  mit  
+               Angabe  der Rueckkehradresse  (d.h.  der  Unterbrechungsstelle  
+               beim  5-ms-Interrupt bzw.  der Aufrufstelle bei normaler  Zei- 
+               cheneingabe). Danach koennen nacheinander beliebig viele Moni- 
+               tor-Funktionen  durch Eingabe ihres Anfangsbuchstabens  (gross  
+               oder klein) aufgerufen werden. 
+               Eine  leere Eingabe oder die erneute Betaetigung der  Monitor- 
+               Taste fuehren zum Verlassen des BIOS-Monitors. 
+                
+                
+               5.6.2. Uebersicht ueber die Monitor-Kommandos 
+                
+                 Zeichen           Funktion 
+                
+                   M               Lesen/Modifizieren Speicher       
+                   C               Aufruf Unterprogramm 
+                   P               Ein-/Ausschalten Speicherschutz 
+                   R               Anzeige der Registerstaende beim Aufruf 
+                                   des Monitors  
+                   T               Ein-/Ausschalten Zeittakt            
+                   H               Help (Konvertieren Hex->Dez->ASCII) 
+                
+                
+               5.6.3. Mem-Kommando 
+                
+               Nach Eingabe von "M" wird eine 2-Byte-Adresse in hexadezimaler  
+               Form erwartet.  Sie gibt die Anfangsadresse eines  Speicherbe- 
+               reichs an. 
+                
+               Jeweils  ein Byte wird aufsteigend in hexadezimaler Form ange- 
+               zeigt und eine Eingabe erwartet: 
+                
+                 keine Eing.:     keine Veraenderung; naechstes Byte 
+                 2 Hex-Ziffern:   Ueberschreiben des Bytes; naechstes Byte 
+                 "-" (Minus):     keine Veraenderung; vorheriges Byte 
+                 4 Hex-Ziffern:   keine Veraenderung; neuer Speicherbereich 
+                 "." (Punkt):     Ende des Mem-Kommandos 
+                
+                
+               5.6.4. Call-Kommando 
+                
+               Nach Eingabe von "C" wird eine 2-Byte-Adresse in hexadezimaler  
+               Form erwartet.  Sie gibt die Startadresse eines Unterprogramms  
+               an.  Als  Rueckkehradresse wird vor dem Ansprung  dieses  Pro- 
+               gramms eine Rueckkehr zum BIOS-Monitor in das Stack gebracht. 
+                
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+                
+
+
+
+               5.6.5. Protect-Kommando (nur fuer Buerocomputer) 
+                
+               Nach Eingabe von "P" (Aufruf MPINIT:  Definition des standard- 
+               maessig  zu  schuetzenden  Bereichs) wird eine  der  folgenden  
+               Eingaben erwartet: 
+               - "." (keine weitere Aktion), 
+               - ein Adressenpaar (bezeichnet einen zu schuetzenden Bereich), 
+               - "-" (Aufruf MPOFF: Aufhebung des gesamten Speicherschutzes), 
+               - "I"  (Einstellung des Regimes  "Ignorieren von   E/A-Schutz- 
+                      Verletzungen",  d.h. Hinterlegen von RETN auf 66H; vgl.  
+                      5.4.4), 
+               - "L" (Einstellung des Regimes "Protokollieren von E/A-Schutz- 
+                     Verletzungen",  d.h. Hinterlegen eines Sprungbefehls auf  
+                     66H; vgl. 5.4.4). 
+                
+               Wird  keine Regimeeinstellung ("I" oder "L")  vorgenommen,  so  
+               bleibt  die Zelle 66H unveraendert (Standard-FCB von  5CH  bis  
+               7FH). 
+                
+                
+               5.6.6. Reg-Kommando 
+                
+               Nach  Eingabe  von  "R" werden die Staende  der  Registerpaare  
+               AF,BC,DE,HL,IX,IY,SP  an der Aufrufstelle des  Monitors  sowie  
+               die  Leitadresse des Rettebereichs dieser Register (fuer even- 
+               tuelle Modifizierung mittels M-Kommando) angezeigt. 
+                
+                
+               5.6.7. Time-Kommando 
+                
+               Nach Eingabe von "T" wird eine "5" zur  Aktivierung/Deaktivie- 
+               rung  des  5-ms- (bei PC1715 25-ms-) Zeittaktes oder eine  "1"  
+               zur Aktivierung/Deaktivierung des 1-s- (bei PC1715 wie 25-ms-)  
+               Zeittaktes erwartet.  Folgt danach kein Zeichen,  so wird  der  
+               Takt aktiviert, ein anschliessendes "-" deaktiviert ihn. 
+                
+                
+               5.6.8. Help-Kommando  
+                
+               Nach Eingabe von "H" wird eine Hexadezimal-Zahl zwischen 0 und  
+               FFFF erwartet. Ihr Dezimalwert und ggf. das zugeordnete ASCII- 
+               Zeichen (nur fuer Zahlen zwischen 20H und 7EH) werden ausgege- 
+               ben. 
+                
+                
+                
+               5.7. Einbindung der Erweiterungen in CP/A 
+                
+               5.7.1. Sprungvektor 
+                
+               Der  Aufruf  des Monitors,  der Zeitgeber- und  der  Speicher- 
+               schutzroutinen u.a.  BIOS-Unterprogramme ist von normalen Pro- 
+               grammen  aus  ist ueber einen  Sprungvektor  moeglich.  Dieser  
+               besteht aus je 3 Byte langen Sprungbefehlen. Die Anfangsadres- 
+               se  des Sprungvektors befindet sich auf Hauptspeicherplatz 4EH  
+               (beim Warmstart hinterlegt). 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+                
+
+
+
+               Folgende Entries sind vergeben (Funktion siehe BIOS-Listing): 
+                
+                    Entry                              Parameter 
+                
+                      0       JP   MONCAL               - 
+                      3       JP   TIM5ON               - 
+                      6       JP   TIM5OF               - 
+                      9       JP   TIM1ON               - 
+                      C       JP   TIM1OF               - 
+                      F       JP   MPINIT               - 
+                     12       JP   MPSET               Reg. BC,DE 
+                     15       JP   MPOFF                - 
+                     18       JP   DELSPS               - 
+                     1B       JP   DELSPR               - 
+                     1E       JP   DISKIO              Reg. HL,IX,AF 
+                     21       JP   UMLCON              Reg. A 
+                
+               Sind die betreffenden Funktionen nicht generiert, so steht auf  
+               dem Entry  ein RET-Befehl (und 2 NOP-Befehle). 
+                
+               Der Aufruf ist z.B. ueber folgende Befehlsfolge moeglich: 
+                
+                         ld   a,<entry> 
+                         ld   hl,(4eh) 
+                         add  a,l 
+                         ld   l,a 
+                         ld   a,0            ;kein XOR! 
+                         adc  a,h 
+                         ld   h,a 
+                         jp   (hl) 
+                
+                
+               5.7.2. Feste Adressen im unteren Hauptspeicher 
+                
+                    00h..02h       JP   BIOS+3    (Warmstart) 
+                         03h       IOBYTE 
+                         04h       User/Defaultdrive 
+                    05h..07h       JP   BDOS 
+                    08h..1fh       frei           (fuer RST-Routinen nutzbar) 
+                    20h..2ch       bei OSS-RAM-Floppy belegt, sonst frei 
+                    2dh..37h       frei           (fuer RST-Routinen nutzbar) 
+                         38h       JP   Break     (Debugger) 
+                    3bh..3fh       reserviert 
+                
+                
+               Als  Scratch-Bereich des BIOS sind in CP/M die Zellen 40H  bis  
+               4FH freigehalten.  Sie werden von CP/A wie folgt benutzt,  bis  
+               auf CPMEXT koennen alle Werte auch vom Nutzer gesetzt werden: 
+                
+                         40h       Pufferspeicher fuer Tastatur-Lampen 
+                                   (0 bei aus, 1 bei ein)     bei K7606 neben 
+                                   Bit  7    Hardcopy-Lampe    INS MODE 
+                                        6    Fehler-Lampe        CI 
+                                     5..4    reserviert (=0) 
+                                     3..0    Selektor 3-0      Selektortasten 
+                   
+                    41h..42h       TIM5CN    Zaehler 5-ms-Zeittakt 
+                    43h..44h       TIM1CN    Zaehler 1-s-Zeittakt 
+                    45h..46h       TIM1RT    Adr. der 1-s-Nutzerroutine 
+                         47h       LMAXP     max. Anzahl Druckpositionen bei 
+                                             Hardcopy Bildschirm -> Drucker 
+                         48h       LMAXN     max. Anzahl Druckzeilen bei 
+                                             Hardcopy Bildschirm -> Drucker 
+                    49h..4dh       reserviert 
+                    4eh..4fh       CPMEXT    Sprungvektoradresse fuer 
+                                             CP/A-Erweiterung 
+               -------------- 
+                    50h..52h       BIOS-BCD-Uhr in der Form HHMMSS 
+                    53h..55h       von ACCOUNT hinterlegtes BCD-Datum TTMMJJ 
+                    56h..5bh       reserviert 
+
+
+
+                    5ch..7fh       Standard-FCB 
+                    80h..ffh       Standard-DMA 
+                
+                    ab 100h        Beginn TPA 
+                
+               5.7.3. Belegung der Interruptsaeule 
+                
+               Die  Interruptsaeule  befindet  sich i.a.  40h Bytes  vor  dem  
+               Beginn des Bildschirmpuffers,  d.h. auf f7c0h. Die genaue Lage  
+               sollte  ueber das I-Register ermittelt  werden,  im  folgenden  
+               wird hierfuer 'ii' verwendet: 
+                
+                    vor  iic0h     BIOS, d.h. Interruptsaeule ohne Systemmo- 
+                                   difikation nicht nach vorn "verlaengerbar" 
+                    iic0h..iicfh   Kassettenanschluss, frei wenn nicht vorh. 
+                    iid0h..iidfh   SIO (V.24 o.ae.) 
+                    iie0h..iie5h   frei 
+                    iie6h..iie7h   Speicherschutz 
+                    iie8h..iiebh   Disketten 
+                    iiech..iiefh   frei 
+                    iif0h..iif7h   Lochstreifen Leser/Stanzer 
+                    iif8h..iifbh   System-CTC Kanal 0, 1 (frei) 
+                    iifch..iiffh   System-CTC Kanal 2, 3 (5ms, 1sec) 
+                
+               6. Besonderheiten des BDOS 
+                
+               CP/A unterscheidet sich durch folgende inhaltlichen  Veraende- 
+               rungen  im  BDOS vom Betriebssystem  CP/M,  Version  2.2  (bei   
+               gleichem Hauptspeicherbedarf von E00h Bytes): 
+                
+               - Beschleunigung der Arbeit mit Nicht-Default-Laufwerken.  Ist  
+                 im    FCB  ein  anderes als das  Default-Laufwerk  angegeben  
+                 (FCB[0]<>0) und dies ist nicht ausgewaehlt, so wird vom BDOS  
+                 auf  dieses umgeschaltet (SELDSK) und beim  Verlassen  nicht  
+                 zurueckgeschaltet,  sondern  nur eine haengende  Umschaltung  
+                 vermerkt. 
+                 Dadurch  wird eine staendige Uebernahme  der  Disk-Parameter  
+                 durch  das BDOS vermieden,  so dass auch in diesem Fall  die  
+                 gleiche  Geschwindigkeit  wie  bei der Arbeit  mit  Default- 
+                 Disketten erreicht wird. 
+                
+               - Wegfall der ^S-Funktion. 
+                 Das  Stoppen  von Konsolausgaben kann  als  Spezialfall  der  
+                 allgemeinen Stop-Funktion im BIOS (s.5.1.3) erreicht werden.  
+                 Verbunden  mit  dem Wegfall der ^S-Funktion konnte  auf  die  
+                 Pufferung von Konsoleingaben im BDOS voellig verzichtet wer- 
+                 den,  d.h. es werden keine Zeichen vertauscht, wenn zwischen  
+                 BDOS und direkter BIOS-Tastatureingabe gewechselt wird. 
+                
+               - ^S  und DEL wirken bei der Stringeingabe ueber das BDOS  wie  
+                 ^H. 
+                
+               - Um eine Arbeit ohne LW A (weil es gerade defekt ist und  die  
+                 Laufwerke nicht umgesteckt werden koennen) zu erlauben, wird  
+                 statt Laufwerk A:  dasjenige Laufwerk, von dem aus der Kalt- 
+                 start  erfolgte  bei der BDOS-Funktkion "Disk-Reset"  selek- 
+                 tiert.  Da mit dieser BDOS-Funktion auch die Abarbeitung von  
+                 SUBMIT-Stroemen  verbunden ist,  muss daher beim Aufruf  von  
+                 SUBMIT das Kaltstart-Laufwerk als Standardlaufwerk  zugewie- 
+                 sen sein, damit der Kommandostrom dort abgelegt wird! 
+                 Erfolgte  der Kaltstart von Laufwerk A,  so hat diese  BDOS- 
+                 Aenderung keine Auswirkungen. 
+                
+               - IX  und  IY werden durch das BDOS (und daraus  resultierende  
+                 BIOS-Aufrufe) nicht zerstoert. 
+                
+               - Es  wurde  ein Kopierschutz  integriert,  das  Kopieren  ge- 
+                 schuetzter  Dateien  fuehrt zu der Fehlermeldung  'File R/O'  
+                 (unabhaengig vom evtl.  R/O-Status der Dateien).  Wie dieser  
+                 Schutz funktioniert, wird hier nicht verraten. 
+
+
+
+               7. Besonderheiten des CCP 
+                
+               Das CCP enthaelt gegenueber der Version CP/M 2.2 einige Erwei- 
+               terungen  (bei gleichem Hauptspeicherbedarf von  800h  Bytes).  
+               Sie  betreffen vor allem die Arbeit mit verschiedenen  Nutzer- 
+               bereichen, wie sie sich bei 800k-Disketten als sinnvoll erwei- 
+               sen kann. 
+                
+               Bei  einem eingestellten Nutzerbereich groesser als  0  lautet  
+               die Promt-Meldung du> statt nur d> (d fuer Default-Laufwerk, u  
+               fuer  dezimale Nutzernummer).  Hierdurch hat der Anwender  bei  
+               der  Aufteilung einer Diskette in mehrere Nutzerbereiche einen  
+               leichteren Ueberblick,  in welchem Bereich er sich  z.Zt.  be- 
+               wegt. 
+                
+               Kommandofiles  werden  bei USER>0 auch unter USER 0  und  wenn  
+               dort erfolglos auf der Systemdiskette (im Kaltstart-LW)  unter  
+               USER 0 gesucht (gilt nicht fuer nachgeladene Files!). 
+                
+               Weiterhin existieren zusaetzliche residente Kommandos: 
+                
+                 CLK hh:mm:ss tt.mm.jj 
+                         Durch  dieses  Kommando  koennen Uhrzeit  und  Datum  
+                         (beide Angaben ab 50h in BCD-Form vom Kaltstart bzw.  
+                         von  ACCOUNT hinterlegt) neu gestellt  werden.  Dies  
+                         kann sich z.B.  nach Programmen,  die diesen Bereich  
+                         zerstoert oder wegen zu langer geschlossener  Inter- 
+                         rupts  eine  falsche Uhrzeit verursacht  haben,  als  
+                         notwendig erweisen. 
+                         Im  angegebenen  Parameterformat  bedeutet  (jeweils  
+                         dezimal, auch einstellig erlaubt): 
+                         hh:mm:ss  Stunden:Minuten:Sekunden 
+                         tt.mm.jj  Tag.Monat.Jahr 
+                         Alle  Angaben ab ss koennen fehlen,  in diesem  Fall  
+                         werden diese Werte nicht veraendert. 
+                 GO <beliebige Parameter> 
+                         Das  letzte  geladene Programm wird   ohne  Neuladen  
+                         aktiviert,  Parameter koennen wie beim  Direktaufruf  
+                         angegeben werden,  Nutzerbereich beliebig (d.h.  das  
+                         Programm  kann  zuvor ueber einen anderen  Nutzerbe- 
+                         reich in den Hauptspeicher gebracht worden sein), 
+                 EXT [d:]<filename> 
+                         Das  angegeben  COM-File  wird zu  einem  residenten  
+                         Kommando erklaert,  indem es vor BDOS,  CCP und  vor  
+                         evtl.  schon  residenten zusaetzlichen Kommandos  im  
+                         Hauptspeicher abgelegt wird, um bei Aufruf statt von  
+                         Diskette von dort nach 100h geladen zu werden. Hier- 
+                         durch  verringert sich jedoch der TPA  entsprechend.  
+ 
+                         Da  residente  Kommandos nur maximal 4 Zeichen  lang  
+                         sein duerfen, trifft dies auch auf <filename> zu. 
+                
+                 RES 
+                         Streichen aller zusaetzlich residenten Kommandos 
+                 HELP 
+                         Ausgabe einer Liste aller z.Zt. residenten Kommandos 
+                
+               Bei  jedem  Warmstart prueft das BIOS,  ob das ueber  das  CCP  
+               definierte Standard-Laufwerk im System definiert ist. Im nega- 
+               tiven  Fall (z.B.  Tippfehler) wird auf das Kaltstart-Laufwerk  
+               umgeschaltet, der Nutzerbereich bleibt erhalten. 
+                
+                
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+
+
+               Kurzuebersicht zu letzten Aenderungen an CP/A 
+                
+               ;CCP 
+               ; -     Promt du> bei u groesser 0 
+               ; -     Kommandofiles werden bei USER>0 auch unter USER 0 und  
+               ;       wenn dort erfolglos auf der Systemdiskette (im Kalt- 
+               ;       start-LW) unter USER 0 gesucht (gilt nicht fuer nach- 
+               ;       geladene Files!) 
+               ; -     neue residente Kommandos GO, CLK, EXT, RES, HELP 
+               ;BDOS 
+               ; -     Um eine Arbeit ohne LW A zu erlauben, wird das erste  
+               ;       Default-LW nach Kaltstart bei jedem Disk-Reset selek- 
+               ;       tiert. 
+               ;Floppy: 
+               ; -     Beschleunigung der Arbeit mit 8"-Disketten am Buero- 
+               ;       computer, vor allem beim Kopieren zw. 2 Laufwerken 
+               ;Bildschirm: 
+               ; -     00h wird als NOP-Steuerzeichen interpretiert 
+               ; -     Bit7 wird immer geloescht (kein Kursor mehr) 
+               ; -     wahlweise Unterstuetzung ADM3A-Steuerzeichenfolgen 
+               ;Tastatur: 
+               ; -     Vereinfachung der Einbindung weiterer Tastaturen 
+               ; -     Integration Spezialtastatur IH-Mittweida 
+               ; -     Moeglichkeit der nutzereignen Stringdefinition 
+               ;       durch Bildschirm-Steuerzeichenfolge oder im Stopzust. 
+               ; -     ^Q-Prefix beim Betaetigen Kursor-Taste mit vorherigem 
+               ;       ET2 (bei nicht K76x4) bzw. gleichzeitigem Control 
+               ; -     Aenderung der Standardbelegung fuer Tasten PF6 und PF7: 
+               ;       PF6: ^OD (zuvor ^Q); PF7: ^OG (zuvor ^P, wenig benutzt) 
+               ;       Unterstuetzung der Tasten PF10, PF11, PF12 
+               ;       PF10: ^KS^QP, PF11: ^KB, PF12: ^KK 
+               ;Drucker: 
+               ;Stopfunktion: 
+               ; -     Gepufferte Tastaturz. werden wie bei Mon.aufr. gestr. 
+               ; -     Moeglichkeit der Definition von Nutzerstring-Tasten
