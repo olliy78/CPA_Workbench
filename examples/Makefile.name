@@ -1,0 +1,60 @@
+
+
+# Makefile für NAME.COM (CP/M-Programm, fragt Anwendernamen ab)
+#
+# Dieses Makefile baut das Name-Programm im aktuellen Verzeichnis.
+# Es kopiert die benötigten Tools aus ../tools ins Arbeitsverzeichnis,
+# da die CP/M-Tools keine Verzeichnisse unterstützen.
+# Nach dem Build werden die Tools wieder entfernt.
+
+# Betriebssystem erkennen (für Wine unter Linux)
+OS := $(shell uname)
+
+# Name des CP/M-Emulators
+CPMEXE = cpm.exe
+
+# Name und Pfad der Zieldatei
+TARGET = name.com
+
+# Quelltextdatei
+SRC = name.mac
+
+# CPM-Tool-Aufruf je nach Betriebssystem
+ifeq ($(OS),Linux)
+CPM = wine $(CPMEXE)
+else
+CPM = $(CPMEXE)
+endif
+
+# Standard-Target: baue das Name-Programm
+all: $(TARGET)
+
+# Build-Regel: Erzeuge name.com im aktuellen Verzeichnis
+$(TARGET): $(SRC)
+	@echo "---------------------------------------------------"
+	@echo "Generieren von name.com"
+	@echo "---------------------------------------------------"
+	# 1. Tools ins Arbeitsverzeichnis kopieren
+	cp ../tools/cpm.exe .
+	cp ../tools/m80.com .
+	cp ../tools/linkmt.com .
+	# 2. Vorherige Build-Produkte entfernen
+	@rm -f name.com
+	# 3. Assemblieren mit M80
+	$(CPM) m80 =name/L
+	$(CPM) m80 name.erl=name
+	# 4. Linken mit LINKMT
+	$(CPM) linkmt name=name/p:100
+	# 5. Temporäre Dateien entfernen
+	@rm -f *.syp name.erl name.rel
+	# 6. Tools wieder entfernen
+	rm -f cpm.exe m80.com linkmt.com
+	@echo "..................................................."
+	@echo "Fertig !!!!!!"
+
+# Clean-Target: löscht alle Build-Produkte und temporären Dateien
+clean:
+	rm -f name.com *.syp name.erl name.rel
+
+# Diese Targets sind keine echten Dateien
+.PHONY: all clean

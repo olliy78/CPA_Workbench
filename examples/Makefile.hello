@@ -1,0 +1,65 @@
+
+
+# Makefile für HELLO.COM (CP/M-Programm, gibt Hello World aus)
+#
+# Dieses Makefile baut das Hello-World-Programm im aktuellen Verzeichnis.
+# Es kopiert die benötigten Tools aus ../tools ins Arbeitsverzeichnis,
+# da die CP/M-Tools keine Verzeichnisse unterstützen.
+# Nach dem Build werden die Tools wieder entfernt.
+
+
+# Betriebssystem erkennen (für Wine unter Linux)
+OS := $(shell uname)
+
+# Name des CP/M-Emulators
+CPMEXE = cpm.exe
+
+# Name und Pfad der Zieldatei
+TARGET = hello.com
+
+# Quelltextdatei
+SRC = hello.mac
+
+
+# CPM-Tool-Aufruf je nach Betriebssystem
+ifeq ($(OS),Linux)
+CPM = wine $(CPMEXE)
+else
+CPM = $(CPMEXE)
+endif
+
+
+# Standard-Target: baue das Hello-World-Programm
+all: $(TARGET)
+
+
+
+# Build-Regel: Erzeuge hello.com im aktuellen Verzeichnis
+$(TARGET): $(SRC)
+	@echo "---------------------------------------------------"
+	@echo "Generieren von hello.com"
+	@echo "---------------------------------------------------"
+	# 1. Tools ins Arbeitsverzeichnis kopieren
+	cp ../tools/cpm.exe .
+	cp ../tools/m80.com .
+	cp ../tools/linkmt.com .
+	# 2. Vorherige Build-Produkte entfernen
+	@rm -f hello.com
+	# 3. Assemblieren mit M80
+	$(CPM) m80 =hello/L
+	$(CPM) m80 hello.erl=hello
+	# 4. Linken mit LINKMT
+	$(CPM) linkmt hello=hello/p:100
+	# 5. Temporäre Dateien entfernen
+	@rm -f *.syp hello.erl hello.rel
+	# 6. Tools wieder entfernen
+	rm -f cpm.exe m80.com linkmt.com
+	@echo "..................................................."
+	@echo "Fertig !!!!!!"
+
+
+# Clean-Target: löscht alle Build-Produkte und temporären Dateien
+clean:
+	rm -f hello.com *.syp hello.erl hello.rel
+
+.PHONY: all clean
