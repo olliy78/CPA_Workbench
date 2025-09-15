@@ -1,0 +1,124 @@
+diskdef PRG710-1
+  seclen 1024
+  tracks 160
+  sectrk 5
+  blocksize 2048
+  maxdir 128
+  skew 0
+  boottrk 4
+  os 2.2
+end
+
+diskdef PRG710
+  seclen 1024
+  tracks 160
+  sectrk 5
+  blocksize 2048
+  maxdir 128
+  skew 0
+  boottrk 3
+  os 2.2
+end
+
+diskdef A5120_780
+  seclen 1024
+  tracks 160
+  sectrk 5
+  blocksize 2048
+  maxdir 128
+  skew 0
+  boottrk 0
+  offset 15104
+  os 2.2
+end
+
+
+# Robotron 1715 with SCP3
+diskdef 17153
+  seclen 1024
+  tracks 160
+  sectrk 5
+  blocksize 2048
+  maxdir 128
+  skew 0
+  boottrk 4
+  os 3
+end
+
+diskdef cpa200
+  seclen 1024
+  tracks 40
+  sectrk 5
+  blocksize 2048
+  maxdir 128
+  skew 0
+  boottrk 0
+  os 2.2
+end
+
+diskdef scp624
+  seclen 256
+  tracks 160
+  sectrk 16
+  blocksize 2048
+  maxdir 128
+  skew 0
+  boottrk 4
+  os 2.2
+end
+
+diskdef scp640
+  seclen 256
+  tracks 160
+  sectrk 16
+  blocksize 2048
+  maxdir 128
+  skew 0
+  boottrk 0
+  os 2.2
+end
+
+diskdef scp780
+  seclen 1024
+  tracks 160
+  sectrk 5
+  blocksize 2048
+  maxdir 128
+  skew 0
+  boottrk 3
+  os 2.2
+end
+
+diskdef cpa780_withoutBoot
+  seclen 1024
+  tracks 156
+  sectrk 5
+  blocksize 2048
+  maxdir 128
+  skew 0
+  boottrk 0
+  os 2.2
+end
+
+diskdef scp800
+  seclen 1024
+  tracks 160
+  sectrk 5
+  blocksize 2048
+  maxdir 128
+  skew 0
+  boottrk 0
+  os 2.2
+end 
+
+diskdef z9001
+  seclen 1024
+  tracks 160
+  sectrk 5
+  blocksize 2048
+  maxdir 192
+  skew 0
+  boottrk 0
+  os 2.2
+end 
+
