@@ -1,0 +1,100 @@
+
+#!/bin/sh
+# Script: extract_files
+# Extrahiert alle Dateien aus einem CP/M-Disketten-Image in ein neues Verzeichnis.
+#
+# Verwendung:
+#   ./extract_files [-f FORMAT] <disk_image.img>
+#   -f FORMAT   Dateisystemformat für cpmtools (Standard: scp800)
+#   -h          Zeigt diese Hilfe an
+
+
+# Pfad/Name des cpmcp-Befehls (bei Bedarf anpassen, z.B. /usr/local/bin/cpmcp)
+CPMCP_CMD="cpmcp"
+
+# Standard-Dateisystemformat
+FORMAT="scp800"
+
+# Hilfetext anzeigen
+show_help() {
+    echo "Verwendung: $0 [-f FORMAT] <disk_image.img>"
+    echo "  -f FORMAT   Dateisystemformat für cpmtools (Standard: scp800)"
+    echo "  -h          Zeigt diese Hilfe an"
+    echo "Beispiel: $0 -f scp800 ./cpa1715src.img"
+}
+
+# Argumente parsen
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -f)
+            shift
+            if [ -n "$1" ]; then
+                FORMAT="$1"
+                shift
+            else
+                echo "Fehler: -f benötigt ein Argument."
+                show_help
+                exit 1
+            fi
+            ;;
+        -h)
+            show_help
+            exit 0
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
+            echo "Unbekannte Option: $1"
+            show_help
+            exit 1
+            ;;
+        *)
+            # Erstes nicht-Option-Argument ist das Image-File
+            IMG_FILE="$1"
+            shift
+            ;;
+    esac
+done
+
+# Prüfe, ob ein Image-File angegeben wurde
+if [ -z "$IMG_FILE" ]; then
+    show_help
+    exit 1
+fi
+
+
+
+
+# Bestimme Basisnamen des Images (ohne Pfad und .img-Endung)
+BASENAME=$(basename "$IMG_FILE" .img)
+NEW_DIR="$BASENAME"
+COUNT=1
+# Finde einen freien Verzeichnisnamen (ggf. _1, _2, ... anhängen)
+while [ -d "$NEW_DIR" ]; do
+    if echo "$NEW_DIR" | grep -qE '_[0-9]+$'; then
+        BASE_NO_NUM=$(echo "$NEW_DIR" | sed -E 's/_[0-9]+$//')
+        CUR_NUM=$(echo "$NEW_DIR" | sed -E 's/.*_([0-9]+)$/\1/')
+        COUNT=$((CUR_NUM + 1))
+        NEW_DIR="${BASE_NO_NUM}_$COUNT"
+    else
+        NEW_DIR="${BASENAME}_$COUNT"
+    fi
+done
+
+# Lege das Zielverzeichnis an
+mkdir -p "$NEW_DIR"
+
+
+
+# Liste alle Dateien im Image auf, überspringe die Kopfzeile, extrahiere Dateinamen und kopiere sie ins Zielverzeichnis
+cpmls -f "$FORMAT" "$IMG_FILE" | tail -n +2 | awk '{print $1}' | while read FILE; do
+    [ -n "$FILE" ] && "$CPMCP_CMD" -f "$FORMAT" "$IMG_FILE" "0:$FILE" "$NEW_DIR/"
+done
+
+
+
+# Zähle die extrahierten Dateien und gib das Ergebnis aus
+COUNT_FILES=$(find "$NEW_DIR" -type f | wc -l)
+echo "Es wurden $COUNT_FILES Dateien in den Ordner $NEW_DIR extrahiert."

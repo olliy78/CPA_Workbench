@@ -1,0 +1,2 @@
+ECHO folgende Programme sind vorhanden:
+DIR *.COM

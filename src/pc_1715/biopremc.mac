@@ -1,0 +1,214 @@
+;;Initialisieren RAM-Floppy mit EM256
+;;===================================
+
+;;	Bedeutung der Bits der PIO-Ports des EM256
+;;
+;;	PIO Port A (alle Bits auf Eingabe)
+pioa_0	equ	0		;;Kennung vom U8000
+pioa_1	equ	1		;;       "
+pioa_2	equ	2		;;       "
+n_vi	equ	3		;;Vektorinterrupt U8000 (negiert)
+int16	equ	4		;;Interrupt vom U8000 an U880
+n_s	equ	5		;;Normal-(1) oder Systemmode(0) des U8000
+m8_16	equ	6		;;8-Bit-(1) oder 16-Bit-Mode(0)
+tren	equ	7		;;Transfer Enable des U8000
+;;		
+;;	PIO Port B (b0..b6 Ausgabe, b7 Eingabe)
+sg0p	equ	0		;;fuer U880-Zugriff angewaehltes Segment 
+sg1b	equ	1		;;                "
+n_ramen	equ	2		;;RAM-Enable (negiert)
+n_stop	equ	3		;;U8000-Stop (negiert)
+reset16	equ	4		;;U8000-Reset
+n_trq8	equ	5		;;Transferrequest des U880 (negiert)
+prreset	equ	6		;;Reset Paritaetsfehler
+n_pe	equ	7		;;Paritaetsfehler (negiert)
+;; 
+;;
+;;Programmierung des 16*4-RAM
+;;
+;;     0x/modadr+7    |x|x|x|x| | | | |
+;;     1x/modadr+7    |x|x|x|x| | | | |
+;;          .                 .
+;;          .                 .
+;;    0Fx/modadr+7    |x|x|x|x| | | | |
+;;     |     |                 | | | |___0=Page enable
+;;     |     |                 | | |_____0=Write enable
+;;     |     |                 | |_______/A14-8  Adressbit14 auf EM256 (neg.)
+;;     |     |                 |_________/A15-8      "    15        "
+;;     |     |___________________________Grund(Port)adresse des 16*4-RAM
+;;     |_________________________________Subadresse, adressiert Page im
+;;					 gewaehlten Segment
+;;
+;; !! b6 und b7 der Subadresse stellen die hoechstwertigen Bits der !!
+;; !! externen (von der U880-Seite) Adresse fuer den Zugriff dar.   !!
+;; !! Die wirkliche Adresse auf U8000-Seite ergibt sich durch Sub-  !!
+;; !! stitution durch die mit /A14-8 u. /A15-8 festgelegten Bits.   !!
+ 
+n_pagen	equ	0	;;Page enable (negiert)
+n_write equ	1	;;write enable (negiert)                   
+hbemadr	aset	em256adr and 0c000h
+;;
+emina:	ld 	hl,parrou	;;Interruptadresse Paritaetsfehler
+	ld	(intvec+ivpar),hl
+;;
+	ld	b,3
+	ld	hl,painit	;;em256 PIO Port A
+	ld	c,modadr+2
+	otir			;;Initialisieren
+;;
+	ld	b,5
+	ld 	hl,pbinit	;;em256 PIO Port B
+	ld	c,modadr+3
+	otir			;;Initialisieren
+;;
+	ld	a,1 shl prreset or 1 shl reset16 or 1 shl n_ramen
+	out	(modadr+1),a	;;Parityreset
+	ld	a,1 shl n_ramen or 1 shl reset16
+      				;;RAM-Disable, U8000 Reset
+	out	(modadr+1),a
+;;
+;;alle Pages im 16*4-Bit-Speicher mit PAGE Disable, WRITE Disable,
+;;externe Adresse em256adr initialisieren
+;;
+	ld	bc,modadr+7	;;16*4-RAM, Subadresse 0
+inloop:	ld a,1 shl n_pagen or 1 shl n_write or hbemadr shr 12
+	out	(c),a
+	ld 	a,10h
+	add	a,b
+	ld 	b,a		;;naechste Subadresse
+	jr	nc,inloop
+;;
+;;***Ruecklesen klappt nicht mit allen ZRE's, daher abgeklemmt
+;;	in	a,(c)		;;ruecklesen bit0..3
+;;	or	0f0h
+;;	cpl			;;muesste jetzt gleich
+;;	cp	1 shl n_pagen or 1 shl n_write or hbemadr shr 12
+
+	ld	hl,(em256adr)	;;retten aktuellen Inhalt RAM
+	push	hl
+	ld	hl,0
+	ld	(em256adr),hl	;;und zerstoeren RAM-Inhalt
+	xor	a		;;Spur 0
+	call	ramon		;;scharf
+	ld	de,(em256adr)	;;retten alten Inhalt RAM-Floppy
+	ld	hl,0a55ah	;;Bitmuster 5A A5 auf erste beide Bytes
+	ld	(em256adr),hl	;;der RAM-Floppy oder in normalen RAM
+	ld	hl,(em256adr)	;;Muster zuruecklesen
+	ld	(em256adr),de	;;und alten Inhalt wiederherstellen
+	call	ramoff
+	ld	de,0a55ah
+	or	a
+	sbc	hl,de		;;Muster angekommen?
+	pop	hl
+	ld	(em256adr),hl	;;  wiederherstellen RAM
+	jr	z,inl001	;;ja, EM256 ist vorhanden
+;;				  EM256 nicht vorhanden,
+	ld	hl,kemlwt
+	ld	(hl),'?'	;;in Kaltstart-Text
+	inc	hl
+	ld	(hl),'?'
+	ld	hl,0		;;Laufwerk nicht definiert
+	ld	(dphatb+2*('M'-'A')),hl
+	ld	a,0c9h		;;RET
+	ld	(ramon),a	;;ramon entschaerfen
+	ld	(ramoff),a	;;ramoff	"
+	jp	emine
+;;
+inl001:	xor 	a
+	ld	(parerr),a	;;Paritaetsfehler ruecksetzen
+	call 	tstkng		;;Test, ob Kennung vorhanden
+	jr	z,inl004	;;Ja, noch geladen
+
+;;RAM-Floppy neu anlegen
+inl003:	xor	a
+	call	ramon
+	push	bc
+	ld	de,em256adr	;;Dir-Eintrag anlegen
+	ld	hl,kenn1
+	ld	bc,32+1		;;+ 1 Byte 0E5H
+	ldir
+	ld 	hl,em256adr+32
+	ld	bc,1000h-31-1
+	ldir			;;Directory mit 0E5H vollschreiben
+	pop	bc
+	call	ramoff
+inl004:	ld	a,(parerr)
+	dec	a		;;Fehler aufgetreten ?
+	jr	nz,inl005	;; Nein !
+	ld	hl,parmes
+	call	biosms
+	jp	emina
+;;
+;; wenn auf Segment 2,1 (Spuren 32,16) die Kennung steht, liegt eine 
+;; abgeruestete Variante des EM256 vor ---> Kapazitaet in DPB verringern
+;;
+inl005:	ld 	hl,kemmc
+	ld	(hl),'2'	;;256 k in Meldezeile
+	inc	hl
+	ld	(hl),'5'
+	inc	hl
+	ld	(hl),'6'
+	ld	a,256-1	
+	ld	(dpbem+dpbsiz),a
+	ld	a,32		;;Spur 32
+	call	tstkng		;;Test: Kennung da?
+	jp	nz,emine	;;Nein, dann volle Bestueckung
+
+	ld 	hl,kemmc
+	ld	(hl),'1'	;;128 k in Meldezeile
+	inc	hl
+	ld	(hl),'2'
+	inc	hl
+	ld	(hl),'8'
+	ld	a,128-1		;;Ja, dann max.128kByte
+	ld	(dpbem+dpbsiz),a
+	ld	a,16		;;Spur 16
+	call	tstkng		;;Test:	Kennung da?
+	jp	nz,emine	;;Nein,dann 128kByte
+
+	ld	a,64-1		;;Ja, dann 64kByte
+	ld	(dpbem+dpbsiz),a
+	ld 	hl,kemmc
+	ld	(hl),' '	;; 64 k in Meldezeile
+	inc	hl
+	ld	(hl),'6'
+	inc	hl
+	ld	(hl),'4'
+	jr	emine
+
+parmes:	db	0dh,0ah,' Paritaetsfehler im EM256, Wiederholung!'
+
+painit:	db	0cfh		;;Bit-E/A
+	db	0ffh		;;alle Bits Eingabe
+	db	7		;;Int. verbieten, keine Maske
+pbinit: db	ivpar		;;Int.-vektor Paritaetsfehler
+	db	0cfh		;;Bit-E/A
+	db 	80h		;;b7 Eingabe, Rest Ausgabe
+	db 	97h		;;Maske folgt, 0 loest INT aus, INT Enable
+	db	80h		;;Paritaetsfehler loest INT aus
+
+tstkng: call	ramon
+	push	bc
+	ld	hl,kenn1
+	ld	de,em256adr
+	ld	b,12
+testk1:	ld	a,(de)		;;Kennung da ?
+	cp	(hl)
+	jr	nz,testk2	;;Nein, dann volle Bestueckung
+	inc	hl
+	inc	de
+	djnz	testk1
+testk2:	pop	bc
+	push af			;;Zero-Flag merken
+	call ramoff
+	pop af
+	ret
+
+;; Kennungsmuster fuer Verhindern Loeschen der RAM-Floppy nach Kaltstart
+kenn1:	db 1fh,'@EMvalid','S' or 80h,'Y' or 80h,'S'	;;User 31
+	ds 20,0
+	db 0e5h
+emine:
+
+
+

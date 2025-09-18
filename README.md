@@ -15,6 +15,7 @@ Dieses Projekt enthält den Quellcode der BIOS Komponente sowie einige öffentli
 ## Systemüberblick
 
 Das System besteht aus drei Hauptteilen:
+
 - **BIOS** (Quelltext, konfigurierbar)
 - **BDOS** (vorgefertigt, Link-Eingabe)
 - **CCP** (vorgefertigt, Link-Eingabe)
@@ -22,11 +23,13 @@ Das System besteht aus drei Hauptteilen:
 ## Build-Anleitung
 
 ### Voraussetzungen
+
 - Linux oder Windows
 - Wine (unter Linux, um CP/M-Tools auszuführen)
 - Die Tools m80.com, linkmt.com und cpm.exe müssen im Verzeichnis `tools/` liegen
 
 ### BIOS und System bauen
+
 Im Hauptverzeichnis:
 ```sh
 make
@@ -34,6 +37,7 @@ make
 Das erzeugte System befindet sich dann als `build/@OS.com`.
 
 ### Beispielprogramme bauen
+
 Im jeweiligen Unterverzeichnis (z.B. `examples/`):
 ```sh
 make -f Makefile.hello
@@ -42,39 +46,39 @@ make -f Makefile.name
 Die Tools werden automatisch aus `../tools/` kopiert und nach dem Build wieder entfernt.
 
 ### Aufräumen
+
 ```sh
 make clean
 ```
-Entfernt alle Build-Produkte und temporären Dateien.
+Entfernt alle Build-Produkte und temporäre Dateien.
 
 ## Konfigurationsmöglichkeiten (BIOS)
-
 
 Das BIOS ist hochgradig konfigurierbar. Die wichtigsten Optionen werden direkt im Quelltext (`src/bios.mac`) über sogenannte "equates" (Konstanten-Definitionen mit dem Assembler-Befehl `equ`) gesetzt. Die häufigsten Konfigurationsmöglichkeiten und typische Werte sind:
 
 - **RAM-Größe:** `ramkb` (z.B. 64)
 - **RAM-Floppy/Erweiterungen:** `oss`, `em256`, `mkd256`, `raf`, `rna` (0/1)
 - **Bildschirm (crt):**
-	- `K7024` (0): Standard-Bildschirmkarte
-	- `DSY5` (1): Invers-Karte 
-	- `B1715` (7): PC1715-Bildschirm
+ - `K7024` (0): Standard-Bildschirmkarte
+ - `DSY5` (1): Invers-Karte 
+ - `B1715` (7): PC1715-Bildschirm
 - **Tastatur:**
-	- `typ80`: 3454 (K7634.54), 36 (K7636-Familie)
-	- `kbdotp`: 0 (K7606), 1 (K7604), 2 (DEG-Spezial), 3 (K7633)
+ - `typ80`: 3454 (K7634.54), 36 (K7636-Familie)
+ - `kbdotp`: 0 (K7606), 1 (K7604), 2 (DEG-Spezial), 3 (K7633)
 - **Laufwerke (diskA, diskB, ...):**
-	- 10540: DD, SS, 5", 40 Tracks
-	- 10580: DD, SS, 5", 80 Tracks
-	- 11580: DD, DS, 5", 80 Tracks
-	- 00877: SD, SS, 8", 77 Tracks
-	- 10877: DD, SS, 8", 77 Tracks
-	- 0: Laufwerk nicht vorhanden
+ - 10540: DD, SS, 5", 40 Tracks
+ - 10580: DD, SS, 5", 80 Tracks
+ - 11580: DD, DS, 5", 80 Tracks
+ - 00877: SD, SS, 8", 77 Tracks
+ - 10877: DD, SS, 8", 77 Tracks
+ - 0: Laufwerk nicht vorhanden
 - **Diskettenpuffer:** `dbufsz` (Exponent von 2, z.B. 10 für 1024 Bytes)
 - **Weitere Schalter:**
-	- `monitor`, `stpvar`, `mprot`, `cpastz`, `errvar`, `uhrvar`, `iobvar`, `costu` (jeweils 0/1)
+ - `monitor`, `stpvar`, `mprot`, `cpastz`, `errvar`, `uhrvar`, `iobvar`, `costu` (jeweils 0/1)
 
 Die Kommentare im Quelltext geben zu jedem Parameter weitere Hinweise und erlaubte Werte.
 
-- **RAM-Größe:**  
+- **RAM-Größe:** 
 	`ramkb` – RAM in KB (z.B. 64)
 - **RAM-Floppy:**  
 	`oss`, `em256`, `mkd256`, `raf`, `rna` – Unterstützung verschiedener RAM-Floppy- und Erweiterungskarten
@@ -124,6 +128,39 @@ Die Konfiguration erfolgt durch Anpassen der entsprechenden `equ`-Zeilen in `src
 - Die Makefiles sind ausführlich kommentiert und zeigen die einzelnen Schritte.
 - Beispielprogramme und eigene Tools liegen in `examples/` und sind klar von den Systemquellen getrennt.
 - Die Systemadresse für das Linken wird automatisch aus der M80-Ausgabe extrahiert.
+
+## Systemdiskette erstellen und schreiben
+
+Um eine lauffähige Systemdiskette für CP/A zu erstellen, gehe wie folgt vor:
+
+1. **Systemdisk-Image bauen:**
+   
+   Im Verzeichnis `systemDisk/` befindet sich ein Makefile, das alle nötigen Schritte automatisiert:
+   
+   ```sh
+   cd systemDisk
+   make diskImage
+   ```
+   
+   Dadurch wird ein Diskettenimage (`build/cpadisk.img`) erzeugt, das das Betriebssystem und alle Zusatztools enthält.
+
+2. **Zusatztools:**
+   
+   Im Verzeichnis `additions/` liegen verschiedene Tools und Hilfsprogramme, die automatisch mit auf die Systemdiskette kopiert werden. Diese Werkzeuge erleichtern die Arbeit mit dem Betriebssystem und stehen nach dem Booten direkt zur Verfügung.
+
+3. **Systemdiskette auf physikalisches Laufwerk schreiben:**
+   
+   Mit dem Ziel `writeImage` im selben Verzeichnis kann das erzeugte Image auf ein echtes Laufwerk geschrieben werden (z.B. mit dem Tool `gw`):
+   
+   ```sh
+   make writeImage
+   ```
+   
+   Das Makefile nutzt dazu die passenden Parameter und Konfigurationsdateien. Details siehe Kommentare im `systemDisk/Makefile`.
+
+**Hinweis:**
+- Die Systemdiskette enthält nach dem Build alle im additions-Ordner befindlichen Tools.
+- Für den Schreibvorgang werden ggf. Administratorrechte benötigt.
 
 ## Lizenz
 Bitte beachte die Lizenzhinweise in den Quelldateien und Dokumenten.

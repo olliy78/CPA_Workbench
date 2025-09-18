@@ -1,0 +1,35 @@
+; Kaltstart-Initialisierung Tastatur
+;===================================
+
+	xor	a
+	ld	(0ffffh),a	;;Tastaturpuffer leeren
+crtm43	equ	$-2
+
+ IF costu
+;;Setzen nutzereigene Stringtabelle
+	ld	hl,costrt	;setzen max. Laenge -1
+	if	(costu-1+intvr-biosde) gt 255
+	ld	(hl),255
+	else
+	ld	(hl),costu-1+intvr-biosde
+	endif
+	inc	hl
+	ld	(hl),0ffh	;Tabelle ist leer
+ ENDIF
+
+	ld	hl,copar
+	ld	bc,copl1*256+kbdscs	;;Empf. SIO
+	otir
+	jr	coiin1
+copar:
+;; SIO
+cop1:			;;Kanal A - Tastatur und Printer
+	db	00h,018h	;;Kanal A Reset
+	db	04h,004h	;;Clock*1/1 Stopb./ohne Par.
+	db	01h,000h	;;kein Interrupt (Polling ueber Zeittakt)
+	db	03h,0c1h	;;8 Bit/Empf.freigabe
+copl1	equ	$-cop1
+
+coiin1:
+	call	lampen		;alle Lampen aus
+

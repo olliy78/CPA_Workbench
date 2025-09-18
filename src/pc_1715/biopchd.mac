@@ -1,0 +1,300 @@
+;**************************************************************
+;	zeichenorientierte Geraete, Version 10.06.87
+; Aenderungen:
+; Fehlerkorrektur UC1:-Treiber
+; - getrennter Status Sender/Empf.
+; - Verwaltung des DTR-Bits auf Empf.seite
+; - UC1: arbeitet empfangsseitig interruptgetrieben
+; - Einfuehrung eines UC1:-Puffers als Verlaengerung des SIO-Puffers
+; - bei E/A-Fehler (Drucker nicht bereit) warten auf Bestaetigung,
+;   moegliche Reaktion ^C, I(gnore device) oder R(etry)
+;**************************************************************
+
+ if1
+
+; Warmstart-Initialisierung
+;==========================
+chdwarm	MACRO
+	call	lsynch		;alle Zeichen-Geraete neu initial.
+	ENDM
+
+ endif ; if1
+
+
+; Ausgabe
+;~~~~~~~~
+; TTY:
+;=====
+ if	iobtty
+ttyo:	ld	ix,lsttty
+	jr	lsto
+ else
+ttyo	equ	dumo
+ endif
+
+; LPT:
+;=====
+ if	ioblpt
+lpto:	ld	ix,lstlpt
+	jr	lsto
+ else
+lpto	equ	dumo
+ endif
+
+; UC1:
+;=====
+ if	iobuc1
+uc1o:	ld	ix,lstuc1
+	jr	lstoch		;nicht 2 Bahn Zeichen interpr.
+ else
+uc1o	equ	dumo
+ endif
+
+lsto:
+listi:	;interner Aufruf lsto mit gestelltem IX
+ IF l2bahn
+	ld	hl,lampbf
+	ld	a,c
+	cp	8ah		;beide Bahnen parallel?
+	jr	nz,lst2b6	;nein
+	set	lmpb2b,(hl)	;sonst vermerken
+	ret			;und fertig
+lst2b6:	cp	89h		;umschalten auf rechte Bahn?
+	jr	z,lst2b1	;ja
+	cp	88h		;umschalten auf linke Bahn?
+	jr	z,lst2b2	;ja
+	bit	lmpb2r,(hl)	;ist linke Bahn eingestellt?
+	jr	nz,lst2b7	;nein, rechts ausgeben
+	cp	0ah		;LF?
+	jr	nz,lstoch	;nein, direkt ausgeben
+	bit	lmpb2b,(hl)	;beide Bahnen parallel?
+	jr	z,lstoch	;nein
+	call	lst2b4		;beide Bahnen weiterschalten
+	db	0ah,011h	;LF links und rechts
+	db	0
+; auf rechter Bahn ausgeben
+lst2b7:	cp	0ah		;LF? (kommt in ESC-Folge nicht vor)
+	ld	c,11h		;	LF rechts
+	jr	z,lstoch	;ja
+	cp	0ch		;FF?
+	ld	c,13h		;	FF rechts
+	jr	z,lstoch
+	cp	0dh		;CR?
+	ld	c,a
+	jr	nz,lstoch	;nein, direkt ausgeben
+; CR rechts durch absolute Positionierung simulieren
+lst2b3:	call	lst2b4
+	db	1bh,5bh
+	decout	l2bahn
+	db	60h		;auf abs. Pos. 'l2bahn'
+	db	0
+; String ab (SP) bis 00h ausgeben
+lst2b4:	pop	hl
+	ld	c,(hl)
+	inc	c		;fertig?
+	dec	c
+	ret	z
+	inc	hl
+	push	hl
+	call	lstoch
+	jr	lst2b4
+lst2b1:	set	lmpb2r,(hl)	;auf rechte Bahn umschalten
+	jr	lst2b3		;CR rechts simulieren
+
+lst2b2:	res	lmpb2r,(hl)	;auf linke Bahn umschalten
+	ld	c,0dh		;CR links ausgeben
+ ENDIF
+
+; Einzelzeichenausgabe Reg. C
+;-----------------------------
+lstoch:
+	bit	1,(ix+ltpst)	;senderseitig blockiert?
+	ret	nz		;ja, Ausgabe ignorieren
+	push	bc		;retten Zeichen in C
+loutws:	ld	c,30		;max. Wartezeit in Sek. auf ready
+loutw1:	ld	b,100		;100*10ms warten
+loutwt:	push	bc
+	CALL	lststi		;Status holen
+	jr	nz,loutwf	;ist frei
+	ld	b,1
+	call	wait10		;Warten 10 ms
+	pop	bc
+	djnz	loutwt		;weiter warten?
+	dec	c		;weitere Sekunde warten?
+	jr	nz,loutw1	;ja
+ IF errvar
+	call	spioer		;Fehlermeldung
+	jr	nz,loutws	;Wiederholung
+ ENDIF
+	pop	bc
+	set	1,(ix+ltpst)	;Sender blockiert
+	ret			;folgende Ausgaben werden ignor.
+loutwf:	pop	bc
+	pop	bc
+	ld	a,c		;auszugebendes Zeichen nach A
+	ld	l,(ix+ltpo)
+	ld	h,(ix+ltpo+1)
+	jp	(hl)
+
+ IF errvar
+spioer:	ld	a,(ix+ltpsd)	;Daten-Port-Adresse
+	ld	de,louttp
+	call	mrecoa		;in Text
+	ld	hl,loutto
+	call	biosms
+	call	kbdbcl
+	call	conin
+	res	5,a
+	cp	'C' and 1fh	;^C ?
+	jp	z,0		;ja, Abbruch
+	cp	'I'		;ret z: 'I'; ret nz: 'R'
+	ret
+
+loutto:
+ IF cpastz
+ ELSE
+	db	0dh,0ah
+ ENDIF
+louttp:	db	'XXh Fehler ^C/I/R'
+ IF cpastz
+ ELSE
+	db	07h,0
+ ENDIF
+ ENDIF	;errvar
+
+;-----------------------
+
+
+; Status
+;-------
+; o A=0, ret z	: Ausgabe besetzt
+; o A=ff,ret nz	: Ausgabe frei
+
+; TTY:
+;=====
+ if	iobtty
+ttyst:	ld	ix,lsttty
+	jr	lstst
+ else
+ttyst	equ	dumst
+ endif
+
+; LPT
+;====
+ if	ioblpt
+lptst:	ld	ix,lstlpt
+	jr	lstst
+ else
+lptst	equ	dumst
+ endif
+
+ if iobuc1
+ else
+uc1st	equ	dumst
+ endif
+
+lstst:
+lststi:	;interner Aufruf Sender-Status mit gestelltem IX
+; ret nz, A=FF fuer frei
+; ret z , A=00 fuer besetzt
+
+	ld	l,(ix+ltps)
+	ld	h,(ix+ltps+1)
+	jp	(hl)
+
+;-----------------------------
+
+; Zeichenempfang
+;---------------
+
+ttyi	equ	dumi
+lpti	equ	dumi
+ if iobuc1
+ else
+uc1i	equ	dumi
+ endif
+
+;-------------------------------
+
+; Synchronisieren
+;----------------
+lsynch:	
+	xor	a		;;SIO neu initialisieren
+	if	iobtty
+	ld	(lsttty+ltpst),a
+	endif
+	if	ioblpt
+	ld	(lstlpt+ltpst),a
+	endif
+	if	iobuc1
+	ld	(lstuc1+ltpst),a
+	endif
+	ret
+
+; Portprogrammierung
+;===================
+; i HL	^Steuertabelle, Laenge+1, Port, Bytes,...,1
+portpr:
+portpz:	ld	b,(hl)		;Stringlaenge +1
+	inc	hl
+	dec	b		;Ende?
+	ret	z		;ja
+	ld	c,(hl)		;Port
+	inc	hl
+	otir
+	jr	portpz
+
+;Steuertabellen fuer zeichenweise arbeitende Geraete
+;===================================================
+
+;Struktur:
+; fester Teil
+ltpst	equ	0	;Status
+			;Bit  7-4 Empf.,3-0 Sender  Bedeutung, wenn =1
+			;	4	0 Empfseite init./ Senderseite init.
+			;	5	1      -	 / Sender blockiert
+			;	7	3 Sender gestoppt/ Sender hat frei gem.
+ltpdc	equ	1	;zuletzt empf. Zeichen (i.a. DCx)
+			; (DC1/3 bei IFSS, bei DTR nur bei UC1: benutzt)
+ltpsd	equ	2	;Portadr. Daten
+ltpsc	equ	3	;Portadr. Kommando/Status (noch mal in ltpini!)
+
+ltpo	equ	4	;Adresse der Senderoutine
+ltpi	equ	6	;Adresse der Empfangsroutine
+ltps	equ	8	;Adresse der Empfangsstatus-Routine
+
+; Der folgende Teil existiert nur fuer SIO-Treiber
+ltpw5	equ	10	;WR5:
+			;Prozedur Bit 7,1: 11 DTR; 00 DC1/DC3
+			;Bitanzahl/Byte Bit 6,5: 00 5;01 7;10 6;11 8
+			;Bit 3 = 1 (Senderfreigabe)
+			;Bit 0,2,4 = 0
+; Port-Initialisierung (fuer alle Treiber)
+ltpini	equ	11	;jeweils Byteanzahl+1; Port; Bytefolge
+			;variabel lang
+
+			;fuer SIO-Treiber einige Erlaeuterungen:
+			;Port CTC-Sendetakt
+			;Vorteiler (37h DTR; 17h DC1/3)
+			;Baudrate (1=9600,2=4800,..64=150,96=100,128=75)
+			;evtl. nochmal fuer Port CTC-Empf.takt
+			;WR4:
+			;Paritaet in Bit 1,0: 00 ohne, 01 unger., 11 ger.
+			;Stop-Bits in Bit 3,2: 01 1; 10 1,5; 11 2
+			;Reserve   in Bit 5,4: 00 immer
+			;Prozedur  in Bit 7,6: 00 DTR; 01 DC1/DC3
+			;WR1:
+			;Interrvektormod. in Bit 2: 0=keine Modifizierung
+			;in Kanal B!! setzen
+			;Empf.interr.mode Bit4,3: 00 kein Interrupt
+			;			  01 bei erstem Zeichen
+			;			  10 bei jedem mit Mod.
+			;			  11 bei jedem ohne Mod.
+			;WR3:
+			;Empf.freigabe in Bit 0: 0=Empf. gesperrt; 1=Empf. frei
+			;Bit 1-5:00000
+			;Bitanzahl/Byte Bit 7,6:00 5;01 7;10 6;11 8
+
+von CP/A, so dass dieses bei Arbeit
+; ohne automatische Formaterkennung eingestellt ist.
+; Nutzerspezifische Modifizierunge

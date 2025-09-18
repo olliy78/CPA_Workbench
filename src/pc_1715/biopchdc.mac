@@ -1,0 +1,14 @@
+; Kaltstart-Initialisierung zeichenorientierte Geraete
+;=====================================================
+ if cdtpio
+	ld	hl,cdpsti
+	ld	(intvec+ivpiod),hl
+ endif
+ if iobuc1
+	ld	hl,uc1rin	;;Empf-Interrupt fuer UC1:
+	ld	(intvec+ivsio2),hl
+	ld	hl,uc1err	;;spez. Empf.Bedingung fuer UC1:
+	ld	(intvec+ivsio3),hl
+ endif
+ls Verlaengerung des SIO-Puffers
+; - bei E/A-Fehler (

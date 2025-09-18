@@ -1,0 +1,711 @@
+;************************************************************
+; Bildschirm-Ausgabe, Version 22.04.88
+; - Fehlerkorrektur Steuerzeichen 18h (es wurden nur 79 Zeichen gel.)
+; - bei Tastenumdefinition auch chr(253) als Begrenzer (dbase)
+; - BAB2 als Standardvariante
+; - 17h (insline) und 19h (delline) eingefuehrt fuer TURBO-PASCAL-Editor
+; - Realisierung der SCP1715-Steuerzeichen 1b 5e xx (Feldattribut)
+;   und 1b 5f xx (Spezialzeichen)
+;   Diese ESC-Folgen fueren beim Buerocomputer i.a. auf '^' (unzulaessig),
+;   ausser Feldattribute invers und hell (Reaktion wie Steuerz. 84..87)
+; - Kursor wird nur alle 50ms ueber Zeittakt gestellt, dadurch ca. 20%
+;   Zeiteinsparung bei aufeinanderfolgender Bildschirmausgabe
+;************************************************************
+
+
+bscom	equ	19h		;CRT Kommando
+bspar	equ	18h		;CRT Parameter
+bschsw	equ	34h		;Bildschpuffer/Zeichensatz
+
+; Durch Zeichentakt vorgegebene Werte:
+; (es wurde eine Korrektur der hrtc-Werte um 2 vorgenommen,
+;  um die Neueinstellung der Vertikal-Synchronisation
+;  bei schlecht eingestelltem Fangbereich trotz der
+;  17. bzw. 25. Text-Zeile zu vermeiden; bei einer Korrektur
+;  um 4 rueckt das Bild zuweit nach rechts!)
+
+; 					BAB1	BAB2
+; Quarz qubpt Bildpunkttakt		10,7	13,824	Mhz
+; Zeichentakt cclk =8/qubpt		750	580	ns
+; horfq =1/(cclk*(bssp+hrtc)		15.50	16.26	kHz
+; vertfq=horfq/(lpcr*(bszl+vrtc))	57.42	52.1	 Hz
+
+; Originalwerte ohne 17./25. Zeile	15.15	15.96
+;					56.1	51.2
+
+vrtc	equ	2		;Vertical Retrace Count
+vrtc1	equ	2		;dito BAB1
+ IF (bszl2 gt 24) or cpastz
+hrtc	equ	(28-2)/2	;Horizontal Retrace Count
+ ELSE
+hrtc	equ	28/2
+ ENDIF
+ IF (bszl1 gt 16) or cpastz
+hrtc1	equ	(24-2)/2	;dito BAB1
+ ELSE  
+hrtc1	equ	24/2
+ ENDIF
+lpcr	equ	12		;Lines per Character Row
+lpcr1	equ	15		;dito BAB1
+
+dcupos	equ	crtcps		;BIOS+38h Kursorposition
+
+ if1
+
+; Warmstart-Initialisierung
+;==========================
+crtwarm	MACRO
+	xor	a
+	ld	(desc),a	;evtl. ESCAPE-Modus beenden
+ if	adm3a
+	ld	(crtopo),a	;evtl. ADM3a-Modus beenden
+ endif
+	ld	c,82h		;Kursor sichtbar machen
+	call	crto
+	ENDM
+
+ endif	;if1
+
+crtst	equ	dumst		;CRT:-Status immer ready
+
+crto:
+	call	delsps		;waehrend Bildaufbau
+	push	bc		;merken zeichen in c
+	ld	hl,0*256+255	;Kursor auf Zeile 0, Spalte 255
+	call	crtscu		;d.h. loeschen
+	ld	hl,(dcupos)	;Kursorposition	
+	call	crtoti		;Zeichen ausgeben
+;				 HL danach auf neuer Kursorpositon
+
+; Setzen Kursor auf (HL)
+
+	ld	(dcupos),hl	;cursorposition
+	ld	a,80h
+dcurs	equ	$-1
+	or	a		;Cursor an?
+	jr	z,crtonc	;nein
+	ld	a,(crtccn)	;auf 0ffh ohne 25ms Zeittakt, sonst 2..0
+	inc	a		;laeuft der Zeittakt?
+	jr	nz,crtsc1	;ja
+	call	crtsci		;sonst Cursor aus HL berechnen und setzen
+	jr	crtsc2
+crtsc1:	ld	a,2		;erst nach 2*25ms Cursor berechnen und setzen
+crtonc:	ld	(crtccn),a
+crtsc2:
+	pop	bc		;wiederherstellen c-reg
+	call	delspr		;wiederzulassen Parall.arbeit
+
+ if (stpvar ne 0)  and (chdvar ne 0)
+; Hardcopy realisieren
+
+	ld	a,(lampbf)
+	bit	lmphcp,a	;Hardcopy?
+	ret	z		;nein
+	ld	a,c
+	and	7fh
+	cp	20h		;Steuerzeichen?
+	jr	c,crtoe1	;ja
+	cp	7fh
+	ret	c
+crtoe1:	push	bc
+	ld	hl,crtlc	;zugelassene Steuerzeichen
+	ld	bc,crtlcl
+	cpir			;erlaubt?
+	pop	bc
+	ret	z		;ja
+	ld	c,'^'		;sonst Spezialzeichen
+	ret
+
+; bei Hardcopy Bildschirm -> Drucker zugelassene Steuerzeichen
+
+crtlc:	db	08h,0ah,0ch,0dh
+crtlcl	equ	$-crtlc
+
+ else
+	ret
+ endif	;stpvar and chdvar
+
+
+;==================================
+; interner Aufruf Bildschirmtreiber
+; i HL	Zeiger in Bildschirmpuffer auf Kursorposition
+; o HL	neuer Zeiger auf Kursorposition
+;==================================
+
+crtoti:
+	ld	a,0		;escape mode
+desc	equ	$-1
+	or	a
+	jr	nz,crto04	;ja
+crto02:	ld	a,c
+	cp	87h		;07h ist bell!, daher 87h<>07h
+	jr	z,crto09
+	res	7,a		;sonst 1xxxxxxxB  = 0xxxxxxxB
+	cp	20h		;steuerzeichen?
+	jr	c,crto09	;ja
+	cp	7fh
+	jr	nc,crto09
+crtobs:	ld	(hl),a		;Zeichen in Bildschirmpuffer
+	ex	de,hl
+crtcur:	ld	hl,0-bsend1
+crtm01	equ	$-2
+	add	hl,de		;bs voll?
+	ex	de,hl
+	inc	hl	
+	ret	nc
+	ld	de,bsend1-bssp1+1
+crtm02	equ	$-2
+crto03:	push	de
+	ld	hl,bsanf1+bssp1	;aufschieben
+crtm03	equ	$-2
+	ld	de,bsanf1
+crtm04	equ	$-2
+	ld	bc,bsend1-bsanf1-bssp1+1
+crtm05	equ	$-2
+	ldir
+	dec	hl
+	ld	(hl),' '	;letzte zeile loeschen
+	ld	de,bsend1-1
+crtm06	equ	$-2
+	ld	bc,bssp1-1
+crtm07	equ	$-2
+	lddr
+	pop	hl
+	ret
+;------------------------------
+; 84/04,..,86/06,87
+
+crto84:	ld	a,80h		;normal
+	jr	crtobs
+crto85:	ld	a,90h		;invers
+	jr	crtobs
+crto86:	ld	a,81h		;intensiv
+	jr	crtobs
+crto87:	ld	a,91h		;invers intensiv
+	jr	crtobs
+
+;--------------------------------
+
+; Behandlung Sonderzeichen
+;=========================
+crto09:	ex	de,hl		;test sonderzeichen
+	ld	hl,dszta
+	ld	bc,dsztal
+	cpir
+	jr	z,crto11	;gefunden
+	ld	c,'^'		;nicht-Sonderz. anzeigen
+	ex	de,hl
+	jr	crto02		;falls nicht gefunden
+crto11:	ld	hl,dswe-1
+	or	a
+	sbc	hl,bc
+	sbc	hl,bc
+	ld	b,(hl)
+	dec	hl
+	ld	c,(hl)		;bc:=ansprungadresse
+	push	bc
+	ld	l,e
+	ld	h,d		;bs adresse
+	ld	a,' '		;fuer BS-loeschen
+crtnop:	ret			;ansprung sonderzeichen
+;-----------------------------
+
+; Behandlung Zeichen innerhalb Escape-Folgen
+;===========================================
+crto04:	if	adm3a
+	cp	2		;koennte jetzt "="/"Y" kommen?
+	jr	nz,crtop3	;nein
+	ld	a,(crtopo)	;laeuft schon ADM3A-Position.?
+	or	a
+	jr	nz,crtop2	;ja
+	ld	a,c
+	cp	'='		;ADM3A Positionierung?
+	jr	z,crtop1	;ja
+	cp	'Y'
+	jr	nz,crtop2	;nein, SCP-Positionierung
+crtop1:	ld	a,-20h		;offset ADM31/ADM3A
+	ld	(crtopo),a
+	ret
+crtop2:	ld	a,2		;Restzeichenzahl wiederherst.
+crtop3:
+	endif
+
+	if	costu
+	ld	b,0
+cotd2	equ	$-1		;Restzeichenzahl Stringdef.
+	djnz	crttd0		;nicht in Stringdefinition
+	dec	a		;Escape-Rest := 1/0
+	ld	(desc),a
+	ld	a,c		;a:=Tastcode/Stringz.
+	jr	z,cotd5		;im String
+	push	hl		;retten Kursoradresse
+	ld	hl,costrt
+	cp	253		;Nutzerstringspeicher loeschen?
+	jr	z,cotdcl	;ja
+	or	a		;Nutzerstringspeicher loeschen?
+	jr	nz,cotd1	;nein
+cotdcl:	xor	a
+	ld	(desc),a	;sonst Escape zuende
+	dec	a
+	inc	hl
+	ld	(hl),a		;sonst Tabelle leeren
+	pop	hl
+	ret
+cotd1:	call	costdf		;Tastencode in Nutzerstr.sp.
+	pop	hl
+	ret	pe		;ok
+cotd4:	xor	a
+	ld	(desc),a	;beenden Stringdef.
+	jp	crtclk		;und Fehler anzeigen
+cotd5:	cp	253		;Stringende?
+	ret	z		;ja
+	or	a		;Stringende?
+	ret	z		;ja
+	push	hl
+	call	costda		;Zeichen eintragen
+	pop	hl
+	jr	z,cotd4		;kein Platz mehr
+	ld	a,1		;sonst naechstes Zeichen abw.
+	ld	(desc),a
+	ret
+
+crttd0:	cp	2		;Zeichen nach ESC?
+	jr	nz,crttd1	;nein
+	ld	a,c
+	cp	1bh		;Einleitung Stringdef.?
+	ld	a,2
+	jr	nz,crttd1	;nein
+	dec	a		;Flag: in Stringdef.
+	ld	(cotd2),a	;String-Def.-Flag setzen
+	ret
+crttd1:
+	endif
+
+	dec	a
+	ld	(desc),a	;naechstes escape flag setzen
+ IF escpc
+	ld	a,c		;Zeichen mit offset nach A
+ ENDIF
+	res	7,c		;loeschen evtl. offset 80h
+	jr	z,crto07	;letztes Zeichen ESC-Folge
+
+; vorletztes Zeichen ESC-Folge
+;-----------------------------
+ IF escpc
+	sub	5eh		;Feldattribut oder Sonderzeichen?
+	ld	(crtffl),a	;wenn ja, so 00 bzw. 01
+	ret	z		;1b 5e xx
+	dec	a
+	ret	z		;1b 5f xx 
+ ENDIF
+;Positionierung Zeile
+ 	if	adm3a
+	call	crtops
+	endif
+
+	ld	a,bszl1-1	;letzte zeile
+crtm08	equ	$-1
+	cp	c		;nach letzter zeile?
+	jr	c,crto05	;ja
+	ld	a,c		;sonst auf gewuenschte zeile
+crto05:	ld	hl,bsanf1	;zeile adressieren
+crtm09	equ	$-2
+	or	a
+	ret	z
+	ld	de,bssp1
+crtm10	equ	$-2
+	ld	b,a
+crto06:	add	hl,de
+	djnz	crto06		;zeile finden
+	ret
+
+crto07:
+; letztes Zeichen ESC-Folge
+;--------------------------
+ IF escpc
+	ld	b,0ffh
+crtffl	equ	$-1		;auf 00 bei "1b 5e xx"; auf 01 bei "1b 5f xx"
+	djnz	crtnsp		;nicht 1b 5f xx
+crtspc:	or	80h		;Bit 7 fuer Spezialzeichen setzen
+	jp	 crtobs
+crtnsp:
+	inc	b		;1b 5e xx?
+	jr	nz,crtnfa	;nein
+	and	3fh		;Feldattribute lassen, Bit 6 =0
+	jr	crtspc
+crtnfa:
+ ENDIF
+; Positionierung Spalte
+	if	adm3a
+	call	crtops
+	endif
+
+	ld	a,bssp1-1	;spalte setzen
+crtm11	equ	$-1
+	cp	c		;0 .. letzte spalte
+	jr	nc,crto08	;ja
+	ld	c,a		;sonst auf letzte spalte
+crto08:	ld	b,0
+	add	hl,bc
+	ret
+
+	if	adm3a
+crtops:	ld	a,0		;-offset
+crtopo	equ	$-1
+	add	a,c
+	ld	c,a		;c:=c-(offset)
+	ret
+	endif
+;----------------------------
+
+; ...Realisierung Sonderzeichen...
+;=================================
+crtcr:	ld	bc,bssp1
+crtm12	equ	$-2
+	ld	hl,bsend1
+crtm13	equ	$-2
+crto12:	or	a
+	sbc	hl,bc		;suchen,bis hl < (dcupos)
+	push	hl
+	sbc	hl,de
+	pop	hl
+	jr	nc,crto12	;zeilenanf. noch nicht gefunden
+	inc	hl
+	ret
+;-----------------------------
+crtlf:	ld	hl,bsend1-bssp1
+crtm14	equ	$-2
+	sbc	hl,de	;bs ende (anfang letzte zeile)
+	jp	c,crto03	;aufschieben
+	ld	hl,bssp1
+crtm15	equ	$-2
+	add	hl,de		;naechste zeile
+	ret
+;-----------------------------
+crtdel:	ld	(de),a
+crtcl:	ld	hl,bsanf1	;cursor zurueck
+crtm16	equ	$-2
+	sbc	hl,de
+	ex	de,hl
+	ret	z
+	dec	hl
+	ret
+;----------------------------
+crtbsl:	ld	de,bsanf1	;bs loeschen + home
+crtm17	equ	$-2
+crtbsr:	ld	hl,bsend1
+crtm18	equ	$-2
+	sbc	hl,de
+	ex	de,hl
+	ld	(hl),a
+	ret	z
+	push	hl
+	ld	b,d	
+	ld	c,e
+	ld	d,h
+	ld	e,l
+	inc	de
+	ldir
+	pop	hl
+	ret
+;----------------------------
+crthom:	ld	hl,bsanf1	;home
+crtm19	equ	$-2
+	ret
+;----------------------------
+crtcup:
+	if	adm3a
+	ld	a,(crtopo)
+	or	a		;adm3a-Simulation?
+	ld	a,' '
+	jr	nz,crtbsl	;ja
+crtcu1:
+	endif
+
+	ld	hl,bsanf1+bssp1-1  ;eine zeile hoch
+crtm20	equ	$-2
+	sbc	hl,de		;in oberster zeile?
+	ex	de,hl
+	ret	nc		;nicht ausfuehren
+	ld	de,0-bssp1
+crtm21	equ	$-2
+	add	hl,de		;zeilenlaenge abziehen
+	ret
+;-----------------------------
+crtzl:	call	crtcr		;zeile loeschen
+	ex	de,hl
+crtzlr:	push	de		;restzeile loeschen
+	call	crtcr
+	add	hl,bc
+	or	a
+	sbc	hl,de		;zeilenrest
+crto13:	ld	(de),a
+	inc	de
+	dec	l
+	jr	nz,crto13
+	pop	hl
+	ret
+;-----------------------------
+ IF inslin
+crtinl:	call	crtcr		;Insert line
+	push	hl		;hl auf Zeilenanfang
+	ld	de,bsend2-bssp2+1 ;Anfang letzte Zeile
+crtm44	equ	$-2
+	ex	de,hl
+	or	a
+	sbc	hl,de		;Laenge
+	jr	z,crtil1	;letzte Zeile
+	ld	b,h
+	ld	c,l
+	ld	de,bsend2	;Ziel
+crtm45	equ	$-2
+	ld	hl,bsend2-bssp2	;Quelle
+crtm46	equ	$-2
+	lddr			;eine Zeile nach unten schieben
+crtil1:	pop	de
+	ld	h,d
+	ld	l,e
+	jr	crtzlr		;freigewordene Zeile loeschen
+;-----------------------------
+crtdll:	call	crtcr		;Delete Line
+	push	hl
+	ld	de,bsend2-bssp2+1	;Anfang letzte Zeile
+crtm47	equ	$-2
+	ex	de,hl
+	or	a
+	sbc	hl,de		;Laenge
+	jr	z,crtdl1	;letzte Zeile
+	ex	(sp),hl
+	ld	d,h
+	ld	e,l		;de auf Ziel (Zeilenanfang)
+	add	hl,bc		;hl auf Quelle
+	pop	bc
+	push	de
+	ldir			;eine Zeile nach oben schieben
+crtdl1:	ld	hl,bsend2-bssp2+1
+crtm48	equ	$-2
+	ld	d,h
+	ld	e,l
+	call	crtzlr		;letzte Zeile loeschen
+	pop	hl
+	ret
+;-----------------------------
+ ENDIF	;inslin
+crtesc:	ld	a,2		;escape flag setzen
+	ld	(desc),a
+
+	if	costu or adm3a
+	xor	a
+	if	costu
+	ld	(cotd2),a	;keine Stringdef.
+	endif
+	if	adm3a
+	ld	(crtopo),a	;-offset :=0
+	endif
+	endif
+
+	ret
+;-----------------------------
+crtcrt:	ld	a,80h		;cursor an
+	jr	crto14
+;-----------------------------
+crtcof:	xor	a		;cursor aus
+crto14:	ld	(dcurs),a
+	ret
+;-----------------------------
+; Realisierung 07h
+; Achtung! Diese Routine wird aus Interruptroutine aufgerufen!
+crtclk:	call	crtcl1		;Fehlerlampe umschalten
+
+crtcl1:	ld	b,25		;0.25 sec warten
+	call	wait10
+				;Fehlerlampe wieder zurueck
+; Fehlerlampe umschalten
+; Reg. A, HL bleiben erhalten
+swilmp:	push	af
+	push	hl
+	ld	hl,lampbf
+	ld	a,(hl)
+	xor	1 shl lmperr
+	ld	(hl),a
+	call	lampen
+	pop	hl
+	pop	af
+	ret
+;-----------------------------
+
+; Cursor aus HL im Bildschirmpuffer berechnen und setzen
+crtscp:	ld	hl,(dcupos)
+crtsci:	ld	de,bsanf1
+crtm37	equ	$-2
+	xor	a		;CY:=0, Zeile:=0
+	sbc	hl,de		;relative Cursorposition
+	ld	de,bssp1
+crtm25	equ	$-2
+crtoes:	sbc	hl,de		;bestimmen Zeilennummer
+	jr	c,crtoez
+	inc	a
+	jr	crtoes
+crtoez:	add	hl,de		;L:=Spalte
+	ld	h,a		;H:=Zeile
+
+; Cursor setzen (H Zeile, L Spalte)
+crtscu:	ld	a,80h
+	out	(bscom),a
+	ld	a,l
+	out	(bspar),a
+	ld	a,h
+	out	(bspar),a
+	ret
+;--------------------------------
+ IF zs2var
+; Umschalten auf 2. Zeichensatz
+; Achtung!! Diese Routine wird auch aus Interrupt-Routine
+; aufgerufen, EI/DI darf hier nicht auftreten!!
+crt2zs:	ld	a,40h
+	jr	crtzsu
+; Umschalten auf 1. Zeichensatz
+crt1zs:	xor	a
+crtzsu:	or	high(bsanf1 shr 2)
+crtm41	equ	$-1
+	out	(bschsw),a
+	ret
+ ENDIF
+;--------------------------------
+
+ IF stpvar
+ IF chdvar
+;Hardcopy Bildschirm -> LST
+crthrd:	push	hl
+	ld	hl,bsanf1
+crtm22	equ	$-2
+	ld	c,bszl1+1
+crtm23	equ	$-1
+	jr	crthd3		;zu Beginn neue Zeile
+crthd1:	ld	b,bssp1
+crtm24	equ	$-1
+crthd2:	push	bc
+	ld	a,(hl)
+	inc	hl
+	push	hl
+	and	7fh
+	cp	20h		;BS-Steuerzeichen?
+	jr	nc,crthd4	;nein
+	ld	a,'^'		;sonst Sonderzeichen
+crthd4:	ld	c,a
+	call	BIOS0F		;LIST
+	pop	hl
+	pop	bc
+	djnz	crthd2		;bis Zeilenende
+crthd3:	push	bc
+	push	hl
+	ld	c,0dh
+	call	BIOS0F
+	ld	c,0ah
+	call	BIOS0F
+	pop	hl
+	pop	bc
+	dec	c		;Bildschirmende?
+	jr	nz,crthd1	;nein
+	pop	hl
+	ret
+ ENDIF
+ ENDIF	;stpvar
+
+; Tabelle der Sonderzeichen, SCP kompatibel!
+;==========================================
+
+dszta:	
+	db	00h	;nop
+	db	01h	;home
+	db	02h	;(auch 82h) cursor an
+	db	03h	;(auch 83h) cursor aus
+	db	04h	;(auch 84h) normal, nicht inv.
+	db	05h	;(auch 85h) normal,       inv.
+	db	06h	;(auch 86h) hell  , nicht inv.
+;			 (nur  87h) hell  ,       inv.
+	db	07h	;bell (akustisches zeichen)
+	db	08h	;cursor zurueck
+	db	0ah	;LF
+	db	0ch	;bs loeschen, cursor links oben
+	db	0dh	;CR
+ IF zs2var
+	db	0eh	;umschalten auf 2. Zeichensatz
+	db	0fh	;umschalten auf 1. Zeichensatz
+ ENDIF
+	db	14h	;rest bs loeschen
+	db	15h	;cursor vorwaerts
+	db	16h	;rest der zeile loeschen
+ IF inslin
+	db	17h	;Insert Line
+ ENDIF
+	db	18h	;zeile loeschen, cursor an zeilanf.
+ IF inslin
+	db	19h	;Delete Line
+ ENDIF
+	db	1ah	;eine zeile hoch
+			;bei ADM3a wie 0ch
+	db	1bh	;escape
+;		1b zeile+80h spalte+80h		Kursor posit. SCP
+;		1b zeile+00h spalte+00h		geht auch bei CP/A
+;		1b '='/'Y' zeile+20h spalte+20h	Kursor posit. bei ADM3A
+;		1b 5e xx	Feldattribut setzen (SCP1715 fuer 8275-Contr.)
+;			mit xx= 01urggbh
+;				  u		unterstreichen,
+;				   r		invers,
+;				    gg		Zeichengenerator-Umschaltung,
+;				      b		blinken,
+;				       h	heller 
+;		1b 5f xx	Spezialzeichen setzen (SCP1715 fuer 8275)
+;			mit xx= 01ssssbh
+;				  ssss		Zeichencode (1100 Sonderfkt)
+;				      b		blinken des Sonderzeichens
+;				       h	heller des Sonderzeichens
+	if	adm3a
+	db	1ch	;eine Zeile hoch bei ADM3A
+	endif
+
+	db	7fh	;delete
+	db	87h	;(nicht 07h) hell  ,      inv.
+ dsztal	equ	$-dszta	;Tabellenlaenge
+
+; Reaktionsroutinen fuer Sonderzeichen
+
+	dw	crtnop	;00
+	dw	crthom	;01
+	dw	crtcrt	;02/82
+	dw	crtcof	;03/83
+	dw	crto84	;04/84
+	dw	crto85	;05/85
+	dw	crto86	;06/86
+	dw	crtclk	;07
+	dw	crtcl	;08
+	dw	crtlf	;0A
+	dw	crtbsl	;0C
+	dw	crtcr	;0D
+ IF zs2var
+	dw	crt2zs	;0E
+	dw	crt1zs	;0F
+ ENDIF
+	dw	crtbsr	;14
+	dw	crtcur	;15
+	dw	crtzlr	;16
+ IF inslin
+	dw	crtinl	;17
+ ENDIF
+	dw	crtzl	;18
+ IF inslin
+	dw	crtdll	;19
+ ENDIF
+	dw	crtcup	;1A
+	dw	crtesc	;1B
+
+	if	adm3a
+	dw	crtcu1	;1C	;wie 1A bei SCP
+	endif
+
+	dw	crtdel	;7F
+	dw	crto87	;87
+dswe 	equ	$	;tabellenende
+
+

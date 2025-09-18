@@ -1,0 +1,583 @@
+;****************************************************
+;	Tastatur-Eingabe, Version 15.04.88
+; Aenderungen:
+; - freie Belegbarkeit Kursor- und rechter Ziffernblock
+;****************************************************
+
+ if1
+
+; Warmstart-Initialisierung Tastatur
+;===================================
+kbdwarm	MACRO
+	ld	a,(lampbf)
+	and	(1 shl lmphcp)+(1 shl lmpb2r)+(1 shl lmpb2b)+(1 shl kbdcpb)
+	ld	(lampbf),a	;ruecksetzen Lampen
+
+	ld	hl,kbdsts	;Standard-Stringtabelle wiederherstellen
+	ld	(kbdsst),hl
+	ENDM
+
+ endif	;if1
+
+; Tastatur-Status
+;================
+kbdst:
+; vor Pufferabfrage anstehende Zeichen lesen (falls 5ms Takt aus)
+	di			;parallele Abfrage ueber 5ms verhindern
+	call	kbdsti		;interner Aufruf
+	ei
+ IF stpvar or monitor
+	jp	chksp		;Test auf Spezialfunktionen
+ ELSE
+	ret
+ ENDIF
+
+kbdsti:				;kbdst-Aufruf intern
+kbdstz:	call	kbdst1		;Taste neu gedrueckt ? 
+	jr	z,kbdsnt	;nein
+	call	kbdrdt		;Taste in Puffer ablegen
+ IF stpvar
+ ELSE
+	ld	hl,synflg
+	bit	stoprq,(hl)	;STOP-Request?
+	res	stoprq,(hl)
+	jr	z,kbdstz	;nein
+	call	kbdbcl		;Puffer leeren
+kbdstw:	call	kbdst1		;auf naechsten Tastendruck warten
+	jr	z,kbdstw
+ ENDIF
+	jr	kbdstz		;auf neuen Tastendruck testen
+kbdsnt:
+
+	ld	a,(0ffffh)	;erstes Pufferzeichen
+crtm32	equ	$-2		;wird vom Kaltstart modifiziert
+	or	a		;Puffer leer?
+	ret	z		;ja
+	ld	a,0ffh
+	ret
+
+;------------------------------------------------------------
+
+
+; Taste umkodieren und im Puffer ablegen
+;=======================================
+; Achtung!! Dieses UP wird aus Interruptroutine aufgerufen
+kbdrdt:	call	kbdrch		;Zeichen lesen und auf virtuellen Tastaturcode
+
+ IF stpvar
+	ld	hl,synflg
+	bit	phyact,(hl)	;Taste physisch in Puffer?
+	jp	nz,kbdput	;ja, direkt ablegen
+ ENDIF
+ IF costu
+	ld	hl,costrt+1
+	call	costr		;Nutzerstring?
+	jr	nz,kbdco	;ja
+ ENDIF
+	ld	hl,(kbdsst)	;Adresse der Standard-Stringtabelle
+	call	costr		;Standardstring?
+	jr	z,kbdnco	;nein
+kbdco:	dec	e		;String der Laenge 0?
+	ret	z		;ja, zu ignorierende Taste
+	dec	e		;String exakt ein Zeichen lang?
+	jp	nz,kbdco1	;nein, kann keine Sondertaste sein
+	ld	a,(hl)		;holen erstes Stringzeichen
+kbdnco:	ld	hl,synflg
+
+; Auswertung Sondertasten, die nicht im Puffer abgelegt werden
+;-------------------------------------------------------------
+
+	cp	stpc		;STOP ?
+	jr	nz,kbdnst
+	set	stoprq,(hl)	;Stop-Request vermerken
+	ret
+kbdnst:
+ IF stpvar
+ IF chdvar
+	cp	SyLc		;Drucker Synchronisieren?
+	jr	nz,kbdnsy	;nein
+	set	synlrq,(hl)	;sonst vermerken
+	ret
+kbdnsy:
+	cp	HrLc		;Hardcopy ein/aus ?
+	jr	nz,kbdnhc
+	ld	hl,conol
+	ld	a,(hl)
+	xor	0cdh xor 0c3h	;CALL aus JP u.umgekehrt
+	ld	(hl),a
+	ld	a,1 shl lmphcp	;Hardcopy-Lampe
+	jp	kbdslm
+kbdnhc:
+ ENDIF
+ ENDIF	;stpvar
+
+ IF monitor
+	cp	Monc		;Monitor-Taste ?
+	jr	nz,kbdnmn
+	bit	monact,(hl)	;Monitor aktiv ?
+	jr	nz,kbdmo2	;ja
+	set	monrq,(hl)	;Vermerken Monitor-Request
+	ret
+kbdmo2:	ld	a,0dh		;sonst CR substituieren
+	jr	kbdput
+kbdnmn:
+ ENDIF
+
+	or	a		;Taste zu ignorieren?
+	ret	m		;ja
+
+	bit	ctrlst,(hl)	;Sondertaste mit Control?
+	res	ctrlst,(hl)	;  loeschen evtl. Control-St.
+	jr	z,kbdcts	;nein
+	push	af
+	ld	a,'Q' and 1fh	;"^Q"
+	call	kbdput		;im Puffer ablegen
+	pop	af
+	cp	08h		;"<-"-Taste?
+	jr	nz,kbdcts	;nein
+	ld	a,'S' and 1fh	;umwandeln in "^S"
+kbdcts:
+
+; Zeichen im Puffer ablegen
+;--------------------------
+; A und F bleiben erhalten!
+
+kbdput:	ld	hl,0ffffh	;Pufferadresse
+crtm35	equ	$-2
+	ld	bc,kbdbl	;Pufferlaenge
+	push	af		;A, F retten
+	xor	a		;Pufferende-Kennzeichen
+	cpir
+	jr	nz,kbdpt1	;Puffer voll
+	ld	(hl),a		;neues Pufferende anzeigen
+	pop	af		;A, F regenerieren
+	dec	hl
+	ld	(hl),a		;Zeichen puffern
+	ret
+kbdpt1:	call	crtclk		;Puffer voll anzeigen
+	pop	af		;A, F regenerieren
+	ret
+
+; Ablegen String im Puffer
+;-------------------------
+; i E Stringlaenge -1
+; i HL Stringanfang
+kbdco1:	inc	e
+kbdco2:	push	hl
+	push	de
+	ld	a,(hl)
+	call	kbdput		;in Puffer
+	pop	de
+	pop	hl
+	inc	hl
+	dec	e
+	jr	nz,kbdco2	;wenn String noch nicht fertig
+	ret
+
+
+; Rest des Konsolpuffers streichen
+;---------------------------------
+kbdbcl:	xor	a
+	ld	(0ffffh),a
+crtm36	equ	$-2
+	ret
+
+; Holen naechstes Tastaturzeichen mit Warten
+;===========================================
+
+kbdwin: call	kbdst		;Zeichen da?
+	jr	z,kbdwin	;nein
+
+kbdi:	ld	de,0ffffh
+crtm33	equ	$-2
+	ld	a,(de)		;1.Zeichen lesen
+	or	a		;Puffer leer ?
+	jr	z,kbdwin	;ja: warten 
+	ld	hl,0ffffh+1	;Puffer umspeichern
+crtm34	equ	$-2
+	ld	bc,kbdbl	;einschl.(00h am Ende
+	ldir			;parall. Tastatur-Interrupt
+				;stoert nicht, da alles umgesp.
+	ret
+
+;-------------------------------------------------------------
+
+; Test, ob Taste (neu) gedrueckt
+;===============================
+; o AF	=00 und Z=1	keine Taste
+;	=FF und Z=0	es ist eine Taste gedrueckt
+kbdst1:
+kbdstc:	ld	a,10h		;Reset extern/Status-Interrupt
+	out	(kbdscs),a
+	in	a,(kbdscs)
+	and	1		;Zeichen im Empf.puffer?
+	ret	z		;nein, A=00, ret z
+	in	a,(kbdsci)	;Tastaturzeichen lesen
+	cp	0e0h		;Status?
+	jr	c,kbdrts	;nein, Taste
+ IF zs2var
+	ld	c,a
+ ENDIF
+	ld	hl,synflg
+	and	1 shl ctrlst	;CTRL-Status
+	or	(hl)		;merken
+	ld	(hl),a
+ IF zs2var
+	ld	a,c
+	and	4		;Zeichensatz-Umschaltung
+	xor	0		;bisheriger Zeichensatz
+coizs	equ	$-1
+	call	nz,kbdszs	;neu, umschalten
+	jr	kbdstc		;nach Zeichenstatus folgt Zeichen
+kbdszs:	and	c		;neuer Zeichensatz
+	ld	(coizs),a	;merken
+	jp	nz,crt2zs	;umschalten auf 2. ZS
+	jp	crt1zs		;bzw. rueckschalten
+ ELSE
+	jr	kbdstc		;nach Zeichenstatus folgt Zeichen
+ ENDIF
+kbdrts:	ld	(kbdlch),a	;Taste fuer Auswertung merken
+	xor	a
+	dec	a		;A=ff, ret nz
+	ret
+
+
+;-------------------------------------------------------------
+
+;Zeichen von Tastatur lesen , CAPS-Lock realisieren
+;==================================================
+kbdrch:		;CAPS-Lock funktioniert, Zeichen direkt verwenden
+
+; Zeichen von Tastatur umkodieren
+;================================
+kbdrcu:
+	ld	a,'^'		;letztes empf. Zeichen
+kbdlch	equ	$-1
+
+cocpm1:	ld	hl,kbdcpt
+	ld	bc,kbdcpl
+	cpir			;Umcodieren ?
+	jr	nz,kbdrc1	;nein
+	ld	bc,kbdcpl-1	;-1 wegen CPIR
+	add	hl,bc
+	ld	a,(hl)		;umcodiertes Zeichen
+kbdrc1:	
+cocpm2:
+	cp	20h		;Sondertaste?
+	ret	c		;<20h, ja
+	or	a		
+	ret	m		;>=80h, ja
+	ld	hl,synflg	;norm. Taste mit Control?
+	bit	ctrlst,(hl)
+	ret	z
+	res	ctrlst,(hl)
+	and	1fh		;CTRL realisieren
+	ret
+
+; Suchen, ob Taste (A) umzukodieren entspr. Stringtab ab (HL)
+; ret z:	nicht gefunden, A unveraendert
+; ret nz:	gefunden, A unveraendert
+;		E Stringlaenge+1
+;		HL Stringanfang (nur gueltig falls E>1!)
+costr:	ld	d,0
+costr0:	ld	c,(hl)		;Tastencode o. Tabende
+	inc	c		;Tabende?
+	ret	z		;ja, nicht gefunden
+	inc	hl
+	ld	e,(hl)		;Stringlaenge
+	inc	e		;+1
+	dec	c		;Tastencode wiederherstellen
+	cp	c		;Zeichen umkodieren?
+	jr	z,costr1	;ja
+	add	hl,de		;String uebergehen
+	jr	costr0
+costr1:
+	inc	hl
+	inc	d		;ret nz
+	ret
+
+ IF costu
+; Eintrag Taste (A) in Stringtab ab (HL)+1
+; ret po:	Tabelle voll
+; ret pe:	ok, costda-Aufruf vorbereitet
+costdf:	ld	e,a
+	ld	c,(hl)		;Laenge Stringtab -1
+	inc	hl
+	xor	a
+	ld	b,a
+	dec	a		;Endezeichen fuer Tab
+	cpir			;suchen Tab-Ende, BC:=Restlng
+	ret	po		;bc=0, Tab. voll
+	dec	hl		;auf Tastencode
+	ld	(hl),e		;ablegen
+	inc	hl		;auf Stringlaenge
+	ld	(hl),b		;Stringlaenge :=0
+	ld	(costdl),hl	;^Stringlaenge merken
+	jr	costdn
+
+; Verlaengern aktuell definierten String um Zeichen (A)
+; ret z:	kein Platz
+; ret nz:	ok
+costda:	ld	c,0		;c:=Restlaenge+1
+costdr	equ	$-1
+	dec	c		;noch Platz?
+	ret	z		;nein
+	ld	hl,0		;^Stringlaenge
+costdl	equ	$-2
+	inc	(hl)		;Stringlaenge +1
+	ld	hl,0		;^Tabende
+costdp	equ	$-2
+	ld	(hl),a		;Stringzeichen dorthin
+costdn:	inc	hl
+	ld	(hl),0ffh	;neues Tabende
+	ld	(costdp),hl	;merken
+	ld	a,c		;max. (restliche) Stringlaenge
+	ld	(costdr),a	;merken
+	ret			;ret nz / ret pe 
+ ENDIF
+
+; Tastatur-Lampe umschalten
+;==========================
+kbdslm:	ld	hl,lampbf
+	xor	(hl)		;Lampe ein/aus
+	ld	(hl),a
+
+; Tastatur-Lampen ein/aus
+;========================
+; Achtung! Diese Routine wird auch aus Interrupt-Routine
+; aufgerufen (EI/DI darf hier nicht auftreten!!)
+lampen:
+ IF cpastz
+	ld	hl,lampbf
+	ld	c,(hl)
+
+; Fehlerlampe simulieren
+	bit	lmperr,c	;Fehlerlampe?
+	ld	a,stzfrm	;phys. Steuerzeichen Statuszeile
+	jr	z,lampn6	;nein
+	ld	a,+(stzfrm xor 11h)	;inverse Darstellung
+lampn6:	ld	(statz1+statzc),a
+crtm30	equ	$-2		;BS-Puffer-Adr
+
+; restliche Lampen als Byte ausgeben
+	ld	de,statz1+statzl
+crtm39	equ	$-2
+	ld	a,c
+	jp	mrecoa
+ ELSE
+	ret			;Lampen nicht simulieren
+ ENDIF
+
+
+; Die folgende phys. Code-Tabelle kann je nach Tastaturtyp
+; beim Kaltstart modifiziert werden (bisher bei PC1715 noch
+; nicht notwendig), dies ist bei Aenderung der Tastenzuord-
+; nung zu beachten!
+; Einige Tastencodes koennen mehrmals auftauchen (wenn sie
+; bei den Tastaturen disjunkt sind), um auch bei falsch er-
+; kanntem Tastaturtyp eine notduerftige Arbeit zu gestatten.
+
+kbdcpt:
+;	physik.Tastencodes (Standardbelegung)
+;	~~~~~~~~~~~~~~~~~~
+
+; Kursortastenfeld:
+;------------------
+	db	087H
+;		|<-
+	db	08BH
+;		^
+	DB	089H
+;		->|
+	db	088H
+;		<-
+	DB	08CH
+;		'\  
+	db	086H
+;		->
+	db	09DH
+;		<-'
+	db	08AH
+;		v
+; Sondertasten:
+;--------------
+	db	9eh
+;		ET
+	db	8dh
+;		-> im Tastenfeld rechts oben
+	db	9bh
+;		ESC
+	db	0ceh
+;		CE
+	db	082H
+;		INS
+; Funktionstasten:
+;-----------------
+	db	0d0h,0d1h,0d2h,0d3h,0d4h,0cfh,0a0h,0a1h
+;		S    F1   F2   F3   F4   F5   F6   F7
+	db	0a2h,0a3h,083h,0c1h,0c0h,0c2h,0cdh,08eh
+;		F8   F9   F10  F11  F12  F13  F14  F15
+; Ziffernfeld
+;------------
+	db	0b0h,0b1h,0b2h,0b3h,0b4h,0b5h,0b6h,0b7h,0b8h,0b9h
+;		0    1    2    3    4    5    6    7    8    9
+	db	0BBH,0ach
+;		00  ,Komma
+	db	0bdh
+;		Minus unter CE
+
+
+
+kbdcpl	EQU	$-kbdcpt	;Laenge Tabelle phys. Codes
+
+;	zugehoerige log.Tastencodes
+;	~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;	(direkt hinter phys. Codes!, in gleicher Ordnung)
+
+; Die Vergabe der Codes ist entsprechend der CP/A-Philosophie
+; tastaturunabhaengig, daher kommen auch Codes vor, die keine
+; Entsprechung beim PC1715 haben, aber am BC A51xx!
+
+; Kursortasten
+;-------------
+kcurwl	equ	0c1h
+kcurup	equ	0c2h
+kcurwr	equ	0c3h
+kcurlf	equ	0c4h
+kcurpu	equ	0c5h
+kcurri	equ	0c6h
+kcurpd	equ	0c7h
+kcurdw	equ	0c8h
+
+; Sondertasten
+;-------------
+spcce	equ	0cch		;CE
+spcins	equ	0cdh		;INS
+
+; Bei Einfuehrung neuer Sonderzeichen zwischen Sel0..Sel3 muss
+; Test auf Sel0..3 zuletzt erfolgen, da diese als Gruppe
+; getestet werden, aber nicht dicht liegen!
+Sel0	equ	0d1h;!!hintere!!	;LED 0 bei SEL 0
+Sel1	equ	0d2h;!!Tetrade!!	;LED 1 bei SEL 1
+Sel2	equ	0d4h;!!=2**LED!!	;LED 2 bei SEL 2
+Sel3	equ	0d8h;!!	      !!	;LED 3 bei SEL 3
+
+SyLc	equ	0d9h			; Synch. List
+HrLc	equ	0dah			; Hardcopy
+Monc	equ	0dbh			; BIOS-Monitor
+z00c	equ	0dch			; "00" im Ziffernblock
+z000	equ	0ddh			; "000" im Ziffernblock
+stpc	equ	0deh			; allg. STOP
+ctlc	equ	0dfh			; Control (-Ersatz)
+
+; Funktionstasten
+;----------------
+pf0c	equ	0e0h			;PF0 bzw. S0
+pf1c	equ	0e1h			;PF1...
+pf2c	equ	0e2h
+pf3c	equ	0e3h
+pf4c	equ	0e4h
+pf5c	equ	0e5h
+pf6c	equ	0e6h
+pf7c	equ	0e7h
+pf8c	equ	0e8h
+pf9c	equ	0e9h
+;***die folgenden 3 Funktionstasten ex nicht bei allen
+; Tastaturen, koennten aber durch andere Tasten ersetzt werden!
+pfac	equ	0eah
+pfbc	equ	0ebh
+pfcc	equ	0ech
+;***die folgenden 3 Funktionstasten ex. nicht bei A51xx:
+pfdc	equ	0edh
+pfec	equ	0eeh
+pffc	equ	0efh
+
+;rechter Ziffernblock
+;--------------------
+zbl0	equ	0f0h
+zbl1	equ	0f1h
+zbl2	equ	0f2h
+zbl3	equ	0f3h
+zbl4	equ	0f4h
+zbl5	equ	0f5h
+zbl6	equ	0f6h
+zbl7	equ	0f7h
+zbl8	equ	0f8h
+zbl9	equ	0f9h
+zbl00	equ	z00c
+zbl000	equ	z000
+zblkom	equ	0fah		;Komma im Ziffernblock
+zblmin	equ	0fbh		;Minus im Ziffernblock
+	;Enter im Ziffernblock siehe "pf0c"
+
+; zu ignorierende Tasten
+;-----------------------
+cign	equ	0ffh			;Taste ignorieren
+
+kbdcpb	equ	lmpsl0	;0..3, Selectortaste fuer CAPS-Lock
+
+
+; Beginn der Tabelle logischer Tastencodes
+;=========================================
+
+; Kursortastenfeld:
+;------------------
+	db	kcurwl
+;		|<-
+	db	kcurup
+;		^
+	DB	kcurwr
+;		->|
+	db	kcurlf
+;		<-
+	DB	kcurpu
+;		'\  
+	db	kcurri
+;		->
+	db	kcurpd
+;		<-'
+	db	kcurdw
+;		v
+; Sondertasten:
+;--------------
+	db	0dh
+;		ET
+	db	09h
+;		-> im Tastenfeld rechts oben
+	db	1bh
+;		ESC
+	db	spcce
+;		CE
+	db	spcins
+;		INS
+; Funktionstasten:
+;-----------------
+; Es folgen die Funktionstasten. Diese werden unabhaengig von
+; der Tastatur zunaechst auf einen einheitlichen 'logischen'
+; Code pf0c,...,pffc abgebildet und dann i.a. ueber Standard-
+; oder Nutzer-Stringumkodierung weiter umgesetzt.
+	db	pf0c,pf1c,pf2c,pf3c,pf4c,pf5c,pf6c,pf7c
+;		S    F1   F2   F3   F4   F5   F6   F7
+	db	pf8c,pf9c,pfac,pfbc,pfcc,pfdc,pfec,pffc
+;		F8   F9   F10  F11  F12  F13  F14  F15
+; Ziffernfeld
+;------------
+	db	zbl0,zbl1,zbl2,zbl3,zbl4,zbl5,zbl6,zbl7,zbl8,zbl9
+;		0    1    2    3    4    5    6    7    8    9
+	db	zbl00,zblkom,zblmin
+;		00   ,Komma ,Minus
+
+
+; String-Umkodierungstabellen
+;============================
+
+; Standardstrings:
+
+kbdsts:	costs
+	db	0ffh		;Tab.ende
+
+ IF costu
+; Nutzerstrings liegen direkt vor Interruptvektoren
+;==================================================
+ ENDIF
+

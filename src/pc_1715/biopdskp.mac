@@ -1,0 +1,364 @@
+;**************************************************************
+; physischer Floppytreiber fuer PC 1715
+;  (und bis auf invertiertes Signal MKE auch fuer AMF 5120/21/22)
+; Autor: W. Dames
+; Version: 29.03.88
+; Aenderungen:
+; - nop,nop in "diowt1" eingefuegt (RAM-refresh)
+; - K5120 Variante eingefuegt
+;*************************************************************
+
+; Die Floppy-Arbeit wird durch paralle Interrupts nicht gestoert,
+; im Echtzeitbetrieb waehrend des Transfers eines physischen Sektors
+; arbeitet der Treiber in einer Interruptroutine mit geschlossenen
+; Interrupts (bei 1K Sektorlaenge max. 40ms!).
+; Es wird gesichert, dass maximal viele Fremd-Interrupts durchkommen,
+; so dass z.B. die Verfaelschung einer Software-Uhr durch Disketten-
+; transfer auf Basis eines 25ms-Taktes (nur wenn nicht kaskadierte
+; CTC-Kanaele interessant) minimal ist.
+
+; Zur Realisierung der Motorabschaltung wird der Indexinterrupt des
+; Floppy benutzt.
+
+; Es werden keine Schattenregister benoetigt.
+
+; Untersuchungen zur Einschraenkung der Befehlsfolgen (bei 2.5 MHz Takt):
+; Abstand zwischen IN/OUT-Befehlen fuer Daten		maximal
+; Datenrate 	5" FM		64 mikrosec pro Byte	156 Takte
+;		5" MFM, 8" FM	32 mikrosec pro Byte	78 Takte
+;		8" MFM		16 mikrosec pro Byte	39 Takte
+
+; max. Abstand zwischen zwei M1-Zyklen wegen Refresh und
+; Bildschirm-DMA waehrend Refresh im Durchschnitt:
+;	0.580 ns *12 Zeilen	6.96 mikrosec		17 Takte
+; Dieser Wert kann fuer einzelne Bytes ueberschritten werden (durch
+; zusaetzliche WAIT-Zyklen), wenn diese Zeit innerhalb einer Bild-
+; schirmzeile kompensiert wird.
+
+diorun:
+	jp	dio
+diortn	equ	$-2
+
+; Lesen Sektorid vorbereiten
+;===========================
+diotsr:	ld	hl,+(diotrr-(diomd1+2))*256+18h
+	ld	(diomd1),hl	;einstellen "jr diotrr"
+	ld	de,3*256+fldabd
+	ld	hl,ft.trk+1
+	jr	diostr
+
+; normalen Transfer vorbereiten
+;==============================
+dio:	ld	hl,+(dioign-(diomd1+2))*256+20h
+	ld	(diomd1),hl	;wiederherstellen "jr nz,dioign"
+	ld	hl,(ft.adr)	;Transferadr.
+	ld	de,crcber	;auf Beginn Datenbyte/CRC Vektor
+
+; Start des Transfers
+;====================
+diostr:
+	ld	a,10111001b	;AMF aus, Fault Reset fuer 1.2-Laufwerke
+	out	(flcoad),a
+	ld	a,10111101b	;Seite laden, Mark reset, AMF aus
+diom02	equ	$-1		;bd/b9
+	out	(flcoad),a
+	ld	b,19		;(19*13)/(256*9600)=0.0001
+diow01:	djnz	diow01		;warten 100 Mikrosek. auf Seitenumschaltung
+	in	a,(fldabd)
+	out	(fldaad),a
+dionss:	ld	a,60		;wiederherst. Zaehler falscher Sektid.
+	ld	(seerc),a	;fuer naechsten Sektor
+diomr:	ld	a,5		;time out Ueberwachung
+	ld	(fl.zto),a	;bei fehlender Sektormarke
+diomr1:	ld	b,d		;stellen bc fuer evtl. Lesen Sektid
+	ld	c,e
+	di
+	ld	a,83h
+	out	(flcobc),a	;Interrupt erlauben
+	ld	a,10000101b	;85/81 MFM, 87/83 FM
+diom01	equ	$-1
+	out	(flcoad),a	;AMF ein, Lesen Marke ein
+	xor	a		;Interrupt bei Marke stellt nz-Flag
+	ei
+diowam:	jr	z,diowam	;Warten auf Ende Interrupt
+	dec	b		;Sektorbeginn gefunden?
+	jr	z,diomr1	;nein, weitersuchen
+	dec	b		;richtigen Sektorid gefunden?
+	jr	z,serr1		;nein
+	dec	b		;Sektid-Lesen beendet?
+	jr	z,dtrsie	;ja
+	dec	b		;fehlende Marke?
+	jr	z,diomre	;ja
+; Transfer fehlerfrei
+	ld	a,1
+secan1	equ	$-1		;Zahl zu transf. phys. Sektoren
+	dec	a		;fertig?
+	jr	z,dionse	;ja
+	ld	(secan1),a
+	ld	a,(sidsec)
+	inc	a
+	ld	(sidsec),a
+	jr	dionss		;naechster Sektor
+
+; Lesen Sektid beendet
+dtrsie:
+	ld	a,(sidsid)	;geforderte Seite
+	ld	hl,ft.sid	;gelesene Seite
+	cp	(hl)		;identisch?
+	jr	nz,diotre	;nein, falscher Sektid
+	dec	hl		;auf ft.trk
+	ld	(hl),c		;(tatsaechliche) Spur aus Sektid
+dionse:	call	dioaus
+	dec	b		;Lesen Daten beendet?
+	jp	z,dtrrde	;ja
+	dec	b		;Schreiben Daten beendet?
+	jp	z,dtrwre	;ja
+	jp	noerr		;sonst Lesen Sektid beendet
+
+diotre:	ld	hl,ft.trk+1	;Wiederholung "inir" vorbereiten
+; falscher Sektid
+serr1:	ld	a,(seerc)
+	dec	a		;blieb weiterer Versuch?
+	ld	(seerc),a
+	jr	nz,diomr	;ja
+	call	dioaus
+	jp	serrx
+
+diomre:	call	dioaus
+	jp	fl.to1
+
+dioaus:
+; keine Side-Umschaltung, d.h. Seite bleibt mindestens noch 100 Mikrosek.
+; (fuer einige 1.6-Laufwerke gefordert)
+	ld	a,(diom02)	;bd/b9  AMF aus
+	out	(flcoad),a
+	ret
+
+; Interrupt Adressmarke
+;======================
+
+diomrk:
+diokl:	in	a,(fldabd)
+	cp	0a1h		;noch in Kluft?
+	jr	z,diokl		;ja
+	cp	0feh		;Sektorbeginn?
+	in	a,(fldabd)	; trk
+; folgender Befehl wird modifiziert bei Lesen Sektid auf "jr diotrr"
+diomd1:	jr	nz,dioign	;nein, Interrupt ignorieren
+	cp	0ffh		; stimmt die Spurnr.?
+sidtr	equ	$-1
+	jr	nz,serr		;nein
+ 	in	a,(fldabd)	; side
+	cp	0ffh		; stimmt side?
+sidsid	equ	$-1
+	jr	nz,serr		; nein
+	in	a,(fldabd)	; sec
+	cp	0ffh		; stimmt Sektornr.?
+sidsec	equ	$-1
+	jr	nz,serr		;nein
+	in	a,(fldabd)	; len
+	cp	0ffh		; stimmt len?
+sidlen	equ	$-1
+	jr	nz,serr		;nein
+
+; das gewuenschte Sektor-ID ist gefunden
+	ld	b,20		;Zahl zu uebergehender Bytes
+diomd2	equ	$-1		;20 bei MFM, 9 bei FM
+diosyn:	in	a,(fldabd)	; CRC und Gap Sektid/Daten ueberlesen
+	nop
+	nop
+diosy3:	djnz	diosyn
+	jp	diord		;wird modif. entspr. Operation mit
+dioop	equ	$-2		;diord, diwmfm, diowfm
+
+
+; kein Sektorbeginn
+;------------------
+dioign:	ld	b,1-1
+	jr	dioend
+
+; Falscher Sektid
+;----------------
+serr:	ld	b,2-1
+	jr	dioend
+
+; Lesen Sektid
+;-------------
+diotrr:	jr	nz,dioign	;kein Sektorbeginn
+	inir
+	ld	c,a		;merken Spur
+	ld	b,3-1		;Sektid lesen beendet
+	jr	dioend
+
+; Lesen
+;------
+
+diord:	in	a,(fldabd)
+	ld	b,6
+diords:	in	a,(fldabd)	;uebergehen Synchronbytes
+	nop
+	nop
+	djnz	diords
+	ld	a,10110101b	;b5/b1
+diom10	equ	$-1
+	out	(flcoad),a	;Mark reset, Lesen 1
+	ld	a,(diom01)	;85/81 MFM; 87/83 FM
+	out	(flcoad),a	;Markenerkennung ein
+	ld	bc,160*256+fldabd ; maximal 160*43/(256*9600)=2.8ms
+; d.h. 43 (5"FM), 87 (5"MFM, 8"FM), 175 (8"MFM) Bytes Luecke abwarten
+spi4: 	in	a,(flcobd)	; auf Marke warten
+	and	2
+ IF fdc eq f1715
+	jr	nz,spi5		;Marke ist da
+ ELSE
+	jr	z,spi5		;Marke ist da
+ ENDIF
+	djnz	spi4
+	jr	dioign		; Datenmarke nicht gefunden
+
+spi5:	ld	b,0a1h
+diorkl:	in	a,(fldabd)	; Sync. A1 ueberlesen
+	cp	b
+	jr	z,diorkl
+	ld	(de),a		;merken Datenbeginn-Byte
+	ld	a,1
+diosl1	equ	$-1		;Anzahl der 128er Bytes im Sektor
+diord1:	ini
+ 	ld	b,126
+diord2:	ini
+;folgener Befehl wird modifiziert:
+;*** bei 8" MFM: jp diord3
+;***     8" FM : call -> nop,nop,nop,nop,ret
+;***     5" MFM: wie 8" FM
+;***     5" FM : nop,nop,nop,nop, nop,nop,nop,nop,ret
+diomrw:	call	diowt1
+diord3:	jr	nz,diord2
+	ini
+	dec	a
+	jr	nz,diord1
+	ex	de,hl		; CRC-Adresse holen
+	inc	hl
+	ini			; CRC lesen
+	ini
+	ex	de,hl		; neue CRC-Adresse zurueck
+
+	in	a,(fldabd)
+	ld	b,5-1		;Lesen beendet
+
+dioend:	ld	a,10110101b	;b5/b1
+diom11	equ	$-1
+	out	(flcoad),a	;Lesen 1
+	ld	a,3
+	out	(flcobc),a	;erneuten Interrupt verbieten
+	inc	b		;Stellen nz-Flag
+	ei
+	reti
+
+ IF @write
+; Es muss zuerst Datenbyte ausgegeben werden, dann Markenschreiben ein/aus!!
+
+ IF dsk8fm+dsk8mf+dsk5fm
+
+; Schreiben FM
+;-------------
+diowfm:	in	a,(fldabd)	; Gap ueberlesen
+ 	in	a,(fldabd)
+	in	a,(fldabd)
+	ld	bc,0*256+fldaad
+	in	a,(fldabd)
+	ld	a,10100100b	;a4/a0
+diom04	equ	$-1
+	out	(flcoad),a	; schreiben FM Daten ein
+	out	(c),b		;'00'
+	ld	b,5
+	xor	a
+diowfs:	nop
+	nop
+	out	(c),a		;5*'00'
+	djnz	diowfs
+	ld	a,10110110b
+diom05	equ	$-1		;b6/b2
+	ex	de,hl
+	outi			;Daten-AM schreiben
+	out	(flcoad),a	;Markenschreiben ein
+	ex	de,hl
+	ld	a,10100100b
+diom06	equ	$-1		;a4/a0
+	outi			;erstes Datenbyte
+	out	(flcoad),a	; Markenschreiben aus
+	ld	a,(diosl2)	;Anzahl der 128er Bloecke im Sektor
+	jr	diowrt
+ ENDIF
+
+; Schreiben MFM
+;--------------
+diwmfm:	in	a,(fldabd)	; Gap ueberlesen
+	in	a,(fldabd)
+	in	a,(fldabd)
+	ld	bc,0*256+fldaad
+	in	a,(fldabd)
+	ld	a,10110100b	;b4/b0
+diom07	equ	$-1
+	out	(flcoad),a	; write enable
+	out	(c),b		;'00'
+	ld	b,11
+	xor	a
+spo4:	nop
+	nop
+	out	(c),a		;11*'00'
+	djnz	spo4
+	ld	b,0a1h		; 3 x Sync. A1 schreiben
+	ld	a,10110110b
+diom08	equ	$-1		;b6/b2
+	out	(c),b		;'A1'
+	out	(flcoad),a	; Markenschreiben ein
+	ld	a,10110100b
+diom09	equ	$-1		;b4/b0
+	out	(c),b		;'A1'
+	out	(c),b		;'A1'
+	ex	de,hl
+	outi			;Daten-Am schreiben
+	out	(flcoad),a	; Markenschreiben aus
+	ex	de,hl
+	ld	a,1		;Anzahl der 128er Bloecke
+diosl2	equ	$-1
+diowr1:	outi
+diowrt:	ld	b,126
+diowr2:	outi
+;folgender Befehl wird modifiziert
+;*** siehe Datenlesen
+diomww:	call	diowt1
+diowr3:	jr	nz,diowr2
+	outi
+	dec	a
+	jr	nz,diowr1
+	ex	de,hl
+	outi			; CRC schreiben
+	outi
+	ex	de,hl
+	xor	a
+diowm1:	ld	b,20		;Anzahl der Nachsatz-Bytes
+				;5" MFM/FM: 20; 8" MFM/FM: 2
+diow00:	out	(fldaad),a
+	nop
+	nop
+	djnz	diow00
+	ld	b,6-1		;Schreiben Daten beendet
+	jp	dioend
+
+ ENDIF ;@write
+
+
+; Zeitverzoegerungen und M1-Zyklus-Absicherung
+ IF dsk5fm
+diowt2:	nop
+	nop
+	nop
+	nop
+ ENDIF
+diowt1:	nop
+	nop
+	nop
+	nop
+	ret
+

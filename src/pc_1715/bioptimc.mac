@@ -1,0 +1,30 @@
+
+; Kaltstart-Initialisierung Timer
+;================================
+
+;;Anmerkung zur Verwendung der Zeitgeberkanaele:
+;; (keiner ist im PC1715 kaskadiert!)
+;;CTC0	Tastatur/Printer
+;;CTC1	V.24
+;;CTC2	Kennzeichnung grosser/kleiner Bildschirm fuer alle
+;;	BC-Software, die am A5120 "in a,(0ah)" testen!
+;;	wird Bildschirm-Kaltstart gestellt
+;;CTC3	25ms Takt fuer Uhr und Fehlerueberwachung fuer Disk.Treiber
+timctc	equ	3
+
+	ld	hl,tim5it	;;int.adr.
+	ld	(intvec+ivctc0+timctc+timctc),hl
+	ld	a,ivctc0
+	out	(sysctc),a	;;int.vekt.
+	ld	a,00110111b
+;;kein int./zeitg./vort.256/pos.flanke/naechst.zykl./zk folgt/
+;;	abbruch/1
+	out	(sysctc+timctc),a
+	ld	a,240		;;zk fuer 25ms
+	out	(sysctc+timctc),a
+
+
+tim5of:	ld	a,00110001b
+;kein int./...
+	jr	tim5ot
+

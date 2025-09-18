@@ -1,0 +1,81 @@
+
+;**************************************************************
+;	PIO-Treiber, Version 12.03.87
+;**************************************************************
+
+cdpioi	equ	dumi		;keine Zeicheneingabe unterstuetzt
+
+
+ 
+;einzelzeichenausgabe
+ 
+cdpioo:	cp	0ch		;Test ob CR
+	jr	nz,print
+	call	print
+	ld	a,0ah
+print:	push	af
+print1: in	a,(46h)  
+	rra			;status
+	jr	c,print1
+	pop	af
+	out	(44h),a		;ausgabe 
+	xor	a		;strobe
+	out	(46h),a
+	ld	a,80h
+	out	(46h),a
+	res	3,(ix+ltpst)
+	ret
+ 
+;Statusabfrage wird ignoriert
+
+k63:	defb	0	 
+cdpios:	ld	a,(k63)		;schon init gewesen?
+	cp	0
+	jr      nz,cdpio7
+	ld	a,0fh
+	out	(45h),a
+	ld	a,0cfh
+	out	(47h),a
+	ld	a,1
+	out	(47h),a
+	ld	a,67h
+	out	(47h),a
+	ld	a,80h
+	out	(46h),a
+	ld      (k63),a
+
+cdpio7:	ld	a,(ix+ltpst)	;Status
+	bit	1,a		;senderseitig blockiert?
+;	jr	nz,cdpsr	;ja, frei rueckmelden
+	bit	3,a		;schon mal frei gemeldet?
+	jr	nz,cdpsr1	;ja, Bereitsch.abfrage nur einmal moeglich!
+	or	a		;initialisiert?
+;	call	z,cdpini	;nein
+	in	a,(46h) 
+	ld      a,5             ;liegt Status an?
+	dec     a
+
+cdpsr:	set	3,(ix+ltpst)	;frei, Status nicht neu abfragen
+cdpsr1:	ld	a,0ffh
+	ret	nz		;senderseitig frei
+	res	3,(ix+ltpst)	;nicht frei
+	inc	a		;a:=00, ret z
+	ret			;senderseitig besetzt
+
+
+
+; (Re-)Initialisierung
+; IX auf Steuertabelle
+
+cdpini:
+	LD	(ix+ltpst),11h	;ist initial..; Status neu abfragen
+	LD	(ix+ltpdc),11H	;DC1 nach Initialisierung simulieren
+	push	ix
+	pop	hl
+	ld	bc,ltpini
+	add	hl,bc
+	call	portpr
+	ret
+
+
+

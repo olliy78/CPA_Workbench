@@ -1,0 +1,383 @@
+
+; Kaltstart-Initialisierung Bildschirm
+;=====================================
+
+;;anzeigen im CTC-Kanal 2 grosser Bildschirm fuer alle
+;;A5120-Programme, die "in a,(0ah); bit 6,a" testen!
+
+	ld	a,0fh		;;CTC-Start extern, d.h blockiert
+	out	(sysctc+2),a
+	if	bab eq 1	;;Standard-Format als Anfang
+	ld	a,40h
+	else
+	ld	a,0
+	endif
+babfrm	equ	$-1		;;Bit 6 auf 0: grosser BS
+	out	(sysctc+2),a
+	ld	(bsform),a	;;merken BS-Format fuer Neuladen CTC
+;; Automatische Umschaltung des Bildschirmformates
+;;***naechste frei crtmxx-Marke: crtm49
+
+	bit	6,a		;;BAB2 (24*80)?
+	jp	z,bsbab2	;;ja
+
+bsbab1:	ld	hl,0-bsend1
+	ld	(crtm01),hl
+	ld	hl,bsend1-bssp1+1
+	ld	(crtm02),hl
+ IF inslin
+	ld	(crtm44),hl
+	ld	(crtm47),hl
+	ld	(crtm48),hl
+ ENDIF
+	dec	hl
+	ld	(crtm14),hl
+ IF inslin
+	ld	(crtm46),hl
+ ENDIF
+	ld	hl,bsanf1+bssp1
+	ld	(crtm03),hl
+	dec	hl
+	ld	(crtm20),hl
+	ld	hl,bsanf1
+	ld	(dcupos),hl
+	ld	(crtm04),hl
+	ld	(crtm09),hl
+	ld	(crtm16),hl
+	ld	(crtm17),hl
+	ld	(crtm19),hl
+	ld	(crtm37),hl
+	if	stpvar
+	if	chdvar
+	ld	(crtm22),hl
+	endif
+	endif
+	if	mprot
+	dec	hl
+	ld	(mpiend),hl
+	endif
+	ld	hl,bsend1-bsanf1-bssp1+1
+	ld	(crtm05),hl
+	ld	hl,bsend1-1
+	ld	(crtm06),hl
+	inc	hl
+	ld	(crtm13),hl
+	ld	(crtm18),hl
+ IF inslin
+	ld	(crtm45),hl
+ ENDIF
+	ld	hl,bssp1-1
+	ld	(crtm07),hl
+	ld	a,l
+	ld	(crtm11),a
+	inc	hl
+	ld	(crtm10),hl
+	ld	(crtm12),hl
+	ld	(crtm15),hl
+	ld	(crtm25),hl
+	if	stpvar
+	if	chdvar
+	ld	a,l
+	ld	(crtm24),a
+	ld	a,bszl1+1
+	ld	(crtm23),a
+	endif
+	endif
+	ld	a,bszl1-1
+	ld	(crtm08),a
+	ld	hl,0-bssp1
+	ld	(crtm21),hl
+ IF cpastz
+	ld	hl,statz1
+	ld	(crtm26),hl
+	ld	hl,statz1+statzc
+	ld	(crtm30),hl
+	ld	hl,statz1+statzd
+	ld	(crtm27),hl
+	ld	hl,statz1+statzk-stzkl
+	ld	(crtm40),hl
+	ld	hl,statz1+statzk
+	ld	(crtm42),hl
+	ld	hl,statz1+statzi
+	ld	(crtm38),hl
+	ld	hl,statz1+statzl
+	ld	(crtm39),hl
+	ld	hl,statz1+statzb
+	ld	(crtm28),hl
+	ld	(crtm29),hl
+	ld	hl,statz1+statzt
+ ELSE
+	ld	hl,kbdbuf
+ ENDIF
+	ld	(crtm32),hl
+	ld	(crtm33),hl
+	ld	(crtm35),hl
+ 	ld	(crtm43),hl
+ IF stpvar or monitor
+	ld	(crtm36),hl
+ ENDIF
+	inc	hl
+	ld	(crtm34),hl
+ IF	uhrvar
+  IF cpastz
+	ld	hl,statz1+statzu
+  ELSE
+	ld	hl,bsanf1+bssp1-8
+  ENDIF
+	ld	(bsuhr),hl		;;Stelle fuer Uhrzeit
+ ENDIF
+  IF zs2var
+	ld	a,high(bsanf1 shr 2)
+	ld	(crtm41),a
+  ENDIF
+	call	bsbabi
+
+cotp0:	db	high(bsanf1 shr 2)+(0*64);;immer Zeichensatz 0
+cotpl0	equ	$-cotp0
+cotp1:	db	0			;;Reset
+cotpl1	equ	$-cotp1
+cotp2:	db	bssp1-1
+ IF cpastz
+	db	((vrtc1-1)*64)+(bszl1-1+1)	;;mit Statuszeile
+ ELSE
+	db	((vrtc1-1)*64)+(bszl1-1)	;;ohne Statuszeile
+ ENDIF
+	db	((upl1-1)*16)+(lpcr1-1)
+	db	(0*128)+(fam*64)+(csf*16)+(hrtc1-1)	
+cotpl2	equ	$-cotp2
+cotp3:	db	20h			;;Start
+cotpl3	equ	$-cotp3
+
+
+
+bsbab2:	ld	hl,0-bsend2
+	ld	(crtm01),hl
+	ld	hl,bsend2-bssp2+1
+	ld	(crtm02),hl
+ IF inslin
+	ld	(crtm44),hl
+	ld	(crtm47),hl
+	ld	(crtm48),hl
+ ENDIF
+	dec	hl
+	ld	(crtm14),hl
+ IF inslin
+	ld	(crtm46),hl
+ ENDIF
+	ld	hl,bsanf2+bssp2
+	ld	(crtm03),hl
+	dec	hl
+	ld	(crtm20),hl
+	ld	hl,bsanf2
+	ld	(dcupos),hl
+	ld	(crtm04),hl
+	ld	(crtm09),hl
+	ld	(crtm16),hl
+	ld	(crtm17),hl
+	ld	(crtm19),hl
+	ld	(crtm37),hl
+	if	stpvar
+	if	chdvar
+	ld	(crtm22),hl
+	endif
+	endif
+	if	mprot
+	dec	hl
+	ld	(mpiend),hl
+	endif
+	ld	hl,bsend2-bsanf2-bssp2+1
+	ld	(crtm05),hl
+	ld	hl,bsend2-1
+	ld	(crtm06),hl
+	inc	hl
+	ld	(crtm13),hl
+	ld	(crtm18),hl
+ IF inslin
+	ld	(crtm45),hl
+ ENDIF
+	ld	hl,bssp2-1
+	ld	(crtm07),hl
+	ld	a,l
+	ld	(crtm11),a
+	inc	hl
+	ld	(crtm10),hl
+	ld	(crtm12),hl
+	ld	(crtm15),hl
+	ld	(crtm25),hl
+	if	stpvar
+	if	chdvar
+	ld	a,l
+	ld	(crtm24),a
+	ld	a,bszl2+1
+	ld	(crtm23),a
+	endif
+	endif
+	ld	a,bszl2-1
+	ld	(crtm08),a
+	ld	hl,0-bssp2
+	ld	(crtm21),hl
+
+ IF cpastz
+	ld	hl,statz2
+	ld	(crtm26),hl
+	ld	hl,statz2+statzc
+	ld	(crtm30),hl
+	ld	hl,statz2+statzd
+	ld	(crtm27),hl
+	ld	hl,statz2+statzk-stzkl
+	ld	(crtm40),hl
+	ld	hl,statz2+statzk
+	ld	(crtm42),hl
+	ld	hl,statz2+statzi
+	ld	(crtm38),hl
+	ld	hl,statz2+statzl
+	ld	(crtm39),hl
+	ld	hl,statz2+statzb
+	ld	(crtm28),hl
+	ld	(crtm29),hl
+	ld	hl,statz2+statzt
+ ELSE
+	ld	hl,kbdbuf
+ ENDIF
+	ld	(crtm32),hl
+	ld	(crtm33),hl
+	ld	(crtm35),hl
+	ld	(crtm43),hl
+ IF stpvar or monitor
+	ld	(crtm36),hl
+ ENDIF
+	inc	hl
+	ld	(crtm34),hl
+ IF	uhrvar
+  IF cpastz
+	ld	hl,statz2+statzu
+  ELSE
+	ld	hl,bsanf2+bssp2-8
+  ENDIF
+	ld	(bsuhr),hl		;;Stelle fuer Uhrzeit
+ ENDIF
+  IF zs2var
+	ld	a,high(bsanf2 shr 2)
+	ld	(crtm41),a
+  ENDIF
+	call	bsbabi
+
+	db	high(bsanf2 shr 2)+(0*64);;immer Zeichensatz 0
+	db	0			;;Reset
+	db	bssp2-1
+ IF cpastz
+	db	((vrtc-1)*64)+(bszl2-1+1)	;;mit Statuszeile
+ ELSE
+	db	((vrtc-1)*64)+(bszl2-1)		;;ohne Statuszeile
+ ENDIF
+	db	((upl-1)*16)+(lpcr-1)
+	db	(0*128)+(fam*64)+(csf*16)+(hrtc-1)	
+	db	20h			;;Start
+
+bsbabi:
+
+ IF cpastz
+;; Initialisieren Statuszeile
+
+	ld	a,(clddev)
+	add	a,'A'		;setzen Submit-laufwerk in Statuszeile
+	ld	(statzm+statzs),a
+
+	ld	de,statz1
+crtm26	equ	$-2
+	ld	hl,statzm
+	ld	bc,stzml
+	ldir
+	jp	statze
+
+;=========================================================
+; Muster fuer Satuszeile
+;=========================================================
+statzm:
+statzc	equ	$-statzm	;;Umschaltzeichen fuer BELL
+	db	stzfrm		;;Darstellungsformat Statuszeile
+ if stzfrm ge 90h ;;invers
+stztrn	equ	7fh		;;Trennzeichen zw. Statusfeldern
+ else
+stztrn	equ	'|'
+ endif
+
+;; Default-LW, User
+statzd	equ	$-statzm
+	db	'A0'
+;; Submit-LW
+	db	'\'
+statzs	equ	$-statzm
+	db	'A'
+	db	'>',stztrn
+
+;; Kapazitaet der Laufwerke
+statzk	equ	$-statzm
+stzka:	db	'     '	;;A:800
+stzkl	equ	6		;;Laenge eines Eintrags
+	if	disknb gt 1
+	ds	stzkl,' '
+	endif
+	if	disknb gt 2
+	ds	stzkl,' '
+	endif
+	if	disknb gt 3
+	ds	stzkl,' '
+	endif
+stzke:	db	stztrn
+
+;; I/O-Byte
+	db	'i'
+statzi	equ	$-statzm
+	db	'00',stztrn
+
+;; Lampen-Puffer (da keine an Tastatur ansteuerbar)
+	db	'l'
+statzl	equ	$-statzm
+	db	'00',stztrn
+
+;; BIOS-Meldungen
+statzb	equ	$-statzm
+stzb:	db	'**CP/A**  AdW/IIR'
+stzbl	equ	$-stzb
+	db	stztrn
+
+;; Uhrzeit
+	if	uhrvar
+statzu	equ	$-statzm
+	db	'00:00:00',stztrn
+	else
+;; ohne Uhr Tastaturpuffer(anzeige) groesser
+	endif
+
+;; Kopf des Tastaturpuffers
+statzt	equ	$-statzm
+cobufm:	db	0		;;zu Beginn leer
+	ds	statzm+128-$,0	;;auffuellen bis max. Laenge
+
+stzml	equ	$-statzm
+
+statze:
+
+ ENDIF	;cpastz
+
+	ld	c,0ch
+	call	crto		;;Bildschirmpuffer loeschen
+
+;; Initialisieren Bildschirm
+;;~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	pop	hl
+	ld	bc,cotpl0*256+bschsw	;;Puffer/Zeichensatz
+	otir
+	ld	bc,cotpl1*256+bscom	;;Reset
+	otir
+	ld	bc,cotpl2*256+bspar	;;CRT programmieren
+	otir
+	ld	bc,cotpl3*256+bscom	;;Start Display
+	otir
+
+	ld	c,bsinic	;;Grundzustand Bildschirm
+	call	crto		;;einstellen
+
+

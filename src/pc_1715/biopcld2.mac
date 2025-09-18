@@ -1,0 +1,82 @@
+
+
+; Ende der Kaltstart-Initialisierungen
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	ei
+	ld	hl,kalts1	;erneuten kaltstart
+	ld	(BIOS00+1),hl	;umlenken
+	LD	HL,kaltm	;Startmeldung, variabler Teil
+	CALL	cputms
+
+; Hauptspeicher-Test TPA-Bereich
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	ld	hl,ramtt
+	call	cputms
+	ld	hl,tpaend+1
+	ld	de,kaltsb+kaltsl+3;Kaltstart-Code nicht modif.
+	or	a
+	sbc	hl,de		;Restlaenge TPA (-3 fuer JP)
+	ld	b,h
+	ld	c,l
+	ex	de,hl
+ramtz:	ld	a,(hl)
+	cpl
+	ld	(hl),a
+	cp	(hl)		;angekommen?
+	jr	nz,ramter	;nein
+	cpl
+	ld	(hl),a
+	inc	hl
+	dec	bc
+	ld	a,b
+	or	c
+	jr	nz,ramtz
+	ld	hl,ramtok
+	call	cputms
+	jp	ramten
+rameh:	ld	a,h
+	call	dcnvoa
+	ld	a,l
+
+; Rueckkonvertieren Byte in A nach (DE)
+; RET: 2 Zeichen ab (DE), DE zeigt auf naechstes freies Byte
+dcnvoa:	call	dcnva
+
+; Rueckkonvertieren A in HEX-Ziffern nach (DE)
+; RET: A um 4 bits nach rechts rotiert
+;      DE zeigt auf naechstes Byte
+dcnvol:
+dcnva:	rrca			;linkes Halbbyte
+	rrca
+	rrca
+	rrca
+dcnvor:				;rechtes Halbbyte
+	push	af		;fuer 2. dcnva-Aufruf retten
+	and	0fh
+	sub	9+1
+	jr	c,dcnvod	;0..9
+	add	a,7		;A..F
+dcnvod:	add	a,'0'+10
+	ld	(de),a
+	inc	de
+	pop	af
+	ret
+
+ramter:	ld	de,ramead
+	call	rameh
+	ld	de,BDOS+6	;jp BDOS+6 vor diese Stelle
+	dec	hl
+	ld	(hl),d
+	dec	hl
+	ld	(hl),e
+	dec	hl
+	ld	(hl),0c3h
+	ld	(bdosre),hl	;diesen Sprung als BDOS setzen
+	dec	hl
+	ld	de,ramete
+	call	rameh
+	ld	hl,ramert
+	call	cputms
+ramten:
+
+

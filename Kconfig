@@ -1,0 +1,62 @@
+# Kconfig für CP/A BIOS-Konfiguration
+
+menu "CP/A BIOS Konfiguration"
+
+config RAMKB
+    int "RAM-Größe (KB)"
+    default 64
+    range 32 64
+    help
+      Größe des Arbeitsspeichers in Kilobyte (32–64).
+
+config CRT
+    int "Bildschirmtyp (crt)"
+    default 0
+    range 0 7
+    help
+      0=K7024, 1=DSY5, 7=B1715
+
+config TYP80
+    int "Tastaturtyp (typ80)"
+    default 3454
+    help
+      3454=K7634.54, 36=K7636-Familie
+
+config KBDOTP
+    int "Tastatur-Option (kbdotp)"
+    default 0
+    range 0 3
+    help
+      0=K7606, 1=K7604, 2=DEG, 3=K7633
+
+config DISKA
+    int "Laufwerk A Typ (diskA)"
+    default 10540
+    help
+      10540=DD,SS,5",40T; 10580=DD,SS,5",80T; 11580=DD,DS,5",80T; 0=kein LW
+
+config DISKB
+    int "Laufwerk B Typ (diskB)"
+    default 10540
+    help
+      Siehe DISKA
+
+config EM256
+    bool "RAM-Floppy EM256 aktivieren"
+    default n
+
+config RAF
+    bool "RAM-Floppy RAF aktivieren"
+    default n
+
+config RNA
+    bool "RAM-Floppy RNA aktivieren"
+    default n
+
+config DBUFSZ
+    int "Diskettenpuffergröße (dbufsz, 2^n Bytes)"
+    default 10
+    help
+      Exponent von 2, z.B. 10=1024 Bytes
+
+endmenu
