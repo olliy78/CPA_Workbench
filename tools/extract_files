@@ -1,38 +1,73 @@
 
 #!/bin/sh
 # Script: extract_files
-# Extrahiert alle Dateien aus einem CP/M-Disketten-Image in ein neues Verzeichnis.
+# Extrahiert alle Dateien aus einem CP/M-Disketten-Image oder direkt von Diskette (Greaseweazle) in ein neues Verzeichnis unterhalb des Ordners Disketten.
 #
 # Verwendung:
-#   ./extract_files [-f FORMAT] <disk_image.img>
-#   -f FORMAT   Dateisystemformat für cpmtools (Standard: scp800)
+#   ./extract_files [-t FORMAT] -f <disk_image.img> | -g <DiskName>
+#   -t FORMAT   Dateisystemformat für cpmtools (Standard: cpa800)
+#   -f FILE     Image-Datei einlesen (z.B. foo.img)
+#   -g DiskName Diskette mit Greaseweazle einlesen (legt DiskName.img temporär an)
 #   -h          Zeigt diese Hilfe an
+#
+# Das Zielverzeichnis und ggf. das temporäre Image werden immer unterhalb des Ordners Disketten/ angelegt.
+# Existiert Disketten/ nicht, wird es automatisch erzeugt.
+# Nach Extraktion wird ein temporär erzeugtes Image automatisch gelöscht.
 
 
-# Pfad/Name des cpmcp-Befehls (bei Bedarf anpassen, z.B. /usr/local/bin/cpmcp)
+# Pfad/Name der cpmtools-Befehle (bei Bedarf anpassen, z.B. /usr/local/bin/cpmcp)
 CPMCP_CMD="cpmcp"
+CPMLS_CMD="cpmls"
 
 # Standard-Dateisystemformat
-FORMAT="scp800"
+FORMAT="cpa800"
 
 # Hilfetext anzeigen
 show_help() {
-    echo "Verwendung: $0 [-f FORMAT] <disk_image.img>"
-    echo "  -f FORMAT   Dateisystemformat für cpmtools (Standard: scp800)"
+    echo "Verwendung: $0 [-t FORMAT] -f <disk_image.img> | -g <DiskName>"
+    echo "  -t FORMAT   Dateisystemformat für cpmtools (Standard: cpa800)"
+    echo "  -f FILE     Image-Datei einlesen (z.B. foo.img)"
+    echo "  -g DiskName Diskette mit Greaseweazle einlesen (legt DiskName.img an)"
     echo "  -h          Zeigt diese Hilfe an"
-    echo "Beispiel: $0 -f scp800 ./cpa1715src.img"
+    echo "Beispiel: $0 -t cpa800 -f foo.img"
+    echo "Beispiel: $0 -t cpa800 -g Diskett1"
 }
 
-# Argumente parsen
+IMG_FILE=""
+DISKNAME=""
+ORIG_FILE=""
+CONVERT_TEMP_IMG=""
 while [ $# -gt 0 ]; do
     case "$1" in
-        -f)
+        -t)
             shift
             if [ -n "$1" ]; then
                 FORMAT="$1"
                 shift
             else
+                echo "Fehler: -t benötigt ein Argument."
+                show_help
+                exit 1
+            fi
+            ;;
+        -f)
+            shift
+            if [ -n "$1" ]; then
+                ORIG_FILE="$1"
+                shift
+            else
                 echo "Fehler: -f benötigt ein Argument."
+                show_help
+                exit 1
+            fi
+            ;;
+        -g)
+            shift
+            if [ -n "$1" ]; then
+                DISKNAME="$1"
+                shift
+            else
+                echo "Fehler: -g benötigt ein Argument."
                 show_help
                 exit 1
             fi
@@ -45,18 +80,55 @@ while [ $# -gt 0 ]; do
             shift
             break
             ;;
-        -*)
+        -* )
             echo "Unbekannte Option: $1"
             show_help
             exit 1
             ;;
         *)
-            # Erstes nicht-Option-Argument ist das Image-File
-            IMG_FILE="$1"
-            shift
+            echo "Unbekanntes Argument: $1"
+            show_help
+            exit 1
             ;;
     esac
 done
+
+# Wenn -g angegeben wurde, lese Diskette mit Greaseweazle ein
+GW_TEMP_IMG=""
+CONVERT_TEMP_IMG=""
+DISKDIR="Disketten"
+mkdir -p "$DISKDIR"
+if [ -n "$DISKNAME" ]; then
+    IMG_FILE="$DISKDIR/${DISKNAME}.img"
+    GW_TEMP_IMG="$IMG_FILE"
+    echo "Lese Diskette mit Greaseweazle ein: $IMG_FILE (Format: $FORMAT)"
+    gw read --diskdefs=cpaFormates.cfg --format="$FORMAT" "$IMG_FILE"
+    if [ $? -ne 0 ]; then
+        echo "Fehler beim Einlesen mit Greaseweazle."
+        exit 1
+    fi
+elif [ -n "$ORIG_FILE" ]; then
+    BASENAME_NOEXT=$(basename "$ORIG_FILE")
+    BASENAME_NOEXT="${BASENAME_NOEXT%.*}"
+    EXT="${ORIG_FILE##*.}"
+    if [ "$EXT" != "img" ]; then
+        IMG_FILE="$DISKDIR/${BASENAME_NOEXT}.img"
+        CONVERT_TEMP_IMG="$IMG_FILE"
+        echo "Konvertiere $ORIG_FILE nach $IMG_FILE (Format: $FORMAT) ..."
+        gw convert --diskdefs=cpaFormates.cfg --format="$FORMAT" "$ORIG_FILE" "$IMG_FILE"
+        if [ $? -ne 0 ]; then
+            echo "Fehler bei der Konvertierung mit Greaseweazle."
+            exit 1
+        fi
+    else
+        IMG_FILE="$ORIG_FILE"
+        # Falls das Image nicht im Disketten/-Verzeichnis liegt, kopiere es dorthin
+        if [ "$(dirname \"$IMG_FILE\")" != "$DISKDIR" ]; then
+            cp "$IMG_FILE" "$DISKDIR/"
+            IMG_FILE="$DISKDIR/$(basename \"$IMG_FILE\")"
+        fi
+    fi
+fi
 
 # Prüfe, ob ein Image-File angegeben wurde
 if [ -z "$IMG_FILE" ]; then
@@ -69,7 +141,7 @@ fi
 
 # Bestimme Basisnamen des Images (ohne Pfad und .img-Endung)
 BASENAME=$(basename "$IMG_FILE" .img)
-NEW_DIR="$BASENAME"
+NEW_DIR="$DISKDIR/$BASENAME"
 COUNT=1
 # Finde einen freien Verzeichnisnamen (ggf. _1, _2, ... anhängen)
 while [ -d "$NEW_DIR" ]; do
@@ -79,7 +151,7 @@ while [ -d "$NEW_DIR" ]; do
         COUNT=$((CUR_NUM + 1))
         NEW_DIR="${BASE_NO_NUM}_$COUNT"
     else
-        NEW_DIR="${BASENAME}_$COUNT"
+        NEW_DIR="${NEW_DIR}_$COUNT"
     fi
 done
 
@@ -88,8 +160,11 @@ mkdir -p "$NEW_DIR"
 
 
 
+# Zeige den Inhalt der Diskette an
+$CPMLS_CMD -Ff "$FORMAT" "$IMG_FILE"
+
 # Liste alle Dateien im Image auf, überspringe die Kopfzeile, extrahiere Dateinamen und kopiere sie ins Zielverzeichnis
-cpmls -f "$FORMAT" "$IMG_FILE" | tail -n +2 | awk '{print $1}' | while read FILE; do
+$CPMLS_CMD -f "$FORMAT" "$IMG_FILE" | tail -n +2 | awk '{print $1}' | while read FILE; do
     [ -n "$FILE" ] && "$CPMCP_CMD" -f "$FORMAT" "$IMG_FILE" "0:$FILE" "$NEW_DIR/"
 done
 
@@ -98,3 +173,13 @@ done
 # Zähle die extrahierten Dateien und gib das Ergebnis aus
 COUNT_FILES=$(find "$NEW_DIR" -type f | wc -l)
 echo "Es wurden $COUNT_FILES Dateien in den Ordner $NEW_DIR extrahiert."
+
+# Falls Image temporär mit Greaseweazle oder Konvertierung erzeugt wurde, lösche es
+if [ -n "$GW_TEMP_IMG" ]; then
+    rm -f "$GW_TEMP_IMG"
+    echo "Temporäres Disketten-Image $GW_TEMP_IMG wurde gelöscht."
+fi
+if [ -n "$CONVERT_TEMP_IMG" ]; then
+    #rm -f "$CONVERT_TEMP_IMG"
+    echo "Temporäres konvertiertes Image $CONVERT_TEMP_IMG wurde gelöscht."
+fi

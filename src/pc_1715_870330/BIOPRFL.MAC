@@ -1,0 +1,332 @@
+;********************************************************
+;	RAM-Floppy
+; Version 05.03.87
+; Aenderungen:
+; Unterstuetzung EM256 und KES als RAM-Floppy
+;********************************************************
+
+ if1
+
+ IF oss
+rflwarm	MACRO
+	ld	hl,osscd
+	ld	de,ossld
+	ld	bc,osscdl
+	ldir			;;wiederherstellen OSS-"LDIR"
+	ENDM
+ ENDIF
+
+ IF wbootv eq 3
+rflcpw	MACRO
+	ld	hl,ossccp	;;CCP von OSS-Kopie wiederh.
+	ld	de,CCP
+	ld	b,(ccpkpl+127)/128 ;;Anzahl 128-Bloecke
+osswbc:	push	bc
+	push	de
+	ld	de,ossbuf
+	push	de
+	ld	bc,128
+	call	ossld		;;CCP-Kopie -> ossbuf
+	push	hl
+	pop	ix		;;ix:=ossccp-Zeiger
+	pop	hl		;;hl:=ossbuf
+	pop	de		;;de:=CCP-Zeiger
+	ld	c,128
+osswld:	ldir			;;ossbuf -> CCP
+	push	ix
+	pop	hl		;;hl:=ossccp-Zeiger
+	pop	bc
+	djnz	osswbc
+ ENDIF
+
+
+ IF em256
+rflwarm	MACRO
+	ENDM
+ ENDIF
+
+ IF	wbootv eq 5
+rflcpw	MACRO
+	xor 	a
+	call	ramon		;;EM256 Spur 0 aktivieren
+	push	bc		;;Retten der Portadresse 
+	ld 	hl,em256adr+800h	;;CCP ist erstes File in RAM
+	ld 	de,ccp
+	ld	bc,ccpkpl
+	ldir
+emldir	equ	$-2		;;wird zu nop,nop modif. wenn kein em256 vorh.
+	pop 	bc
+	call	ramoff
+	ENDM
+ ENDIF
+ 
+ endif ;if1
+
+
+;**************************************************************
+;	Schreiben RAM-Floppy
+;**************************************************************
+wrramf:
+ IF oss
+	call	osswri
+	jr	c,osswru	;dma -> oss direkt
+	push	de
+	ld	de,ossbuf
+	push	de
+	ldir			;dma -> ossbuf
+	pop	hl
+	pop	de
+	ld	c,128
+	call	ossld		;ossbuf -> oss
+ossrw:	ld	hl,ossbf1
+	ld	de,ossbuf
+	ld	c,128
+	ldir			;ossbuf wiederherstellen
+ossrdu:	ex	de,hl		;oss -> dma
+osswru:	call	c,ossld		;dma -> oss
+ossrwo:	xor	a		;Transfer fehlerfrei
+	ret
+ ENDIF
+
+ IF	kes or em256
+	ld 	hl,(ddma)
+	ld 	bc,128		;128 Byte von DMA nach Puffer
+	ld 	de,dmabuf
+	ldir
+	ld	a,(dtrack)
+	call 	ramon		;Testram / EM256 zuschalten
+	push 	bc
+	ex 	de,hl
+	ld 	bc,128
+	ld 	hl,dmabuf	;128 byte von Puffer nach Tram
+	ldir
+	pop 	bc
+	call	ramoff
+	IF	em256
+	ld	a,(parerr)
+	ELSE
+	xor 	a		;kein Fehler
+	ENDIF
+	ret
+ ENDIF
+
+;**************************************************************
+;	Lesen RAM-Floppy
+;**************************************************************
+
+rdramf:
+ IF oss
+	call	osswri
+	jp	c,ossrdu	;oss -> dma direkt
+	push	hl
+	ex	de,hl
+	ld	de,ossbuf
+	push	de
+	call	ossld		;oss -> ossbuf
+	pop	hl
+	pop	de
+	ld	c,128
+	ldir			;ossbuf -> dma
+	jr	ossrw		;Rest wie write
+ ENDIF
+
+ IF	kes or em256
+	ld	a,(dtrack)
+	call 	ramon		;Testram aktivieren
+	push 	bc
+	ld 	bc,128		;128 Byte 
+	ld 	de,dmabuf	;nach Puffer
+	ldir
+	pop 	bc
+	call 	ramoff		;Testram abschalten
+	ld 	hl,dmabuf	;von Puffer nach DMA uebertragen
+	ld 	bc,128
+	ld 	de,(ddma)
+	ldir
+	IF	em256
+	ld	a,(parerr)
+	ELSE
+	xor 	a		;kein Fehler
+	ENDIF
+	ret
+ ENDIF
+
+;********************************************************************
+;	Unterprogramme fuer RAM-Floppy
+;********************************************************************
+
+ IF oss
+; oss-Arbeit vorbereiten
+; bc: 128; de: oss-Adresse; hl: dma-Adresse
+; ret c: dma < ossadr-256; ret nc: ossbuf ist gerettet
+osswri:	ld	bc,128
+	call	ossmad		;hl:=oss-Adresse
+	jr	c,osserr	;fehlerhaft
+	ex	de,hl
+	ld	hl,(ddma)	;hl:=dma-Adresse
+	ld	a,h
+	cp	((ossadr-256) shr 8);dma komplett vor ossadr?
+	ret	c		;ja
+	push	de
+	push	hl
+	ld	hl,ossbuf
+	ld	de,ossbf1
+	ldir
+	pop	hl
+	pop	de
+	ld	c,128
+	ret
+osserr:	pop	hl		;wegschmeissen ret-Adr osswri
+	xor	a
+	inc	a		;a:=1 (E/A-Fehler)
+	ret
+
+; Adresse in OSS entspr. Sector berechnen nach HL
+; ret c, wenn Track/Sector fehlerhaft
+ossmad:	ld	a,(dtrack)
+	add	a,0ffh		;Track =0?
+	ret	c		;nein
+	ld	de,0ffffh
+osssec	equ	$-2		;von setsec eingetragen
+	dec	de		;Sectoren ab 0 zaehlen
+	ld	hl,(dpbm)	;max. Sectorzahl
+	sbc	hl,de		;innerhalb OSS-RAM-Floppy?
+	ret	c		;nein
+	ex	de,hl
+	add	hl,hl		;(Sectornr-1)*128
+	add	hl,hl
+	add	hl,hl
+	add	hl,hl
+	add	hl,hl
+	add	hl,hl
+	add	hl,hl
+	ld	de,ossrbg
+	add	hl,de
+	ret			;ret c, wenn Sector zu gross
+
+; Transfer RAM <-> OSS entsprechend ldir-Parmameter
+; Routine steht auf Adresse ossld (nach jedem Warmstart)
+osscd:	di
+	ld	a,3ch
+	out	(0eeh),a
+	ldir
+	ld	a,0
+	out	(0eeh),a
+	ei
+	ret
+osscdl	equ	$-osscd
+ ENDIF
+
+
+ IF 	em256
+;Routinen fuer EM256-RAM-Floppy
+;==============================
+;
+;Aktivieren / Deaktivieren der RAM des EM256
+;Eintritt: <A> - Tracknummer, <dsectr> - Sektornummer
+;Austritt: <DE>- Anfangsadresse des Sektors
+;
+ramon:	ld	d,a		;<a>=  0  0 S1 S0 P3 P2 P1 P0
+	rrca			;          Segment   Page   
+	rrca
+	rrca
+	rrca			;<a>= P3 P2 P1 P0  0  0 S1 S0
+	and	3fh		;   =  0  0 P1 P0  0  0 S1 S0
+	or	high(hbemadr)	;   = H3 H2 P1 P0  0  0 S1 S0
+	ld	b,a		;H3,H2 sind ext. Adresse!!
+	ld	a,d
+	cpl
+	and	0ch		;<a>=  0  0  0  0 /P3/P2  0  0
+	or	b		;   = H3 H2 P1 P0 /P3/P2 S1 S0
+	ld	b,a		;Low-Nibble gleichgueltig (retten)
+	ld 	c,modadr+7	;Adressierung 16*4-RAM
+	and	0ch		;<a>=  0  0  0  0 /P3/P2  0  0     
+				;EM256 erkennt sich auf em256adr
+				;Write enable, Page enable
+	out	(c),a
+	ld	a,b
+	and	3		;Segmentnummer
+	or	1 shl reset16	;U8000-Reset, RAM-Enable
+	out	(modadr+1),a	;RAM scharf
+	ld	a,b
+	and	0f0h
+	ld 	d,a		;Page erscheint auf Adr. in DE
+	xor 	a
+	ld	e,a
+	ld	(parerr),a	;Paritaetsfehler reset
+	ld	a,(dsectr)	;offset aus Sektornummer berechnen
+	dec	a
+	ld 	h,a
+	ld	l,0
+	srl	h
+	rr	l		
+	add	hl,de		;Offset zu Track(Page)Adresse addieren
+	ret
+ramoff:	ld a,b
+	and	0ch
+	or	1 shl n_pagen or 1 shl n_write	;page disable, write disable
+	out 	(c),a
+	ld	a,1 shl reset16 or 1 shl n_ramen
+	out	(modadr+1),a
+	ret
+
+parrou:	ld	(rettea),a	;Interruptbedienung Paritaetsfehler
+	ld	a,1		;benoetigt keinen eigenen Stack
+	ld	(parerr),a	;Kennung Fehler
+	in	a,(modadr+1)
+	set	prreset,a
+	out	(modadr+1),a	;Fehler ruecksetzen
+	res	prreset,a
+	out	(modadr+1),a
+	ld	a,(rettea)
+	ei
+	reti
+
+rettea:	db	0		;A bei Parityinterrupt
+parerr:	db	0		;Paritaetsfehlerspeicher
+
+ ENDIF
+
+;*************************************************************
+; Steuertabellen fuer RAM-Floppy
+;*************************************************************
+
+ IF oss
+dphm:	dw	0		;kein Sector-Versatz
+	dw	0,0,0
+	dw	dirbuf
+	dw	dpbm,csvm,alvm
+
+@dpbmk	equ	(ossren-ossrbg) shr 10 ;Groesse OSS-RAM-Floppy
+dpbm:	dw	(1024/128)*@dpbmk ;nur eine Spur!
+	db	3,7,0		;1K Blockgroesse BDOS
+	dw	@dpbmk-1	;Kapazitaet in 1K Bloecken
+	dw	32-1		;Dir-Entries 0..31
+	db	80h,0		;Dir-Alloc
+	dw	8		;check size fuer dir
+	dw	0		;offset, keine Syst.spuren
+	db	80h		;kein Disketten-DPB
+ ENDIF
+
+
+ IF em256
+dphem:
+dphe:	dw	0	;kein Sektorversatz
+	dw	0,0,0
+	dw	dirbuf
+	dw	dpbem,csvem,alvem
+
+dpbem:
+dpbe:	dw	32	;Recs per Track
+	db	3,7,0	;1k-BDOS-Bloecke 
+	dw	256-1	;256k
+	dw	64-1	;64 Dir-.Eintraege
+	db	0c0h,0	;Alloc. fuer 64 Dir.
+	dw	16	;Check-Size
+	dw	0	;Offset: keine Systemspuren
+	db	80h		;kein Disketten-DPB
+ ENDIF
+
+dpham	aset	dphm		;definieren LW "M:"
+dphae   aset    dphe            ;definieren LW "E:"
+

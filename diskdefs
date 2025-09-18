@@ -1,50 +1,6 @@
-diskdef PRG710-1
-  seclen 1024
-  tracks 160
-  sectrk 5
-  blocksize 2048
-  maxdir 128
-  skew 0
-  boottrk 4
-  os 2.2
-end
+# Disk definitions for cpmtools
 
-diskdef PRG710
-  seclen 1024
-  tracks 160
-  sectrk 5
-  blocksize 2048
-  maxdir 128
-  skew 0
-  boottrk 3
-  os 2.2
-end
-
-diskdef A5120_780
-  seclen 1024
-  tracks 160
-  sectrk 5
-  blocksize 2048
-  maxdir 128
-  skew 0
-  boottrk 0
-  offset 15104
-  os 2.2
-end
-
-
-# Robotron 1715 with SCP3
-diskdef 17153
-  seclen 1024
-  tracks 160
-  sectrk 5
-  blocksize 2048
-  maxdir 128
-  skew 0
-  boottrk 4
-  os 3
-end
-
+# Diskdefinition für CPA200 (5" 40T Single Side) ohne Bootsektoren
 diskdef cpa200
   seclen 1024
   tracks 40
@@ -56,7 +12,8 @@ diskdef cpa200
   os 2.2
 end
 
-diskdef scp624
+# Diskdefinition für CPA624 (5" 80T Double Side) 4 Bootsektoren
+diskdef cpa624
   seclen 256
   tracks 160
   sectrk 16
@@ -67,7 +24,8 @@ diskdef scp624
   os 2.2
 end
 
-diskdef scp640
+# Diskdefinition für CPA640 (5" 80T double sided) ohne Bootsektoren
+diskdef cpa640
   seclen 256
   tracks 160
   sectrk 16
@@ -78,7 +36,20 @@ diskdef scp640
   os 2.2
 end
 
-diskdef scp780
+# Diskdefinition für SCPXPRG640 (5" 80T double sided) mit 2 Bootsektoren für PRG710
+diskdef scpxprg640
+  seclen 256
+  tracks 160
+  sectrk 16
+  blocksize 2048
+  maxdir 128
+  skew 0
+  boottrk 2
+  os 2.2
+end
+
+# Diskdefinition für CPA780 (5" 80T double sided) mit 3 Bootsektoren
+diskdef cpa780
   seclen 1024
   tracks 160
   sectrk 5
@@ -89,6 +60,19 @@ diskdef scp780
   os 2.2
 end
 
+# Diskdefinition für CPA780 (5" 80T double sided) mit 2 Bootsektoren
+diskdef cpa780_b
+  seclen 1024
+  tracks 160
+  sectrk 5
+  blocksize 2048
+  maxdir 128
+  skew 0
+  boottrk 2
+  os 2.2
+end
+
+# Diskdefinition für CPA780 (5" 80T double sided) fehlende Bootsektoren - gibt es so nicht wirklich die 4 fehlenden Sektoren werden im A5120 Spezialformat vor dem schreiben davor kopiert
 diskdef cpa780_withoutBoot
   seclen 1024
   tracks 156
@@ -100,7 +84,8 @@ diskdef cpa780_withoutBoot
   os 2.2
 end
 
-diskdef scp800
+# Diskdefinition für CPA800 (5" 80T double sided) kein Bootsektor PC1715 kann davon trotzdem booten
+diskdef cpa800
   seclen 1024
   tracks 160
   sectrk 5
@@ -111,14 +96,37 @@ diskdef scp800
   os 2.2
 end 
 
-diskdef z9001
+# Diskdefinition für SCPX780 (5" 80T double sided) mit 2 Bootsektoren
+diskdef scpx780
   seclen 1024
   tracks 160
   sectrk 5
   blocksize 2048
-  maxdir 192
+  maxdir 128
+  skew 0
+  boottrk 4
+  os 2.2
+end
+
+diskdef scpx780_b
+  seclen 512
+  tracks 160
+  sectrk 10
+  blocksize 2048
+  maxdir 128
+  skew 0
+  boottrk 4
+  os 2.2
+end
+
+diskdef scpprg780
+  seclen 1024
+  tracks 160
+  sectrk 5
+  blocksize 2048
+  maxdir 128
   skew 0
   boottrk 0
+  offset 
   os 2.2
-end 
-
+end

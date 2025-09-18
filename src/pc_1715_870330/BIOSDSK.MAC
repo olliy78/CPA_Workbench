@@ -1,0 +1,1208 @@
+;****************************************************
+;	Diskettentreiber; Umkleidung des phys. Transfers
+;	Version 11.03.87
+; Aenderungen
+; - bei automatischer Formaterkennung muss fuer DS-Disketten
+;   die Rueckseite und Vorderseite uebereinstimmen
+; - IBM-Disketten (SIOS!) mit 40h in Spur 0, Sektor 1 werden
+;   bei autom. Formaterkennung als Datendisketten ohne System-
+;   spuren betrachtet
+;   (Sektorversatz gilt nicht fuer Systemspuren, Konvertierung SIOS)
+; - Unterstuetzung 8" MFM
+; - bei 8" automatische Unterscheidung MFM- und FM-Format
+; - automatische Formaterkennung 780K
+; - Fehlerkorrektur in autom. Formaterkennung fuer Zahl abweichender
+;   128er Sektoren ab Spur 0
+; - Fehlerkorrektur bei autom. Formaterkenung 16*256*80 SS: (SCP)
+;   nur 64 Dir-Eintraege
+;****************************************************
+
+ if1
+
+; Warmstart-Initialisierung
+;==========================
+dskwarm	MACRO
+	IF	dbufsz gt 7
+	call	dbtrw		;;Diskettenpuffer ausgeben
+	ld	a,0ffh
+	ld	(dbdev),a	;;Puffer ist nicht aktiv
+	ENDIF
+	ENDM
+
+ endif
+
+
+; Laufwerksauswahl
+;=================
+; Reg. C: Laufw. (0=A:, 1=B: ...)
+; Reg. E: Bit 0 ist LOGIN-Bit von BDOS (=0, wenn LOGIN)
+
+seldsk:	ld	b,e		;retten LOGIN-Bit
+	call	dgetpb		;HL auf DPH stellen, IX auf DPB
+	ret	z		;Geraet ex. nicht
+	ld	a,c
+	ld	(ddrive),a	;Laufwerk merken
+	bit	0,b		;LOGIN von BDOS?
+	ret	nz		;nein
+ if ramfl
+;###RAM-Floppy
+	bit	dpbfnd,(ix+dpbflg)	;Diskette?
+	ret	nz		;nein, fertig
+;####
+ endif
+	push	hl		;^DPB merken
+
+	IF	dbufsz gt 7
+	ld	hl,dbdev
+	cp	(hl)		;LOGIN fuer gepuffertes Device?
+	jr	nz,dselnb	;nein
+	ld	(hl),0ffh	;Puffer ist ungueltig
+	ld	hl,dbflg
+	res	dfbwr,(hl)	;kein veraend. Puffer auszug.!
+dselnb:
+	ENDIF
+
+	IF	format
+;++++++++++Automatische Format-Erkennung++++++++++
+; Reg. C zeigt auf Laufwerk
+
+	bit	dpbfrm,(ix+dpbflg);Formaterkennung unterdr.?
+	jp	nz,selext	;ja
+
+	IF	dbufsz gt 7
+ 	call	dbtrw		;Puffer freimachen
+				;und auf Lesen schalten
+	ENDIF
+
+	ld	a,c
+	ld	(dfrmdv),a
+	ld	(dbdev),a
+
+	xor	a
+	ld	(ix+dpbflg),a	;ruecksetzen alle Flags
+	ld	(ix+dpbsn0),a	;keine Weiter-Numm. auf Ruecks.
+	ld	(ix+dpbofs),a	;keine Systemspuren
+
+	ld	(dfrmtr),a	;Spur 0
+	ld	(dbtrk),a
+	inc	a
+	ld	(dbsec),a	;Sektor 1
+	ld	(dbsnb),a	;1 phys. Sektor lesen
+
+; Stellen  Sektor-Translate-Tabelle 1,2,3,...
+	push	ix
+	ld	b,26		;max. Laenge der Tabelle
+ IF dsk8mf
+	bit	7,(ix+dpbsid)	;Tabelle max 52 lang?
+	jr	z,nd8mf		;nein
+	ld	b,52
+nd8mf:
+ ENDIF
+selstz:	ld	(ix+dpbstr),a
+	inc	ix
+	inc	a
+	djnz	selstz
+	pop	ix
+
+; Positionieren auf Spur 0 und analysieren Systemspuren
+	call	dsidtr		;beliebigen Sekt.Id lesen
+	jr	nz,seldlj	;Fehler beim Lesen
+	ld	a,e		;stimmt trk=0?
+	or	d		;und sid=0?
+	jr	nz,seldlj	;nein, Fehler beim Lesen
+	ld	a,h
+	ld	(dbslc),a	;setzen Spurformat fuer Sp. 0
+	IF	dbufsz le 7
+	or	a		;Sektorlaenge 128?
+	jr	nz,seldlj	;nein, Puffer zu klein
+	ENDIF
+ IF dsk8mf
+	ld	hl,dbflg
+	res	dioffm,(hl)
+	ld	a,(dfrflg)
+	bit	dioffm,a	;temporaer FM ?
+	jr	z,nfrtfm	;nein
+	set	dioffm,(hl)	;sonst fuer Datenlesen uebernehmen
+nfrtfm:
+ ENDIF
+	call	dbtran		;Lesen Spur 0, Sektor 1
+seldlj:	jr	nz,seldle	;Fehler
+ IF dbufsz gt 7
+	ld	a,(dbuf)		;Lesen 'USER' aus 'Directory'
+ ELSE
+	ld	a,(dirbuf)
+ ENDIF
+	cp	0e5h		;leere Diskette/geloeschter Eintrag?
+	jr	z,selsy0	;ja, kann Directory sein
+ if ibmfrm
+	cp	40h		;IBM-Format (SIOS-Daten-Diskette)?
+	jr	z,selsy0	;ja, 0 Systemspuren annehmen
+ endif
+	cp	20h		;<=31 ? ("S"YL ist groesser!)
+	jr	nc,selsy1	;nein, kann kein Directory sein
+;Systemlader fuer PC1715 beginnt mit 02 oder 03
+ IF dbufsz gt 7
+	ld	a,(dbuf+21h)	;bei SCP1715-Systemdiskette dort 00h
+ ELSE
+	ld	a,(dirbuf+21h)
+ ENDIF
+	or	a		;sonst dort Dir-Eintrag (E5 oder Filename)
+	jr	z,selsy1	;00h, kein Directory
+selsy0:	dec	(ix+dpbofs)	;=255, wenn evtl. Directory
+selsy1:
+
+; Analysieren Datenspur
+
+; SS/DS-Analyse
+	ld	(ix+dpbstp),2	;Doppel-Step-Impulse
+	ld	a,dlgint	;auf LOGIN-Spur
+	call	dsidtt		;belieb. SektId Vorderseite lesen
+	jr	nz,seldle	;Fehler, unsicheres Format
+	ld	d,h		;d:=Sektorlcode, e:=Spur
+ IF dsk8mf
+	ld	hl,dfrcdb
+	bit	dioffm,(hl)	;musste FM erzwungen werden?
+	jr	z,selnfm	;nein
+	set	dpbffm,(ix+dpbflg)	;sonst ist alles FM
+selnfm:	ld	hl,dbflg
+	res	dioffm,(hl)	;loeschen fuer normalen Transfer
+
+ ENDIF
+ IF dskds
+	bit	0,(ix+dpbsid)	;ist es ein DS-Laufwerk?
+	jr	z,selss		;nein, SS
+	push	de		;merken Sektorlaengencode und Spur
+	set	dpbfds,(ix+dpbflg)
+	ld	a,1+(dlgint*2)	;Rueckseite der Spur,
+				;ab der Format bei SS konstant
+	call	dsidtt		;beliebigen Sekt.Id Ruecks. lesen
+	ld	a,d		;merken side Ruecks.
+	ld	l,e		;h:=Sektorlcode, l:=Spur Rueckseite
+	pop	de		;wiederherstellen Vorderseite
+	jr	nz,selss	;Fehler beim Lesen, SS
+	or	a
+	sbc	hl,de		;Vorder- gleich Rueckseite?
+	jr	nz,selss	;nein, SS
+	dec	a		;stimmt side=1?
+	jr	nz,seldle	;nein, unsicheres Format	
+	jr	sel48		;40 Tr/ 80 Tr unterscheiden
+selss:	res	dpbfds,(ix+dpbflg)
+ ENDIF
+
+; 40/80 Track Analyse
+sel48:	ld	a,e		;trk
+	sub	dlgint		;waren 2 Steps richtig? 
+	jr	z,seldl1	;ja
+	dec	(ix+dpbstp)	;Einzelstep-Impulse
+	sub	dlgint		;waere 1 Step richtig?
+	jr	z,seldl1	;ja
+				;nein, unsicher
+seldle:	ld	(ix+dpbslc),0ffh;provozieren 'BAD SECTOR'
+	ld	hl,0		;erzeugen 'SELECT' Error
+	ex	(sp),hl
+	jp	selext
+
+; DS/SS und 40/80 ist unterschieden, es fehlt Sektorlaenge
+seldl1:	ld	a,d
+	ld	(ix+dpbslc),a	;definieren Sektorlaengencode
+ IF	dbufsz le 7
+	or	a		;Sektorlaenge 128?
+	jr	nz,seldle	;nein, Puffer reicht nicht
+ ELSE
+	IF	dbufsz lt 10	;Test, ob Disk-Puffer ausreicht
+	cp	dbufsz-6	;dpbslc < dbufsz-6?
+	jr	nc,seldle	;nein, zu klein
+	ENDIF
+	or	a		;Sektorlaenge 128?
+	jr	nz,seldxl	;nein, normale Sektorfolge
+ ENDIF	;dbufsz gt 7
+ IF dsk8mf
+	bit	7,(ix+dpbsid)	;8" MFM?
+	jr	z,seldsv	;nein
+	bit	dpbffm,(ix+dpbflg)	;als MFM betreiben?
+	jr	z,seldxl	;ja, kein Sektorversatz
+ ENDIF
+seldsv:
+; Stellen Sektor-Translate-Tabelle 1,7,13,..
+	push	ix
+	pop	hl
+	ld	bc,dpbstr
+	add	hl,bc
+	ex	de,hl
+	ld	hl,xlt
+	ld	c,26
+	ldir
+seldxl:
+
+	call	dtrsla		;stellen hl entspr. Sektorlaenge
+	jr	nz,seldle	;unzulaessig
+	ld	bc,dsll		;Laenge eines Eintrags
+ IF disk8
+	bit	4,(ix+dpbsid)	;8"-LW?
+	jr	nz,sel5zl	;nein
+	add	hl,bc		;5" uebergehen
+	add	hl,bc
+	add	hl,bc
+	add	hl,bc
+  IF dsk8mf
+	bit	3,(ix+dpbsid)	;MFM-Laufwerk?
+	jr	z,selset	;nein
+	bit	dpbffm,(ix+dpbflg) ;als FM zu betreiben?
+	jr	nz,selset	;ja
+	add	hl,bc		;sonst auf 8" MFM Muster
+  ENDIF
+	jr	selset		;Format-Werte setzen
+sel5zl:
+ ENDIF
+	bit	1,(ix+dpbstp)	;40 Tr. auf 80er LW?
+	jr	nz,seld40	;ja
+	ld	a,(ix+dpbptr)	;40er LW?
+	cp	40+1
+	jr	c,seld40	;ja, 40 Tr. auf 40er LW
+	add	hl,bc		;auf 80er Format stellen
+seld40:	bit	dpbfds,(ix+dpbflg)	;DS?
+	jr	z,seldss	;nein
+	add	hl,bc		;auf DS Format
+	add	hl,bc
+seldss:
+selset:
+; DPB modifizieren entsprechend erkanntem Format
+	ld	c,(hl)		;Zahl der benutzten Spuren
+	ld	(ix+dpbtrk),c
+	inc	hl
+	ld	c,(hl)		;Anzahl 128er Sektoren pro Spur
+	ld	(ix+dpbspt),c
+	inc	hl
+	ld	c,(hl)		;Anzahl der Dir-Eintraege -1
+	inc	hl
+	ld	a,(hl)		;Anzahl der Systemspuren
+	srl	a		;feste Anzahl erzwungen?
+	jr	c,seldof	;ja
+	bit	7,(ix+dpbofs)	;kann Spur 0 Directory sein?
+	jr	z,seldof	;nein, Standardanzahl setzen
+	xor	a		;sonst ohne Systemspuren
+seldof:	ld	(ix+dpbofs),a
+	or	a		;0 Systemspuren?
+	jr	z,selddr	;ja
+	ld	a,c		;Anzahl Dir-Eintraege -1
+	cp	192-1		;>=192 Dir-Eintraege ?
+	jr	c,selddr	;nein
+	ld	c,128-1		;780k hat 128 Dir-Eintraege
+selddr:	ld	(ix+dpbdir),c
+	inc	hl
+	ld	c,(hl)		;Abstand der Blockgroessentab.
+	add	hl,bc		;auf Blockgroessentabelle
+	ld	c,(hl)
+	ld	(ix+dpbbls),c
+	inc	hl
+	ld	c,(hl)
+	ld	(ix+dpbblm),c
+	inc	hl
+	ld	c,(hl)
+	ld	(ix+dpbexm),c
+
+; Bestimmen Zahl der abweichenden 128er-Sektoren ab Spur 0
+
+	xor	a
+	ld	(dfrmtr),a	;ab Spur 0
+		;(gleichz. Spurkorr. bei falschen Doppelstepimpulsen)
+sf128z:	call	dsidtr		;beliebigen SektId lesen
+	jr	nz,sf128e	;Fehler
+	ld	a,h		;Sektorlaenge
+	cp	(ix+dpbslc)	;gleich Disketten-Rest?
+	jr	z,sf128e	;ja
+	ld	a,(ix+dpbflg)
+	and	dpbfsm		;bisherige Anzahl abweichender Spuren
+	cp	dpbfsm		;Zaehler voll?
+	jr	z,sf128e	;ja
+	inc	(ix+dpbflg)	;erhoehen abweich. Spurzahl
+	ld	hl,dfrmtr	;naechste (logische!) Spur
+	inc	(hl)
+	jr	sf128z
+sf128e:
+
+; Setzen Anzahl der logischen 128er Rekords im Puffer -1
+; Es wird immer das Maximum gesetzt, dies setzt eine dichte
+; Sektorfolge beim Transfer voraus! (so in dpbstr)
+
+	IF	dbufsz gt 7
+	ld	(ix+dpbbfm),+(1 shl (dbufsz-7))-1
+	ENDIF
+
+; Berechnen Speicherkapazitaet-1 in BDOS-Bloecken aus
+; ((Tracks-dpbofs)*dpbspt/(2**dpbbls))-1
+	ld	l,(ix+dpbtrk)
+	xor	a
+	ld	h,a		;hl:=log. Spurzahl
+	ld	e,(ix+dpbofs)
+	ld	d,a		;de:=log. offset-Spurzahl
+	sbc	hl,de
+	ex	de,hl		;de:=log. Daten-Spurzahl
+	ld	l,a		;hl:=0
+	ld	b,(ix+dpbspt)
+dsizmz:	add	hl,de
+	djnz	dsizmz		;hl:=(tracks-dpbofs)*dpbspt
+dsizme:	ld	b,(ix+dpbbls)
+dsizdz:	srl	h
+	rr	l
+	djnz	dsizdz
+	dec	hl
+	ld	(ix+dpbsiz),l
+	ld	(ix+dpbsiz+1),h
+	ld	a,(ix+dpbdir)	;Dir-Groesse
+	inc	a
+	rrca
+	rrca			;div 4, da 4 Dir-Eintr. /Sekt.
+	ld	(ix+dpbchk),a	;ist Sektorzahl = Check size
+	ld	b,(ix+dpbbls)	;block shift
+seldla:	rrca			;BDOS-Bloecke fuer Dir.
+	djnz	seldla
+	ld	b,a
+	xor	a
+seldal:	scf			;Allocation-Bits fuer Dir.
+	rra
+	djnz	seldal
+	ld	(ix+dpbalc),a
+;+++++++++++Ende automatische Formaterkennung+++++++++++++
+	ENDIF	;format
+
+selext:
+ IF cpastz
+; Anzeigen Diskformat als Speicherkapazitaet in kBytes
+; Ermitteln Stelle in Statuszeile
+	ld	a,(ddrive)
+	ld	c,a
+	ld	hl,statz1+statzk
+conm40	equ	$-2
+	ld	de,stzkl
+	or	a
+	jr	z,selexa
+selexb:	add	hl,de
+	dec	a
+	jr	nz,selexb
+selexa:	ld	(selex5),hl
+
+	ld	a,c
+	add	a,'A'
+	call	selex4
+	ld	a,':'
+	call	selex4
+
+; (dpbsiz+1)*(2**(dpbbls-3))
+	ld	l,(ix+dpbsiz)
+	ld	h,(ix+dpbsiz+1)
+	inc	hl
+	ld	a,(ix+dpbbls)
+	sub	3
+	jr	z,selex1
+selex2:	add	hl,hl
+	dec	a
+	jr	nz,selex2
+selex1:	ld	de,-100		;immer dreistellig
+	call	selex3
+	ld	de,-10
+	call	selex3
+	ld	a,l
+	or	'0'
+	call	selex4
+
+ if disknb le 3
+	ld	a,'k'
+	call	selex4
+ endif
+ ENDIF
+
+selexx:	pop	hl		;hl auf DPH
+	ret			;Return Seldsk
+
+ IF cpastz
+selex3:	call	mhldig		;10er Ziffer nach A
+selex4:	ld	de,0
+selex5	equ	$-2		;Zeiger in Statuszeile
+	ld	(de),a		;ablegen in Statuszeile
+	inc	de
+	ld	(selex5),de
+	ret
+ ENDIF
+
+
+; auf Spur 0 zurueck (vor jedem Dir-Zugriff)
+;===================
+home:
+	IF	dbufsz gt 7
+	ld	hl,dbflg
+	bit	dfbwr,(hl)	;veraenderter Puffer?
+	jr	nz,home1	;ja, nicht freigeben
+	ld	a,0ffh		;sonst Diskwechsel erlauben
+	ld	(dbdev),a	;Puffer ist nicht aktiv
+	ENDIF
+home1:	ld	c,0
+;-----------------------
+
+; Einstellen Spur in Reg. BC
+;================
+settrk:	ld	a,c
+	ld	(dtrack),a	;Spur merken
+	ret
+;-----------------------
+
+; Einstellen Sektor in Reg. C
+;==================
+setsec:	LD	A,C
+	LD	(dsectr),A
+	if	oss		;Sectornr. > 255
+	ld	(osssec),bc
+	endif
+	RET
+;-----------------------
+
+; Einstellen DMA in Reg. BC
+;===============
+setdma:	LD	(ddma),BC
+	RET
+;-----------------------
+
+; Uebersetzung Sektornummer 
+;==========================
+; Translate-Tab-Adr. in DE, Eingangs-Sektornummer in BC,
+;			    Ausgangs-Sektornummer in HL
+; Es wird keine Translate-Tabelle benutzt, da die Sektor-
+; nummernverwaltung verallgemeinert im nicht-Standard-DPB 
+; enthalten ist (auch fuer physische Sektorlaenge <>128)
+
+sectran:
+	LD	H,B
+	LD	L,C
+	inc	hl		;Sektoren zaehlen in CP/A ab 1
+	RET
+;-----------------------
+
+	IF	@write
+
+; Schreiben Sektor
+;=================
+; Register C (vom BDOS gestellt):
+;	=0, wenn normales write
+;	=1, wenn directory-write (sofort ausgeben)
+;	=2, wenn Beginn eines neuen Datenblocks (kein preread)
+
+write:
+	push	bc		;retten Reg. C
+	ld	a,(ddrive)
+	ld	c,a
+	call	dgetpb		;ix:=dpb(ddrive)
+	pop	de
+	jr	z,drwerr	;Geraet ex. nicht
+ if ramfl
+;###RAM-Floppy
+	bit	dpbfnd,(ix+dpbflg)	;Diskette?
+	jp	nz,wrramf	;nein
+;###
+ endif
+	ld	hl,dflg
+	set	dfwr,(hl)	;Write-Flag setzen
+
+	IF	dbufsz gt 7	;gepufferte Disk E/A
+	ld	hl,dbflg
+	set	dfbprr,(hl)	;Annahme preread notwendig
+	ld	a,e		;A:= Write-Typ
+	ld	(dwrtyp),a	;merken Write-Typ
+	cp	2		;write to unallocated?
+	jr	nz,chkuna	;nein
+	ld	a,(ix+dpbblm)	;Zahl der 128-Sekt. im Block -1
+	inc	a
+	ld	(unacnt),a	;fuer diese Sekt. kein preread
+	ld	hl,unadev
+	ld	(hl),c
+	ld	a,(dtrack)
+	ld	(unatrk),a
+	ld	a,(dsectr)
+	ld	(unasec),a
+chkuna:	ld	a,0
+unacnt	equ	$-1
+	or	a		;noch nicht geschr. Sekt. da?
+	jr	z,alloc		;nein
+	dec	a		;sonst Restzahl -1
+	ld	(unacnt),a
+	ld	a,0ffh
+unadev	equ	$-1
+	cp	c		;gleiches Geraet?
+	jr	nz,alloc	;nein
+	ld	a,0ffh
+unatrk	equ	$-1
+	ld	hl,dtrack
+	cp	(hl)		;gleiche Spur?
+	jr	nz,alloc	;nein
+	ld	e,0
+unasec	equ	$-1
+	ld	a,(dsectr)
+	cp	e		;gleicher Sektor?
+	jr	nz,alloc	;nein
+; Vorbereiten naechsten unalloc write-Aufruf
+	cp	(ix+dpbspt)	;neue Spur?
+	jr	c,unatr1	;nein
+	ld	hl,unatrk
+	inc	(hl)		;unatrk +1
+	xor	a		;Sektor auf Spuranfang
+unatr1:	inc	a		;naechster Sektor
+	ld	(unasec),a
+	ld	hl,dbflg
+	res	dfbprr,(hl)	;anzeigen kein preread notw.
+	ENDIF
+	jr	drw
+
+	ENDIF	;@write
+
+; Abbruch read/write mit E/A-Fehler
+drwerr:	ld	a,1
+	ret
+
+; Lesen Sektor
+;=============
+
+read:
+	ld	a,(ddrive)
+	ld	c,a
+	call	dgetpb		;ix:=dpb(ddrive)
+	jr	z,drwerr	;Geraet ex. nicht
+ if ramfl
+;###RAM-Floppy
+	bit	dpbfnd,(ix+dpbflg)	;Diskette?
+	jp	nz,rdramf	;nein
+;###
+ endif
+	ld	hl,dflg
+	res	dfwr,(hl)	;Lesen anzeigen
+
+	IF	dbufsz gt 7
+	ld	hl,dbflg
+	set	dfbprr,(hl)	;preread notwendig
+	ld	a,2
+	ld	(dwrtyp),a
+
+alloc:	IF	@write
+	xor	a
+	ld	(unacnt),a	;Ende unalloc
+	ENDIF
+
+	ENDIF
+
+; gemeinsamer Zweig read/write Floppy
+;------------------------------------
+
+drw:	ld	a,(dsectr)	;Sektornummer in 1..dpbspt ?
+	dec	a		;ab 0 zaehlen
+	jp	m,drwerr	;<0, Fehler
+	cp	(ix+dpbspt)	;<dpbspt?
+	jr	nc,drwerr	;nein, Fehler
+ IF dbufsz gt 7
+	ld	b,a		;retten dsectr-1
+ ENDIF
+	ld	a,(ix+dpbflg)
+	and	dpbfsm		;Anzahl der abweich. 128er Spuren
+	ld	d,a
+	ld	a,(dtrack)	;verlangte Spur
+	cp	d		;im abweichenden Spurformat?
+ IF dsk8mf
+	jr	nc,drwnsp	;nein
+	bit	4,(ix+dpbsid)	;8"
+	jr	nz,drwsp	;nein
+	set	dffm,(hl)	;sonst temporaer FM erzwingen
+drwsp:	jp	drwsec		;Sektorlaenge 128
+drwnsp:
+ ELSE
+	jp	c,drwsec	;ja, Sektorlaenge 128
+ ENDIF
+ IF dsk8mf
+	ld	hl,dflg
+  IF dbufsz gt 7
+ 	ld	de,dbflg
+  ENDIF
+	res	dffm,(hl)	;kein temporaeres FM erzwingen
+  IF dbufsz gt 7
+	ex	de,hl
+	res	dfbfm,(hl)	;kein temporaeres FM erzwingen
+  ENDIF
+	bit	dpbffm,(ix+dpbflg) ;FM erzwungen?
+	jr	z,drwnfm	;nein
+  IF dbufsz gt 7
+	set	dfbfm,(hl)	;alles FM
+	ex	de,hl
+  ENDIF
+	set	dffm,(hl)	;alles FM
+drwnfm:
+ ENDIF
+
+ IF dbufsz gt 7	;gepufferte Disk E/A
+ IF dbufsz lt 12 ;<2**12 =4K Puffer
+	ld	a,(ix+dpbslc)	;phys. Sektorlaenge 128?
+	or	a		;d.h. mit Sektorversatz?
+	jp	z,drwsec	;ja, keine Pufferung sinnvoll
+ ENDIF
+	ld	a,b
+	ld	d,(ix+dpbbfm)	;Puffermaske
+	and	d		;rel. Sekt.nr. des BDOS-Blocks zum Puff.anf.
+	push	af		;merken fuer move
+	xor	b		;a ist Sektornr. des Puff.anf.
+drwbnr:	srl	a		;ermitteln Puffernr in Spur
+	rr	d		;noch Bits in Puffermaske?
+	jr	nz,drwbnr	;ja
+; Test, ob dieser Puffer da ist
+	push	af		;merken Puffernummer
+	cp	0ffh		;richtige Puffernummer?
+dbnb	equ	$-1
+	jr	nz,dbn		;nein
+	ld	a,(dbtrk)
+	ld	d,a
+	ld	a,(dtrack)	;geforderte Spur
+	cp	d		;richtige Spur?
+	jr	nz,dbn
+	ld	a,(dbdev)	;zum Puffer gehoeriges Geraet
+	cp	c		;richtiges Geraet?
+	jr	z,dbmat		;ja, Sektor steht im Puffer
+
+dbn:	push	bc		;retten ddrive
+	call	dbtrw		;veraenderten Puffer ausgeben
+	pop	bc		;c:=ddrive
+	ld	hl,dbdev
+	ld	(hl),c
+	ld	a,(dtrack)
+	ld	(dbtrk),a
+	call	dgetpb		;ix:=dpb(c)
+	ld	b,(ix+dpbslc)
+	ld	hl,dbslc
+	ld	(hl),b
+	ld	a,(ix+dpbbfm)	;Zahl der 128er Sektoren -1
+	inc	a
+	add	a,a		;CY:=0
+	inc	b		;fuer djnz, falls dpbslc=0
+dbsnbz:	rrca			;Zahl der phys. Sekt. im Puff.
+	djnz	dbsnbz
+	ld	d,a		;merken
+	xor	a
+	pop	bc		;b:=geforderte Puffernr.
+	push	bc
+	ld	hl,dbnb
+	ld	(hl),b
+	inc	b
+	dec	b		;Puffernr. 0?
+	jr	z,dbsec0	;ja
+dbsecz:	add	a,d		;0. phys. Sekt. im Puffer
+	djnz	dbsecz		;=dbsnb.*Puffernr.
+dbsec0:	ld	e,a		;merken Pufferanf.-Sektor
+	ld	b,(ix+dpbslc)
+	ld	a,(ix+dpbspt)
+	inc	b		;wegen djnz
+	add	a,a
+dbsecm:	srl	a		;phys. Sektoranzahl
+	djnz	dbsecm
+	sub	e		;Restsektorzahl auf Spur
+	cp	d		;>= Zahl zu transferierender?
+	jr	nc,dbseco	;ja
+	ld	d,a		;sonst nur Restsektorzahl
+dbseco:	inc	e		;Sektoren zaehlen ab 1
+	ld	(dbsec),de	;hinterlegen Sektor, Sektorzahl
+	ld	hl,dbflg
+	res	dfbwr,(hl)
+ if @write
+	bit	dfbprr,(hl)	;muss neuer Puffer gel. werden?
+	jr	nz,dbprr	;ja
+; nur dann kein preread, wenn Rest BDOS-Block >= phys. Puff.
+; und Rest BDOS-Block auf Pufferanfang beginnt
+	ld	a,(unacnt)
+	cp	(ix+dpbbfm)	;Restzahl-1 >= Puffergr.-1 ?
+	jr	c,dbprr		;nein, preread
+	ld	a,(dsectr)	;Sektornr.
+	dec	a		;ab 0 zaehlen
+	and	(ix+dpbbfm)	;rel. Sekt.nr. des
+;				BDOS-Blocks zum Pufferanfang
+	jr	nz,dbprr
+	ld	(dberrf),a	;fehlerfrei gel. anzeigen
+dbprr:	call	nz,dbtran	;Puffer lesen
+ else
+	call	dbtran
+ endif
+dbmat:	
+
+; Sektor in/aus Puffer holen
+;===========================
+	pop	af		;Puffernr. in Spur wegschm.
+	pop	af		;128-er Index im Puffer
+	push	af
+	rra			;Sektornb*128 berechnen
+	ld	b,a
+	ld	c,0
+	rr	c
+	ld	hl,dbuf
+	add	hl,bc		;Adresse im Puffer
+	ld	de,(ddma)	;Nutzer-DMA
+	ld	a,(dflg)
+	bit	dfwr,a		;Schreiben?
+	jr	z,dsmove	;nein
+	ld	a,(dbflg)
+	set	dfbwr,a		;anzeigen Puffer beschrieben
+	ld	(dbflg),a
+	ex	de,hl
+dsmove:	ld	bc,128
+	ldir
+	pop	af		;128-Index im Puffer
+	cp	(ix+dpbbfm)	;letzter Sektor im Puffer
+	jr	z,dmovew	;ja, Puffer ausgeben
+	ld	a,0ffh
+dwrtyp	equ	$-1
+	cp	1		;write to directory?
+dmovew:	call	z,dbtrw		;ja, veraend. Puffer ausgeben
+	ld	a,0
+dberrf	equ	$-1		;Ergebnisflag letztes dbtran
+	ret
+
+; Schreiben Puffer, wenn notw.
+;=============================
+dbtrw:	ld	hl,dbflg
+	bit	dfbwr,(hl)	;Puffer veraendert?
+	ret	z		;nein, Schreiben unterdruecken
+	ENDIF	;dbufsz gt 7
+
+	IF	format or (dbufsz gt 7)
+; gemeinsamer Zweig Lesen/Schreiben Puffer
+;=========================================
+dbtran:	
+	ld	hl,dbcdb
+	IF	dbufsz gt 7
+	call	dsktra
+	ld	(dberrf),a	;Fehlerflag stellen
+	ld	hl,dbflg
+	res	dfbwr,(hl)	;Puffer ist nicht beschrieben
+	ret
+	ELSE
+	jr	dsktra
+	ENDIF
+
+	ENDIF
+
+	IF	format
+; Lesen beliebigen Sektor-Id.
+;===========================
+dsidtt:	ld	(dfrmtr),a	;Eingang fuer Spur in A
+dsidtr:
+	ld	hl,dfrcdb
+ IF dsk8mf
+	res	dioffm,(hl)	;nicht temporaer umschalten
+	call	dsktra		;beliebigen Sektorid lesen
+	ret	z		;ok
+	ld	a,(ix+dpbsid)
+	and	(1 shl 4)+(1 shl 3)	;8"/5" und FM/MFM
+	xor	1 shl 3		;8" MFM ?
+	ret	nz		;nein, Fehler
+	ld	hl,dfrcdb
+	set	dioffm,(hl)	;temporaer auf FM umschalten
+ ENDIF
+	jr	dsktra		;belieb. SektId lesen
+	ENDIF
+
+
+; gemeinsamer Zweig Read/Write 128-Sektor einzeln
+;================================================
+drwsec:
+	ld	hl,dflg
+
+dsktra:	;Aufruf diskio vom BIOS
+
+diskio:	;Aufruf ueber Sprungvektor von BIOS-Erweiterung
+
+;*********************************************************
+; Umkleidung des physischer Disketten-Transfers
+;*********************************************************
+
+; Parameter: HL auf CDB mit folgender Struktur:
+; +0: cdbfl	;Flags	
+			;- Bit 0     **frei**
+diofhd	equ	1	;- Bit 1 =1, wenn Kopf hochnehmen ("headup")
+diofwr	equ	2	;- Bit 2 =1, wenn Schreiben
+diofvf	equ	3	;- Bit 3 =1, wenn Verify nach Schreiben
+diofid	equ	4	;- Bit 4 =1, wenn nur Sektid. zu lesen
+dioftr	equ	5	;- Bit 5 =1, wenn keine Fehlermeldung (und -behandlg)
+diofps	equ	6	;- Bit 6 =1, wenn nicht 'dpbstr' zu benutzen
+dioffm	equ	7	;- Bit 7 =1, wenn temporaer FM-Format erzwungen
+
+; ab hier unwichtig bei Bit 1 in cdbfl =1 (headup)
+; +1: cdbdev	;logisches Geraet 0 .. dphnb-1
+; +2: cdbtrk	;Spur
+; +3: cdbsec	;erster zu uebertr. phys. Sektor
+; +4: cdbsnb	;Anz. zu uebertr. ph. Sekt. (<=4, wenn =0, so nur position.)
+; +5: cdbslc	;Sektorlaengencode (0=128, 1=256, 2=512, 3=1024)
+; ab hier nur wichtig, wenn Bit 4 in cdbfl =0:
+; +6,7: cdbdma	;Transferadresse
+
+; Return, falls nicht Bit 1 in cdbfl =1:
+;	A=0 (ret z) bei fehlerfrei, sonst A=1 (ret nz) bei cdbfl, Bit 5 =0
+;	oder Returncode phys. Transfer
+;	E:=trk, D:=sid ,L:=sec, H:=len
+;	BC,IX unveraendert
+
+	bit	diofhd,(hl)	;Kopf hochnehmen?
+	jp	nz,headup	;ja, kein Transfer
+
+	push	bc
+	push	ix
+diorty:		       ;interne Wiederholung diskio
+	push	hl		;merken hl
+	inc	hl
+	ld	c,(hl)		;logisches Laufwerk
+	call	dgetpb		;IX auf DPB stellen
+	pop	hl		;wiederherstellen hl
+	push	hl
+	ld	a,(ix+dpbsid)	;5"/8" und FM/MFM
+	and	(1 shl 4)+(1 shl 3)	;aus DPB uebernehmen
+ IF dsk8mf
+	bit	dpbffm,(ix+dpbflg)	;Diskette permanent FM?
+	jr	nz,diosfm	;ja
+	bit	dioffm,(hl)	;temporaer FM erzwingen (8" Systemsp.)?
+	jr	z,dionfm	;nein, FM/MFM vom Geraet bleibt
+diosfm:	res	3,a		;erzwingen FM-Format
+dionfm:
+ ENDIF
+	bit	diofid,(hl)	;Sekt.id lesen?
+	jr	z,dionid	;nein
+	set	1,a		;setzen Sektid lesen
+dionid:	set	0,a		;setzen lesen
+	bit	diofwr,(hl)	;schreiben?
+	jr	z,dionwr	;nein, lesen
+	bit	diofvf,(hl)	;mit verify?
+	jr	nz,diownv	;ja
+	res	0,a		;loeschen lesen (nur schreiben)
+diownv:	set	2,a
+dionwr:
+	ld	(ft.kom),a	
+
+	inc	hl
+	ld	a,(ix+dpbdnr)	;physische LW-Nr.
+	ld	(ft.lwn),a
+
+	ld	a,(ix+dpbstp)	;Anzahl der Stepimpulse
+	ld	(ft.stp),a
+
+	ld	a,(ix+dpbsti)	;Schrittzeit
+	ld	(ft.sti),a
+
+; Track und Side entpsr. Diskettenformat setzen
+	inc	hl
+	ld	d,(hl)		;Track
+	ld	e,d		;merken
+	inc	hl
+	ld	c,(hl)		;Sektornummer ab 1
+	dec	c		;Sektornr. ab 0
+	bit	dpbf86,(ix+dpbflg)	;Fortsetzung Dsk. auf Ruecks.?
+	jr	nz,diots2	;ja
+	bit	dpbfds,(ix+dpbflg)	;ungerade Spuren auf Rueckseite?
+	jr	z,diotrs	;nein, einseitig
+	srl	d		;Spur halbieren
+	jr	nc,diotrs	;gerade Spur, Vorderseite
+	jr	diots1		;auf Rueckseite
+diots2:	ld	b,(ix+dpbtrk)	;log. Spurzahl
+	srl	b		;Spuren auf Vorderseite
+	ld	a,d
+	sub	b		;Spur auf Vorderseite?
+	jr	c,diotrs	;ja, Spur in d unveraendert lassen
+				;40 ->  0; 41 ->  1; ...; 79 ->  39
+				;77 ->  0; 78 ->  1; ...;153 ->  76
+	bit	dpbfsv,(ix+dpbflg)	;Ruecks. von aussen nach innen?
+	jr	nz,diots4	;ja
+	cpl			;40 -> -1; 41 -> -2; ...; 79 -> -40
+				;77 -> -1; 78 -> -2; ...;153 -> -77
+	add	a,b		;40 -> 39; 41 -> 38; ...; 79 ->   0
+				;77 -> 76; 78 -> 75; ...;153 ->   0
+diots4:	ld	d,a
+diots1:	ld	a,(ix+dpbsn0)	;Versch. der Sektornr. auf Rueckseite
+	add	a,c		;Sektornr. evtl. weiterzaehlen
+	ld	c,a
+	ld	a,1		;side:=1
+	jr	diotss
+diotrs:	xor	a		;side:=0
+diotss:	ld	(ft.sid),a	;side setzen
+	ld	a,d
+	ld	(ft.trk),a	;phys. Spur setzen
+
+	ld	a,e		;log. Spurnr. zurueck nach A
+	cp	(ix+dpbofs)	;Systemspur?
+	jr	c,diossp	;ja, Sektornummern nicht logisch
+	ex	(sp),hl		;hl auf cdbflg
+	bit	diofps,(hl)	;Sektor-Nummer physisch?
+	ex	(sp),hl
+	jr	nz,diossp	;ja
+	ld	b,0
+	add	ix,bc		;IX entspr. Index in dpbstr
+	ld	c,b		;c:=0
+diossp:	ld	a,c		;phys. Sektornr. ab 0
+	add	a,(ix+dpbstr)	;+echte Sektornr.
+diossc:	ld	(ft.sec),a
+
+	inc	hl
+	ld	a,(hl)		;Anzahl zu transf. phys. Sektoren
+	ld	(ft.anz),a
+
+	inc	hl
+	ld	a,(hl)		;Sektorlaengencode
+	ld	(ft.len),a
+
+	inc	hl
+	ld	e,(hl)		;Transferadresse
+	inc	hl
+	ld	d,(hl)
+	ld	(ft.adr),de
+
+ IF stpvar or monitor
+	call	delsps		;Sondertasten verbieten
+ ENDIF
+	call	floppy		;$$$ phys. Transfer $$$
+ IF stpvar or monitor
+	call	delspr		;Sondertasten wieder erlauben
+ ENDIF
+	pop	hl		;HL wieder auf Paramfeld-Adresse
+
+	or	a		;Returncode
+	jr	z,dtrok		; -> fehlerfrei
+	cp	'R'		;not ready?
+	jp	z,diorty	;ja, Wiederholung
+
+; Fehlerprotokoll
+	bit	dioftr,(hl)	;Fehlerprotokoll unterdr.?
+	jr	nz,dtrok	;ja, keine Fehlerausgabe
+ IF errvar
+	ld	(derrcd),a	;Fehlercode
+	bit	diofwr,(hl)	;war lesen?
+	ld	a,'R'
+	jr	z,derrr		;ja
+	ld	a,'W'
+derrr:	ld	(derrrw),a
+	ld	hl,ft.trk	;phys. Spur
+	ld	de,derrtr
+	call	mbreco
+	inc	de		;',' uebergehen
+	ld	a,(ft.sid)	;Seite
+	call	mrecor
+	inc	de		;',' uebergehen
+	ld	hl,ft.sec	;phys. Sektor
+	call	mbreco
+	ld	hl,derrms
+	call	biosms
+ ENDIF
+ 	ld	a,1		;return mit Fehler
+
+dtrok:	or	a		;stellen Z-Flag
+	ld	de,(ft.trk)	;E:=trk, D:=sid
+	ld	hl,(ft.sec)	;L:=sec, H:=len
+	pop	ix
+	pop	bc
+	ret
+
+ IF errvar
+; Fehlermeldung Disk I/O Error
+;=============================
+; Genau so lang (kurz), wie in Statuszeile Platz dafuer da ist!
+; und das sind 17 Bytes!
+derrms:
+ IF cpastz
+ ELSE
+	db	0dh,0ah
+ ENDIF
+derrrw:	db	'X'
+derrcd:	db	'X;T,S,Se='
+derrtr:	db	'XX,'
+derrts:	db	'X,'
+derrsc:	db	'XX'
+ IF cpastz
+ ELSE
+	db	07h,0
+ ENDIF
+
+ ENDIF
+
+ IF	format
+
+; Stellen HL entsprechend Sektorlaengencode in (A)
+;=================================================
+; ret nz bei unzulaessigem
+dtrsla:	or	a
+	ld	hl,dtrsl0
+	ret	z		;=0 (128)
+	dec	a
+	ld	hl,dtrsl1	;=1 (256)
+	ret	z
+	dec	a
+	ld	hl,dtrsl2	;=2 (512)
+	ret	z
+	dec	a
+	ld	hl,dtrsl3	;=3 (1024)
+	ret
+
+ ENDIF
+
+;************************************************
+;	Steuertabellen
+;************************************************
+
+
+ IF	format
+; Modifizierungstabellen entspr. Sektorlaenge und LW-Typ
+;-------------------------------------------------------
+
+; Struktur:
+
+dsltrk	equ	0		;benutzte Spuren
+dslspt	equ	dsltrk+1	;Sektoren/Spur
+dsldir	equ	dslspt+1	;Dir-Eintraege
+dsloff	equ	dsldir+1	;2*offset
+				;[+Flag fuer festes offset]
+dslfo	equ	1		;festes offset
+dslvo	equ	0		;offset =0, falls Directory mgl.
+dslblk	equ	dsloff+1	;rel. Adr. Tab. BDOS-Blockgroesse
+dsll	equ	5		;Laenge eines Eintrags
+
+; Reihenfolge
+; 5", 40 Tr, SS
+; 5", 80 Tr, SS
+; 5", 40 Tr, DS
+; 5", 80 Tr, DS
+ if	disk8
+; 8", 77 Tr, SS, SD
+  if dsk8mf
+; 8", 77 Tr, SS, DD
+  endif
+ endif
+
+; Zur automatischen Bestimmung des Spurformats wird dasjenige
+; Format der Spur "dlgint" benutzt, alle folgenden Spuren
+; muessen das gleiche Format haben!
+dlgint	equ	3	;groesste Anzahl SS-Systemspuren
+
+; 128
+dtrsl0:	
+	db	40,26,63,2*2+dslvo,dbl1k-$	;CP/M Standard
+	db	80,26,127,2*2+dslvo,dbl2k-$
+	db	80,26,127,2*0+dslfo,dbl2k-$
+	db	160,26,127,2*0+dslfo,dbl2k0-$
+
+	if	disk8
+	db	77,26,63,2*2+dslvo,dbl1k-$	;CP/M Standard
+	if	dsk8mf
+	db	77,40,127,2*2+dslvo,dbl2k-$
+	endif
+	endif
+
+; 256
+dtrsl1:	
+	db	40,32,63,2*3+dslfo,dbl2k-$	;SCP Hausformat A51xx
+	db	80,32,63,2*3+dslfo,dbl2k-$	;SCP
+	db	80,32,127,2*4+dslfo,dbl2k-$
+	db	160,32,127,2*4+dslfo,dbl2k0-$	;SCP Hausformat PC1715
+
+	if	disk8
+	db	77,32,63,2*3+dslfo,dbl2k-$
+	if	dsk8mf
+	db	77,52,127,2*2,dslfo,dbl2k-$
+	endif
+	endif
+
+; 512
+dtrsl2:	
+	db	40,36,63,2*1+dslfo,dbl1k-$
+	db	80,36,127,2*2+dslfo,dbl2k-$
+	db	80,36,127,2*2+dslfo,dbl2k-$
+	db	160,36,127,2*0+dslfo,dbl2k0-$
+
+	if	disk8
+	db	77,36,127,2*2+dslvo,dbl2k-$	;Hausformat IH Mittweida
+	if	dsk8mf
+	db	77,64,127,2*2+dslvo,dbl2k0-$
+	endif
+	endif
+	
+; 1024
+dtrsl3:	
+	db	40,40,63,2*2+dslvo,dbl1k-$	;CP/A Standard A51xx
+	db	80,40,127,2*2+dslvo,dbl2k-$	;CP/A
+	db	80,40,127,2*0+dslvo,dbl2k-$	;CP/A
+	db	160,40,191,2*4+dslvo,dbl2k0-$	;CP/A (und SCP)
+
+	if	disk8
+	db	77,32,63,2*3+dslvo,dbl2k-$	;CP/A und SCP
+	if	dsk8mf
+	db	77,64,127,2*2+dslvo,dbl2k0-$	;CP/A und SCP
+	endif
+	endif
+
+; Modifizierungstabellen fuer BDOS-Blockgroesse
+dbl1k:	db	3,7,0		;Bl. Shift, Bl. Mask, Ext. Mask
+dbl2k:	db	4,0fh,1
+dbl2k0:	db	4,0fh,0		;fuer Kapazitaet >255
+
+; log. Sektortranslate-Tabelle fuer 26*128
+xlt:	db	1,7,13,19,25,5,11,17,23,3,9,15,21
+	db	2,8,14,20,26,6,12,18,24,4,10,16,22
+
+ ENDIF	;format
+
+; CDB's
+;======
+
+	IF	format
+; CDB fuer Bestimmung Spurformat
+;------------------------------------
+dfrcdb:
+dfrflg:	db	(1 shl diofid)+(1 shl dioftr)
+;		Lesen Sektorid., kein Fehlerprotokoll
+dfrmdv:	db	0ffh		;Geraet
+dfrmtr:	db	0ffh		;Spur
+	db	1		;Sektor (bel.)
+	db	1		;Sektoranzahl (>0)
+	db	0		;Sektorlaengencode
+	ENDIF
+
+	IF	format or (dbufsz gt 7)
+; Puffer-CDB
+;-----------
+dbcdb:
+dbflg:	db	1 shl dfbvf	;mit Verify Schreiben 
+dfbprr	equ	0		;=1, wenn Puffer erst gelesen 
+;				     werden muss
+;	equ	1		;=0 immer (Kopf bleibt)
+dfbwr	equ	diofwr ;(=2)	;=1, wenn Puffer durch
+;				     Schreiben veraendert
+dfbvf	equ	diofvf ;(=3)	;=1, wenn Verify Pufferschr.
+;	equ	4		;=0 immer (kein Sektid. lesen)
+;	equ	5		;=0 immer (mit Fehlerprotokoll)
+;	equ	6		;=0 immer (mit Sektortranslate)
+dfbfm	equ	dioffm ;(=7)	;=1, wenn temporaer FM zu erzwingen
+dbdev:	db	0ffh
+dbtrk:	db	0ffh
+dbsec:	dw	0ffffh
+dbsnb	equ	$-1
+dbslc:	db	0ffh
+	IF	dbufsz gt 7
+dbdma:	dw	dbuf
+	ELSE
+dbdma:	dw	dirbuf
+	ENDIF
+	ENDIF
+
+; CDB fuer ungepufferte E/A
+;--------------------------
+
+dcdb:
+dflg:	db	1 shl dfvf	;mit Verify Schreiben
+;	equ	1		;=0 immer (Kopf bleibt)
+dfwr	equ	diofwr ;(=2)	;=1, wenn write-Aufruf
+dfvf	equ	diofvf ;(=3)	;=1, wenn Verify Schreiben
+;	equ	4		;=0 immer (kein Sektid lesen)
+;	equ	5		;=0 immer (mit Fehlerprotokoll)
+;	equ	6		;=0 immer (mit Sektortranslate)
+dffm	equ	dioffm ;(=7)	;=1, wenn temporaer FM zu erzwingen
+ddrive:	db	0
+dtrack:	db	0ffh
+dsectr:	db	0ffh
+	db	1		;immer nur 1 Sektor
+	db	0		;zu 128 Bytes
+ddma:	dw	0ffffh
+
+" und FM/MFM

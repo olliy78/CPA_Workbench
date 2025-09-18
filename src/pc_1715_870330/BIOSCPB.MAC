@@ -1,0 +1,153 @@
+	db	00H	;Status
+	db	00H	;zuletzt empfangenes Zeichen
+	db	@ld	;Daten
+	DB	@ls	;Status/Kommando
+ IF (@lt mod 10) lt 5	;;SIO
+	dw	cdsioo	;;Senden
+	dw	cdsioi	;;Empfang
+	dw	cdsios	;;Empf.Status
+@l	aset	00001000b	;;DC1/3, 5 Bit
+ if (@lt mod 10) eq 1
+@l	aset	@l xor 10000010b	;;DTR
+ endif
+ if ((@lt mod 1000)/100) eq 6
+@l	aset	@l xor 01000000b
+ endif
+ if ((@lt mod 1000)/100) eq 7
+@l	aset	@l xor 00100000b
+ endif
+ if ((@lt mod 1000)/100) eq 8
+@l	aset	@l xor 01100000b
+ endif
+	db	@l	;WR5
+			;**Portinitialisierung**
+ IF @ld ne kbdsci	;;bei PC1715 CTC, SIO durch Tastatur initialisiert!!
+ 	db	2+1
+	db	@lcs		;CTC Senden
+ if (@lt mod 10) eq 0
+	db	17h		;DC1/3
+ else
+	db	37h		;DTR
+ endif
+@l	aset	1 shl (((@lt mod 100)/10)-1)
+ if ((@lt mod 100)/10) eq 8
+@l	aset	96		;;100 bd
+ endif
+ if ((@lt mod 100)/10) eq 9
+@l	aset	128		;;75 bd
+ endif
+	db	@l		;Baudrate senden
+ if @lcr ne @lcs
+	db	2+1
+	db	@lcr		;CTC Empf.
+ if (@lt mod 10) eq 0
+	db	17h		;DC1/3
+ else
+	db	37h		;DTR
+ endif
+	db	@l		;Baudrate empf.
+ endif
+	db	7+1
+	db	@ls		;SIO-Komm.
+	db	18h		;WR0
+@l	aset	00000100b	;;ohne P., 1 Stbit, DTR
+ if @lt ge 10000
+@l	aset	@l xor 00000001b	;;ung P.
+ endif
+ if @lt ge 20000
+@l	aset	@l xor 00000011b	;;ger. P.
+ endif
+ if ((@lt mod 10000)/1000) eq 2
+@l	aset	@l xor 00001000b	;;2 Stbit
+ endif
+ if ((@lt mod 10000)/1000) eq 3
+@l	aset	@l xor 00001100b	;;1,5 Stbit
+ endif
+ if (@lt mod 10) eq 0
+@l	aset	@l xor 01000000b	;;DC1/3
+ endif
+	db	4,@l		;WR4
+	db	1,0		;WR1
+@l	aset	00000001b	;;5 Bit, Empf.freigabe
+ if ((@lt mod 1000)/100) eq 6
+@l	aset	@l xor 10000000b
+ endif
+ if ((@lt mod 1000)/100) eq 7
+@l	aset	@l xor 01000000b
+ endif
+ if ((@lt mod 1000)/100) eq 8
+@l	aset	@l xor 11000000b
+ endif
+	db	3,@l		;WR3
+ ENDIF	;;@ld ne kbdsci
+	db	1+1
+	db	@ld
+	db	7fh		;Reset Status
+	db	1	;**Ende**
+ ELSE	;;PIO
+@l	aset	(@lt mod 10)
+ IF @l eq 5
+	dw	cdpioo
+	dw	cdpioi
+	dw	cdpios
+	db	0		;dummy
+				;**Portinitialisierung**
+	db	1+1
+	db	@ld+1
+	db	8fh		;Datenport byte e/a bidirektional
+	db	2+1
+	db	@ls+1
+	db	0cfh,0feh	;Statusport bit e/a
+	db	2+1
+	db	@ls
+	db	1,0		;reset
+	db	1		;**Ende**
+ ENDIF
+ IF @l eq 6
+	dw	cdp54o
+	dw	cdp54i
+	dw	cdp54s
+	db	0		;dummy
+				;**Portinitialisierung**
+	db	1+1
+	db	@ld+1
+	db	0fh		;Datenport output mode
+	db	2+1
+	db	@ls+1
+	db	0cfh,0feh	;Statusport bit e/a
+	db	2+1
+	db	@ls
+	db	0,1		;reset (invers!)
+	db	1		;**Ende**
+ ENDIF
+ IF (@l eq 7) or (@l eq 8)
+	dw	cdp56o
+	dw	cdp56i
+	dw	cdp56s
+	db	0		;dummy
+				;**Portinitialisierung**
+	db	2+1
+	db	@ls
+	db	0cfh,0
+	db	2+1
+	db	@ls+1
+	db	0cfh,0f0h
+	db	1+1
+	db	@ld+1
+  If @l eq 7
+	db	0ffh
+  ENDIF
+  IF @l eq 8
+	db	000h
+  ENDIF
+	db	1		;**Ende**
+ ENDIF
+ ENDIF
+
+all	ldrvor	;druckkopf steht links
+			;von dem zu druckenden text
+	ret
+
+lchz1:	ld	a,b
+	dec	a
+	c

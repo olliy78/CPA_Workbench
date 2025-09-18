@@ -1,0 +1,283 @@
+;$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+; Variantenkontrolle ; Version 04.03.87
+; Aufruf nur im Pass1 des Assemblers, daher fehlen if1-Klammern
+;$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+; Hilfsmakros fuer 4 stellige Hexadezimal-Aufbereitung
+; Aufruf: <Tab>hexout<Tab>Wert
+hexout	MACRO	hv
+	.RADIX	16
+	hexdb	%(hv)
+	.RADIX	10
+	ENDM
+
+hexdb	MACRO	hv
+	db	'&hv','H'
+	ENDM
+
+; Hilfsmakro fuer Dezimal-Aufbereitung
+; Aufruf: <Tab>decout<Tab>Wert
+decout	MACRO	dv
+	decdb	%(dv)
+	ENDM
+
+decdb	MACRO	dv
+	db	'&dv'
+	ENDM
+
+; Hilfsmakro fuer Versionsaufbereitung
+version	MACRO
+	chardb	%verst
+	db	'.'
+	chardb	%versm
+	db	'.'
+	chardb	%versj
+	ENDM
+
+chardb	MACRO	c
+	if	c lt 10
+	db	'0&c'
+	else
+	db	'&c'
+	endif
+	ENDM
+
+; Hilfsmakro fuer Dezimalausgabe
+printd	MACRO	t,n
+	printx	<t>,%(n)
+	ENDM
+
+; Hilfsmakro fuer Hexadezimalausgabe
+printh	MACRO	t,n
+	.RADIX	16
+	printx	<t>,%(n)
+	.RADIX	10
+	ENDM
+
+printx	MACRO	t,n
+ .printx * t n
+	ENDM
+
+; Ermitteln, welche zeichenweisen Treiber gebraucht werden
+cdtdc1	aset	0
+cdtdtr	aset	0
+cdtpio	aset	0
+cdtp54	aset	0
+cdtn56	aset	0
+cdtp56	aset	0
+
+	IF	iobtty
+@cdt	aset	iobtty mod 10
+	IF	@cdt eq 0
+cdtdc1	aset	cdtdc1+1
+	ENDIF
+	IF	@cdt eq 1
+cdtdtr	aset	cdtdtr+1
+	ENDIF
+	IF	@cdt eq 5
+cdtpio	aset	cdtpio+1
+	ENDIF
+	IF	@cdt eq 6
+cdtp54	aset	cdtp54+1
+	ENDIF
+	IF	@cdt eq 7
+cdtn56	aset	cdtn56
+	ENDIF
+	IF	@cdt eq 8
+cdtp56	aset	cdtp56+1
+	ENDIF
+	ENDIF
+
+	IF	ioblpt
+@cdt	aset	ioblpt mod 10
+	IF	@cdt eq 0
+cdtdc1	aset	cdtcd1+1
+	ENDIF
+	IF	@cdt eq 1
+cdtdtr	aset	cdtdtr+1
+	ENDIF
+	IF	@cdt eq 5
+cdtpio	aset	cdtpio+1
+	ENDIF
+	IF	@cdt eq 6
+cdtp54	aset	cdtp54+1
+	ENDIF
+	IF	@cdt eq 7
+cdtn56	aset	cdtn56
+	ENDIF
+	IF	@cdt eq 8
+cdtp56	aset	cdtp56+1
+	ENDIF
+	ENDIF
+
+	IF	iobuc1
+@cdt	aset	iobuc1 mod 10
+	IF	@cdt eq 0
+cdtdc1	aset	cdtcd1+1
+	ENDIF
+	IF	@cdt eq 1
+cdtdtr	aset	cdtdtr+1
+	ENDIF
+	IF	@cdt eq 5
+cdtpio	aset	cdtpio+1
+	ENDIF
+	IF	@cdt eq 6
+cdtp54	aset	cdtp54+1
+	ENDIF
+	IF	@cdt eq 7
+cdtn56	aset	cdtn56
+	ENDIF
+	IF	@cdt eq 8
+cdtp56	aset	cdtp56+1
+	ENDIF
+	ENDIF
+
+
+
+; Kontrolle der Varianten auf Konsistenz
+;=======================================
+
+ IF (oss eq 0) and (wbootv eq 3)
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ .printx * wbootv=3 nur bei oss=1 erlaubt!
+ .printx * Neuuebersetzung notwendig!
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ ENDIF
+
+ IF (kes eq 0) and (wbootv eq 4)
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ .printx * wbootv=4 nur bei kes=1 erlaubt!
+ .printx * Neuuebersetzung notwendig!
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ ENDIF
+
+ IF (em256 eq 0) and (wbootv eq 5)
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ .printx * wbootv=5 nur bei em256=1 erlaubt!
+ .printx * Neuuebersetzung notwendig!
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ ENDIF
+
+ IF (em256 ne 0) and (kes ne 0)
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ .printx * entweder kes=1 oder em256=1 !
+ .printx * Neuuebersetzung notwendig!
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ ENDIF
+
+ IF kbdbl eq 0
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ .printx * Tastaturpuffer 0 Zeichen gross!
+ .printx * Neuuebersetzung notwendig!
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ ENDIF
+
+ IF dbufsz gt 13
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ .printx * dbufsz > 13    (0<=dbufsz<=13)!
+ .printx * Neuuebersetzung notwendig!
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ ENDIF
+
+; Online-Protokoll der ausgewaehlten CP/A-Version
+;================================================
+
+ .printx *
+; Hilfsmacro fuer Versionsausgabe
+printv	MACRO	t,m,j
+ .printx * Generierung CP/A, Version t m j *
+	ENDM
+ printv	%(verst),<.>%(versm),<.>%(versj)
+ .printx * Buerocomputer-Variante
+
+ .printx *
+  printd  <Hauptspeicher in Kbytes: >,ramkb
+
+ if oss
+ .printx * mit Unterstuetzung OSS als RAM-Floppy
+ endif
+
+ if kes
+ .printx * mit Unterstuetzung TestRAM als RAM-Floppy
+ endif
+
+ if em256
+ .printx * mit Unterstuetzung EM256 als RAM-Floppy
+ endif
+
+ if wbootv eq 0
+ .printx * CCP Kopie im BIOS (keine Systemspuren notw.)
+ endif
+ if wbootv eq 1
+ .printx * ohne CCP-Kopie, Warmstart=Kaltstart
+ endif
+ if wbootv eq 2
+ .printx * bei Warmstart CCP aus File @OS.COM laden
+ endif
+ if wbootv eq 3
+ .printx * CCP-Kopie in OSS (keine Systemspuren notw.)
+ endif
+ if wbootv eq 4
+ .printx * CCP-Kopie in TestRAM (keine Systemdiskette notw.)
+ endif
+ if wbootv eq 5
+ .printx * CCP-Kopie in EM256 (keine Systemdiskette notw.)
+ endif
+
+ if monitor
+ .printx * mit BIOS-Monitor
+ else
+ .printx * ohne BIOS-Monitor
+ endif
+
+ if mprot
+ .printx * mit Speicherschutz
+ else
+ .printx * ohne Speicherschutz
+ endif
+
+ if uhrvar
+ .printx * mit BIOS-Uhr
+ else
+ .printx * ohne BIOS-Uhr
+ endif
+
+ if chdvar eq 0
+ .printx * ohne Drucker (dummy)
+ else
+ if iobtty
+  printh  <TTY: Geraet an Portadresse: >,ttydat
+ else
+ .printx * TTY: nicht unterstuetzt
+ endif
+ if ioblpt
+  printh  <LPT: Geraet an Portadresse: >,lptdat
+ else
+ .printx * LPT: nicht unterstuetzt
+ endif
+ if iobuc1
+  printh  <UC1: Geraet an Portadresse: >,uc1dat
+ else
+ .printx * UC1: nicht unterstuetzt
+ endif
+ endif
+
+ if costu
+  printd  <mit NutzerTastenDefinition, Mindesttablng >,costu
+ else
+ .printx * ohne Moeglichkeit der NutzerTastenDefinition
+ endif
+
+ if disk5
+  printd  <Anzahl 5 1/4 Zoll Disketten-Laufwerke: >,disk5
+ endif
+ if disk8
+  printd  <Anzahl   8   Zoll Disketten-Laufwerke: >,disk8 
+ endif
+ if dbufsz gt 7
+  printd  <Groesse Diskettenpuffer: >,<1 shl dbufsz>
+ endif
+t
+			;WR4:
+			;Paritaet in Bit 1,0: 00 ohne, 01 unger., 11 ger.
+			;Stop-Bits in Bit 3,

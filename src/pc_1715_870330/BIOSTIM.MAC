@@ -1,0 +1,164 @@
+;*************************************************************
+;	Zeitgeberdienst, Version 20.03.87
+;*************************************************************
+
+ IF1
+
+timwarm	MACRO
+	ld	hl,ret		;;leere 1-sec-Interr.routine
+	ld	(tim1rt),hl
+	call	tim5on		;;5ms-Zeittakt ein
+	call	tim1on		;;1s-Zeittakt ein
+	ENDM
+
+ ENDIF
+
+; 5ms/25ms an
+tim5on:	ld	a,10110001b
+;int./zeitg./vort.256/pos.flanke/naechst.zykl./keine zk/
+;	weiter/1
+tim5ot:	DI
+	out	(sysctc+timctc),a
+	EI
+	ret
+
+; 5ms/25ms aus
+tim5of:	ld	a,00110001b
+;kein int./...
+	jr	tim5ot
+
+; 1s an
+tim1on:	ld	a,11010001b
+;int./zaehler//pos.flanke//keine zk/weiter/1
+tim1ot:	DI
+	out	(sysctc+timctc+1),a
+	EI
+ret:	ret
+; 1s aus
+tim1of:	ld	a,01010001b
+;kein int./...
+	jr	tim1ot
+
+; Interr.routine 5ms/25ms
+tim5it:
+ IF stpvar or monitor
+	ld	(t5ihl),hl	;retten hl
+	ld	hl,chksp	;Test auf haengende Spezialfktnen
+	push	hl		;nach const-Aufruf in 5ms Interrupt
+	ld	hl,0		;wiederherstellen hl
+t5ihl	equ	$-2
+ ENDIF
+	ld	(intsp),sp
+	ld	sp,intstk
+	push	af
+	push	hl
+	ld	hl,(tim5cn)
+	inc	hl
+	ld	(tim5cn),hl
+	push	de
+	push	bc
+intkbd:	call	kbdsti		;Tastatur abfragen
+				;auf 'ld hl,.. .' waehrend Lampen-Ausgabe
+intrbc:	pop	bc
+	pop	de
+intrhl:				;allg. Interr.-ausgang
+tim5i2:	pop	hl
+intraf:	pop	af
+	ld	sp,0
+intsp	equ	$-2
+intret:	ei
+	reti
+
+; Interr.routine 1s
+tim1it:	ld	(intsp),sp
+	ld	sp,intstk
+	push	af
+	push	hl
+	push	de
+	push	bc
+	call	tim1up
+	jr	intrbc
+
+; Reaktionsroutine fuer 1 sec Interrupt
+tim1up:	ld	hl,(tim1cn)
+	dec	hl
+	ld	(tim1cn),hl
+	ld	a,(synsem)
+	or	a		;const, conout ?
+	call	z,lampen	;nein, Aktualisierung Lampen
+
+ IF cpastz
+; Default-LW, User in Statuszeile
+	ld	a,(defaul)
+	push	af
+	and	0fh		;User loeschen
+	add	a,'A'
+	ld	de,statz1+statzd
+conm27	equ	$-2		;BS-Puffer-Adr
+	ld	(de),a		;anzeigen default-LW
+	pop	af
+	inc	de
+	call	mrecol		;anzeigen user
+
+; I/O-Byte in Statuszeile
+	ld	a,(iobyte)
+	ld	de,statz1+statzi
+conm38	equ	$-2
+	call	mrecoa
+
+; wenn Anzeigezeit um, so BIOS-Meldung wieder loeschen
+
+	ld	hl,stzbto	;Anzeigezeit in Sekunden
+	dec	(hl)		;abgelaufen?
+	jr	nz,nstzcl	;nein
+	ld	b,stzbl
+	ld	hl,statz1+statzb
+conm28	equ	$-2		;BS-Puffer-Adr.
+stzclz:	ld	(hl),' '
+	inc	hl
+	djnz	stzclz
+nstzcl:
+ ENDIF
+
+	IF	uhrvar		;1 Sec. BCD-Uhr verwalten
+	ld	b,3		;HH:MM:SS
+	ld	hl,bcduhr+2	;auf SS
+	jr	t1uhr1		;Einsprung in Zyklus
+t1uhr2:	cp	60h		;Uebertrag?
+	jr	c,t1uhre	;nein
+	ld	(hl),0
+	dec	hl
+t1uhr1:	ld	a,(hl)
+	add	a,1		;kein "inc"-Befehl!
+	daa
+	djnz	t1uhr2		;Sec., Min. haben 60
+	cp	24h		;Std. haben 24
+	jr	c,t1uhre	;kein Uebertrag
+	xor	a
+t1uhre:	ld	(hl),a
+; Uhr anzeigen
+	ld	hl,synflg
+	bit	uhraus,(hl)	;Uhr anzeigen?
+	jr	nz,t1uhrn	;nein
+	ld	hl,bcduhr
+ IF cpastz
+	ld	de,statz1+statzu
+ ELSE
+	ld	de,bsanf1+bssp1-8
+ ENDIF
+bsuhr	equ	$-2		;BS-Puffer-Adr. fuer Uhr
+	ld	b,3
+	jr	t1uhr4		;Einsprung in Zyklus
+t1uhr3:	ld	a,':'
+	ld	(de),a
+	inc	de
+t1uhr4:	call	mbreco
+	inc	hl
+	djnz	t1uhr3
+t1uhrn:	ENDIF
+
+	ld	hl,(tim1rt)	;Adresse der Nutzerroutine
+	jp	(hl)		;1-sec-Nutzerroutine ausfuehren, ret
+
+!! b6 und b7 der Subadresse stellen die hoechstwertigen Bits der !!
+;; !! externen (von der U880-Seite) Adresse fuer den Zug

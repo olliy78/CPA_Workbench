@@ -46,7 +46,7 @@ TOOLS_DIR = tools
 # Verzeichnisse je nach TARGET
 ifeq ($(TARGET),PC)
 SRC_DIR = src/pc_1715
-PREBUILT_DIR = prebuilt/pc_17
+PREBUILT_DIR = prebuilt/pc_1715
 BOOTSECTOR = src/boot_sector/bootsecPC.bin
 else
 SRC_DIR = src/bc_a5120
@@ -65,38 +65,46 @@ CPM = $(CPMEXE)
 endif
 
 # Systemdisk-Image-Konfiguration
-TMP_IMAGE = $(BUILD_DIR)/cpa780fs.img
+TMP_IMAGE = $(BUILD_DIR)/cpadisk.img.tmp
 FINAL_IMAGE = $(BUILD_DIR)/cpadisk.img
 SYSTEMNAME = 0:@os.com
-DISKDEF = cpa780_withoutBoot
 ADDITIONS_DIR = additions
 CPMCP = $(TOOLS_DIR)/cpmcp
 CPMLS = $(TOOLS_DIR)/cpmls
 GW = gw
 CFG = cpaFormates.cfg
-FORMAT = cpa.780
+
+ifeq ($(TARGET),PC)
+	DISKDEF = cpa800_withoutBoot
+	FORMAT = cpa800
+	IMAGE_SIZE = 800
+else
+	DISKDEF = cpa780_withoutBoot
+	FORMAT = cpa780
+	IMAGE_SIZE = 780
+endif
 
 # Targets für TARGET-Auswahl
 .PHONY: BC PC
 BC:
-	@if [ -z "$(MAKECMDGOALS)" ] || [ "$(MAKECMDGOALS)" = "BC" ] || [ "$(MAKECMDGOALS)" = "PC" ]; then \
+	@if [ "$(filter-out BC PC,$(MAKECMDGOALS))" = "" ]; then \
 	  $(MAKE) help; \
+	else \
+	  $(MAKE) TARGET=BC $(filter-out BC PC,$(MAKECMDGOALS)); \
 	fi
 PC:
-	@if [ -z "$(MAKECMDGOALS)" ] || [ "$(MAKECMDGOALS)" = "BC" ] || [ "$(MAKECMDGOALS)" = "PC" ]; then \
+	@if [ "$(filter-out BC PC,$(MAKECMDGOALS))" = "" ]; then \
 	  $(MAKE) help; \
+	else \
+	  $(MAKE) TARGET=PC $(filter-out BC PC,$(MAKECMDGOALS)); \
 	fi
 
 
 # Haupttargets
-	BC:
-		@if [ "$(filter-out BC PC,$(MAKECMDGOALS))" = "" ]; then \
 .PHONY: help all os diskImage writeImage clean
 
 # Standard-Target: Hilfe anzeigen
 all: help
-	PC:
-		@if [ "$(filter-out BC PC,$(MAKECMDGOALS))" = "" ]; then \
 
 # Hilfe-Target
 help:
@@ -124,21 +132,25 @@ os: $(OS_TARGET)
 # Build-Regel: Erzeuge @OS.COM im build/-Verzeichnis
 # Abhaengigkeiten: Quelltexte und vorgefertigte ERL
 $(OS_TARGET): $(SRC_DIR)/bios.mac $(PREBUILT_DIR)/bdos.erl $(PREBUILT_DIR)/ccp.erl $(PREBUILT_DIR)/cpabas.erl
-	@echo "---------------------------------------------------"
-	@echo "Generieren von CP/A ... @OS.COM (TARGET=$(TARGET))"
-	@echo "---------------------------------------------------"
-	cp $(SRC_DIR)/*.mac $(BUILD_DIR)/
+	@echo "[STEP 1] Kopiere alle .mac-Dateien aus src und $(SRC_DIR) nach $(BUILD_DIR)"
+	cp src/*.mac $(BUILD_DIR)/ 2>/dev/null || true
+	cp $(SRC_DIR)/*.mac $(BUILD_DIR)/ 2>/dev/null || true
+	@echo "[STEP 2] Kopiere ERL-Dateien aus $(PREBUILT_DIR) nach $(BUILD_DIR)"
 	cp $(PREBUILT_DIR)/*.erl $(BUILD_DIR)/
+	@echo "[STEP 3] Kopiere Tools (m80.com, linkmt.com, cpm.exe) nach $(BUILD_DIR)"
 	cp $(TOOLS_DIR)/m80.com $(TOOLS_DIR)/linkmt.com $(TOOLS_DIR)/cpm.exe $(BUILD_DIR)/ 2>/dev/null || true
+	@echo "[STEP 4] Assemblieren mit m80 (Log: bios.log)"
 	cd $(BUILD_DIR) && $(CPM) m80 =bios/L | tee bios.log
+	@echo "[STEP 5] Assemblieren bios.erl=bios"
 	cd $(BUILD_DIR) && $(CPM) m80 bios.erl=bios
-	@diff=$$(grep '/p:' $(BUILD_DIR)/bios.log | sed 's/[^[:print:]]//g' | sed -n 's/.*\/p:[[:space:]]*\([0-9A-Fa-f]\{4,\}\).*/\1/p' | head -1); \
+	@echo "[STEP 6] Linken mit berechnetem /p:-Wert"
+	@diff=$$(LC_ALL=C grep -a '/p:' $(BUILD_DIR)/bios.log | sed 's/[^0-9A-Fa-f ]//g' | sed -n 's/.*[ ]\([0-9A-Fa-f]\{4,\}\).*/\1/p' | head -1); \
 	if [ -z "$$diff" ]; then echo "Fehler: Kein /p:-Wert in bios.log gefunden!"; exit 1; fi; \
 	echo "Verwende berechneten Linkwert: $$diff"; \
 	cd $(BUILD_DIR) && $(CPM) linkmt @OS=cpabas,ccp,bdos,bios/p:$$diff
+	@echo "[STEP 7] Aufräumen temporärer Dateien"
 	rm -f $(BUILD_DIR)/*.syp $(BUILD_DIR)/*.rel $(BUILD_DIR)/*.mac $(BUILD_DIR)/*.erl $(BUILD_DIR)/bios.log $(BUILD_DIR)/$(CPMEXE) $(BUILD_DIR)/m80.com $(BUILD_DIR)/linkmt.com
-	@echo "..................................................."
-	@echo "Fertig !!!!!!"
+	@echo "[FERTIG] @OS.COM wurde erfolgreich erzeugt."
 
 # Diskettenimage erzeugen
 diskImage: $(FINAL_IMAGE)
@@ -146,14 +158,14 @@ diskImage: $(FINAL_IMAGE)
 
 # Image bauen: Abhängigkeit von OS und Bootsektor
 $(FINAL_IMAGE): $(BOOTSECTOR) $(OS_TARGET)
-	@echo "[STEP 1] Erzeuge leeres temporäres Image: $(TMP_IMAGE)"
-	dd if=/dev/zero bs=1024 count=780 2>/dev/null | tr '\0' '\345' | dd of=$(TMP_IMAGE) bs=1024 count=780 2>/dev/null
-	@echo "[STEP 2] Kopiere CPA-System (@os.com) ins Image"
-	$(CPMCP) -f $(DISKDEF) $(TMP_IMAGE) $(OS_TARGET) $(SYSTEMNAME)
-	@echo "[STEP 3] Kopiere Dateien aus '$(ADDITIONS_DIR)' ins Image"
-	@for f in $(ADDITIONS_DIR)/*; do \
-	  if [ -f "$$f" ]; then \
-	    fname=$$(basename "$$f"); \
+			 @echo "[STEP 1] Erzeuge leeres temporäres Image: $(TMP_IMAGE) (Größe: $(IMAGE_SIZE)K, Format: $(FORMAT))"
+			 dd if=/dev/zero bs=1024 count=$(IMAGE_SIZE) 2>/dev/null | tr '\0' '\345' | dd of=$(TMP_IMAGE) bs=1024 count=$(IMAGE_SIZE) 2>/dev/null
+			 @echo "[STEP 2] Kopiere CPA-System (@os.com) ins Image (Format: $(FORMAT))"
+			 $(CPMCP) -f $(DISKDEF) $(TMP_IMAGE) $(OS_TARGET) $(SYSTEMNAME)
+			 @echo "[STEP 3] Kopiere Dateien aus '$(ADDITIONS_DIR)' ins Image"
+			 @for f in $(ADDITIONS_DIR)/*; do \
+				 if [ -f "$$f" ]; then \
+					 fname=$$(basename "$$f"); \
 	    echo "  [ADD] $$fname"; \
 	    $(CPMCP) -f $(DISKDEF) $(TMP_IMAGE) $$f 0:$$fname; \
 	  fi; \

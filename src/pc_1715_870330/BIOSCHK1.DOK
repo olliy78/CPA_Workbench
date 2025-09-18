@@ -1,0 +1,145 @@
+
+; Kontrolle der Varianten auf Konsistenz
+;=======================================
+
+ IF (oss eq 0) and (wbootv eq 3)
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ .printx * wbootv=3 nur bei oss=1 erlaubt!
+ .printx * Neuuebersetzung notwendig!
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ ENDIF
+
+ IF (kes eq 0) and (wbootv eq 4)
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ .printx * wbootv=4 nur bei kes=1 erlaubt!
+ .printx * Neuuebersetzung notwendig!
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ ENDIF
+
+ IF (em256 eq 0) and (wbootv eq 5)
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ .printx * wbootv=5 nur bei em256=1 erlaubt!
+ .printx * Neuuebersetzung notwendig!
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ ENDIF
+
+ IF (em256 ne 0) and (kes ne 0)
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ .printx * entweder kes=1 oder em256=1 !
+ .printx * Neuuebersetzung notwendig!
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ ENDIF
+
+ IF kbdbl eq 0
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ .printx * Tastaturpuffer 0 Zeichen gross!
+ .printx * Neuuebersetzung notwendig!
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ ENDIF
+
+ IF dbufsz gt 13
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ .printx * dbufsz > 13    (0<=dbufsz<=13)!
+ .printx * Neuuebersetzung notwendig!
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ ENDIF
+
+; Online-Protokoll der ausgewaehlten CP/A-Version
+;================================================
+
+ .printx *
+; Hilfsmacro fuer Versionsausgabe
+printv	MACRO	t,m,j
+ .printx * Generierung CP/A, Version t m j *
+	ENDM
+ printv	%(verst),<.>%(versm),<.>%(versj)
+ .printx * Buerocomputer-Variante
+
+ .printx *
+  printd  <Hauptspeicher in Kbytes: >,ramkb
+
+ if oss
+ .printx * mit Unterstuetzung OSS als RAM-Floppy
+ endif
+
+ if kes
+ .printx * mit Unterstuetzung TestRAM als RAM-Floppy
+ endif
+
+ if em256
+ .printx * mit Unterstuetzung EM256 als RAM-Floppy
+ endif
+
+ if wbootv eq 0
+ .printx * CCP Kopie im BIOS (keine Systemspuren notw.)
+ endif
+ if wbootv eq 1
+ .printx * ohne CCP-Kopie, Warmstart=Kaltstart
+ endif
+ if wbootv eq 2
+ .printx * bei Warmstart CCP aus File @OS.COM laden
+ endif
+ if wbootv eq 3
+ .printx * CCP-Kopie in OSS (keine Systemspuren notw.)
+ endif
+ if wbootv eq 4
+ .printx * CCP-Kopie in TestRAM (keine Systemdiskette notw.)
+ endif
+ if wbootv eq 5
+ .printx * CCP-Kopie in EM256 (keine Systemdiskette notw.)
+ endif
+
+ if monitor
+ .printx * mit BIOS-Monitor
+ else
+ .printx * ohne BIOS-Monitor
+ endif
+
+ if mprot
+ .printx * mit Speicherschutz
+ else
+ .printx * ohne Speicherschutz
+ endif
+
+ if uhrvar
+ .printx * mit BIOS-Uhr
+ else
+ .printx * ohne BIOS-Uhr
+ endif
+
+ if chdvar eq 0
+ .printx * ohne Drucker (dummy)
+ else
+ if iobtty
+  printh  <TTY: Geraet an Portadresse: >,ttydat
+ else
+ .printx * TTY: nicht unterstuetzt
+ endif
+ if ioblpt
+  printh  <LPT: Geraet an Portadresse: >,lptdat
+ else
+ .printx * LPT: nicht unterstuetzt
+ endif
+ if iobuc1
+  printh  <UC1: Geraet an Portadresse: >,uc1dat
+ else
+ .printx * UC1: nicht unterstuetzt
+ endif
+ endif
+
+ if costu
+  printd  <mit NutzerTastenDefinition, Mindesttablng >,costu
+ else
+ .printx * ohne Moeglichkeit der NutzerTastenDefinition
+ endif
+
+ if disk5
+  printd  <Anzahl 5 1/4 Zoll Disketten-Laufwerke: >,disk5
+ endif
+ if disk8
+  printd  <Anzahl   8   Zoll Disketten-Laufwerke: >,disk8 
+ endif
+ if dbufsz gt 7
+  printd  <Groesse Diskettenpuffer: >,<1 shl dbufsz>
+ endif
+

@@ -1,0 +1,9 @@
+
+*******************
+
+KALTST:				;Kaltstart-Initialisierung
+	di
+	ld	hl,kaltsc
+	ld	de,kaltsb
+	ld	bc,kaltsl
+	ldir			;Kalt

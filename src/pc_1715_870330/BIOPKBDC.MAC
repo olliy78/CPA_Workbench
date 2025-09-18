@@ -1,0 +1,632 @@
+; Kaltstart-Initialisierung Tastatur
+;===================================
+
+	xor	a
+	ld	(0ffffh),a	;;Tastaturpuffer leeren
+crtm43	equ	$-2
+
+ IF costu
+;;Setzen nutzereigene Stringtabelle
+	ld	hl,costrt	;setzen max. Laenge -1
+	if	(costu-1+intvr-biosde) gt 255
+	ld	(hl),255
+	else
+	ld	(hl),costu-1+intvr-biosde
+	endif
+	inc	hl
+	ld	(hl),0ffh	;Tabelle ist leer
+ ENDIF
+
+
+
+;;automatische Tastaturerkennung fuer BCA51xx
+;;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 	ld	b,3
+ciini1:	ld	de,400h
+ciini2:	dec	de
+	in	a,(kbdpci)	;;ueberlesen Tastaturzeichen
+	in	a,(kbdsci)
+	ld	a,d
+	or	e
+	jr	nz,ciini2
+	djnz	ciini1
+	xor	a
+	out	(kbdp3o),a	;;ruecksetzen K7634/36
+	ld	a,00000101b	;;di/zeitg/vt16/neg.fl/strt/zk
+	out	(kbdsct),a	;;Zeitgeber fuer IFSS-Tastatur
+	ld	a,1		;;Zeitkonstante
+	out	(kbdsct),a
+;	IF 	kbdotp eq 4
+;	ld	bc,k72prl*256+kbdscs ;;ruecksetzen K7672
+;	ld	hl,k72par
+;	endif
+;	else
+	ld	bc,k37prl*256+kbdscs ;;ruecksetzen K7637
+	ld	hl,k37par
+	
+	otir			;;SIO initialisieren
+	xor	a		;;reset an Tastatur
+	out	(kbdsci),a
+;; Bediensicherung nach RESET wird als unzulaessiges Zeichen
+;; bei der normalen Tastatureingabe ignoriert
+	ld	hl,kmodif	;;Standard-Ausgang
+	push	hl		;;als Return-Adresse
+	ld	b,6	;;Warten auf Typ-Code K7634/36/37
+coityp:	in	a,(kbdpcs)
+	bit	3,a		;;Zeichen da?
+	jr	nz,coitn1	;;nein
+	in	a,(kbdpci)
+	and	0f0h
+	cp	typc3s		;;Typ-Code Sondertastatur
+	ld	hl,km3s
+	ret	z		;;ja
+	cp	typc34		;;Typ-Code K7634?
+	jr	nz,coin34	;;nein
+	in	a,(kbdpcs)	;;ctrl-Taste vorhanden?
+	and	4
+	ld	hl,km3458
+	ret	nz		;;ja, nicht K7634.54
+	ld	hl,km3454
+	ret
+coin34:	cp	typc36		;;Typ-Code K7636?
+	ld	hl,km36
+	ret	z		;;ja, K7636
+coitn1:	in	a,(kbdscs)
+	bit	0,a		;;Zeichen da?
+	jr	z,coitn2	;;nein
+	in	a,(kbdsci)
+	and	0f0h
+	cp	typc37
+	ld	hl,km37
+	ret	z		;;K7637
+coitn2:	dec	c
+	jr	nz,coityp
+	djnz	coityp		;;verhindern unendl.Schleife
+;;				 fuer Tastaturen ohne Typcode
+	IF	kbdotp eq 0	;;K7606 annehmen
+	ld	hl,km06
+	ENDIF
+	IF	kbdotp eq 1	;;K7604 annehmen
+	in	a,(kbdpcs)	;;ctrl-Taste vorhanden?
+	and	4
+	ld	hl,km0458
+	ret	nz		;;ja, nicht K7604.54
+	ld	hl,km0454
+	ENDIF
+	IF	kbdotp eq 2	;;DEG-Tastatur annehmen
+	ld	hl,kmdeg
+	ENDIF
+	IF 	kbdotp eq 4	;;K7672.03 
+	ld	hl,km72
+	ENDIF
+	ret
+
+
+;; Initialisierung Tastatur K7672.03
+k72par:	db	0,18h	;;Kanal-Reset
+	db	4,44h	;;clock*16  / 1 stoppbit / unger. Par.
+	db	2,8	
+	db	1,0
+	db	5,68h	;;Send. ein / 8 bit pro Zeichen
+	db	3,0c1h	;;Empf. ein / 8 bit pro Zeichen
+k72prl	equ	$-k72par
+
+
+;; Initialisierung Tastatur K7637
+k37par:	db	0,18h	;;Kanal-Reset
+	db	4,44h	;;clock*16  / 1 stoppbit / unger. Par.
+	db	2,8	
+	db	1,0
+	db	5,68h	;;Send. ein / 8 bit pro Zeichen
+	db	3,0c1h	;;Empf. ein / 8 bit pro Zeichen
+k37prl	equ	$-k37par
+
+
+;; Tastatur-Modifizierung gemaess Steuertabelle ab (HL)
+
+kmodif:
+	ld	de,kbdtyp
+	ld	bc,2
+	ldir
+	ld	b,kmodl		;;Anzahl der Adressen
+kmodi1:	push	bc
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)
+	inc	hl
+	push	hl
+	ld	hl,kmodi2
+	push	hl		;;ret-Adr.
+	push	de		;;Modif.routine
+coidum:	ret			;;abarbeiten
+kmodi2:	pop	hl
+	pop	bc
+	djnz	kmodi1
+;; Ende Kaltstart-Modifizierungen
+	jp	coinie
+
+
+;;Steuertabellen fuer Modifizierung
+;;==================================
+
+;; dw coidum, wenn keine Modifizierung
+
+;; k76x4 -Tastaturen
+;;------------------
+
+km0454:	db	'04'		;;letzte 2 Zeichen Tastatur
+kmodt:	dw	coidum		;;Port-Modifizierung
+	dw	coi044		;;Tastenumkodierung
+	dw	coi04c		;;kbdst1-Modifizierung
+	dw	coi04w		;;kbdwin-Modifizierung
+	dw	coi04l		;;lampen-Modifizierung
+	dw	coicps		;;gross <-> klein vertauschen
+kmodl	equ	($-kmodt)/2	;;Anzahl der Adressen
+
+km0458:	db	'04'
+	dw	coidum
+	dw	coi048
+	dw	coi04c
+	dw	coi04w
+	dw	coi04l
+	dw	coicps
+
+
+km3454:	db	'34'
+	dw	coidum
+	dw	coi344
+	dw	coi34c
+	dw	coi34w
+	dw	coi34l
+	dw	coicps
+
+km3458:	db	'34'
+	dw	coidum
+	dw	coi348
+	dw	coi34c
+	dw	coi34w
+	dw	coi34l
+	dw	coicps
+
+;; k76x6 -Tastaturen
+;;------------------
+
+km06:	db	'06'
+	dw	coidum
+	dw	coidum
+	dw	coi06c
+	dw	coidum
+	dw	coi06l
+	dw	coidum
+
+
+km36:	db	'36'
+	dw	coidum
+	dw	coidum
+	dw	coi36c
+	dw	coi36w
+	dw	coi36l
+	dw	coidum
+
+;; k7672.03 -Tastatur
+;;-------------------
+
+km72: 	db 	'72'
+	dw	coi37p
+	dw	coi37t
+	dw	coi37c
+	dw	coi37w
+	dw	coidum
+	dw	coidum
+
+;; k7637 -Tastatur
+;;----------------
+
+km37:	db	'37'
+	dw	coi37p
+	dw	coi37t
+	dw	coi37c
+	dw	coi37w
+	dw	coidum
+	dw	coidum
+
+;; Sondertastatur (modifizierte K7634)
+;;---------------
+km3s:	db	'?S'
+	dw	coidum		;;Portmodif.
+	dw	coi3st		;;Tastenumkodierung
+	dw	coi3sc		;;kbdst1-Modif.
+	dw	coi3sw		;;kbdwin-Modif.
+	dw	coi3sl		;;lampen-Modif.
+	dw	coidum		;;klein <-> gross
+
+;; DEG-Spezialtastatur
+kmdeg:	db	'DG'		;;Kennz. K76DG fuer DEG-Tastatur
+	dw	coidum
+	dw	coidg
+	dw	coidum
+	dw	coidum
+	dw	coidgl
+	dw	coidum
+
+
+;; Modifizierungs-Unterprogramme
+;;==============================
+
+;;Portmodifizierung
+;;-----------------
+coi37p:	ld	a,kbdsci
+	ld	(kbdmt1),a
+	ret
+
+;;Codemodif.
+;;----------
+coi044:	ld	hl,cp0454
+	jr	coicpt
+
+coi048:	ld	hl,cp0458
+	jr	coicpt
+
+coi344:	ld	hl,cp3454
+	jr	coicpt
+
+coi348:	ld	hl,cp3458
+	jr	coicpt
+
+coi37t:	ld	hl,cp37
+coicpt:	ld	de,kbdcpt
+	ld	bc,kbdcpl
+	ldir			;;Umkodierungstabelle setzen
+	ret
+
+coi3st:	ld	hl,cocp3s	;;Umkodierung ignorieren
+	ld	de,cocpm1
+	ld	bc,coc3se-cocp3s
+	ldir
+	ret
+
+coidg:	ld	hl,cppdg
+	ld	de,cophsp
+	ld	bc,cppdgl
+	ldir
+	ld	hl,cpdg
+	jr	coicpt
+
+;;kbdst1-Modif.
+;;-------------
+coi3sc:
+coi04c:
+coi34c:
+coi36c:
+coi06c:	ld	hl,cst06
+	ld	de,kbdst1
+	ld	bc,cst06e-cst06
+	ldir
+	ret
+
+coi37c:	ld	hl,cst37
+	ld	de,kbdst1
+	ld	bc,cst37e-cst37
+	ldir
+	ret
+
+;;kbdwin-Modif.
+;;-------------
+coi3sw:
+coi04w:
+coi34w:
+coi36w:
+coi37w:	ld	hl,cwi34
+	ld	de,kbdmd1
+	ld	bc,cwi34e-cwi34
+	ldir
+	ret
+
+;;lampen-Modif.
+;;-------------
+coi04l:	ld	hl,lmp04
+	ld	de,lmp3404	;;lmp34 modif. ohne Warten
+	ld	bc,lmp04e-lmp04
+	ldir
+coi34l:	ld	hl,lmp34
+	ld	de,kbdmd2
+	ld	bc,lmp34e-lmp34
+	ldir
+	ret
+
+coi06l:	ld	hl,lmp06
+	ld	de,kbdmd2
+	ld	bc,lmp06e-lmp06
+	ldir
+	ret
+
+coidgl:	ld	hl,lmpdg
+	ld	de,lmpdg06	;;lmp36 modif. ohne Warten
+	ld	bc,lmpdge-lmpdg
+	ldir
+coi36l:	ld	hl,lmp36
+	ld	de,kbdmd2
+	ld	bc,lmp36e-lmp36
+	ldir
+	ret	
+
+coi3sl:	ld	hl,lmp34c
+	ld	(hl),typc3s	;;Typecode modif.
+	jr	coi34l
+
+;;Gross <-> klein modif.
+;;----------------------
+coicps:	ld	hl,lampbf
+	set	kbdcpb,(hl)
+	ret
+
+
+;; Modifizierungs-Muster
+;;======================
+
+;; Tastatur-Code modif.
+;;--------------------
+cocp3s:	jr	$+cocpm2-cocpm1
+coc3se:
+
+;; kbdwin
+;;-------
+cwi34:		;;Modifizierungsroutine fuer K7634/36/37
+;;kbdwin:
+	call	kbdst		;;Taste gedrueckt?
+	jr	z,cwi34		;;nein
+	jp	kbdinn		;;sonst auswerten
+
+cwi34e:
+
+;; kbdst1
+;;-------
+;; Modifizierungsroutine fuer K7606/36
+cst06:
+;;kbdst1:
+	in	a,(kbdpcs)	;;Taste gedrueckt?
+	cpl
+	and	8
+	ret	z		;;nein, (a)=0, z=1
+	ld	a,0ffh
+	ret			;;ja, (a)=ff, z=0
+cst06e:
+
+;; Modifizierungsroutine fuer K7637
+cst37:
+;;kbdst1:
+	in	a,(kbdscs)	;;Taste gedrueckt?
+	and	1
+	ret	z		;;nein, ret z, (a)=0  
+	ld	a,0ffh		;;sonst ret nz, (a)=0ffh
+	ret
+cst37e:
+
+;; lampen
+;;-------
+lmp06:		;;Modifizierungsroutine fuer K7606
+;;lampen:
+	ld	a,3
+	out	(kbdp3o),a	;;lampen aus
+	ld	a,(lampbf)	;;puffer lampenbits
+	push	af
+	rlca
+	rlca
+	and	3
+	xor	8+3		;;0 bedeutet ein
+	out	(kbdp3o),a
+	pop	af		;;selectorlampem
+	xor	0fh		;;0 bedeutet ein
+	out	(kbdp5o),a
+	ret
+lmp06e:
+
+lmp34:		;;Modifizierungsroutine fuer K7604/K7634
+;;lampen:
+	ld	a,(lampbf)
+	cp	00h		;;veraendert?
+lmpb34	equ	$-1		;;Kopie Lampen-Puffer
+	ret	z		;;unveraendert
+	ld	hl,intkbd
+	ld	(hl),21h	;;ld hl,...
+	and	0c0h		;;Sel 0..3 LED gibt es nicht
+	bit	7,a		;;INS-MODE ?
+	jr	z,lmp34a	;;aus
+	set	4,a
+lmp34a:	bit	6,a		;;Fehlerlampe ?
+	jr	z,lmp34b	;;aus
+	set	2,a		;;sonst zusaetzlich OFF-LED
+lmp34b:	cpl			;;0 bedeutet ein
+	set	7,a		;;Flag LED-Aenderung
+	out	(kbdp3o),a
+lmp3404:
+lmp34w:	call	kbdst1		;;warten auf Antwort
+	jr	z,lmp34w
+	in	a,(kbdpci)
+	and	0f0h
+	cp	typc34
+lmp34c	equ	$-1		;;fuer evtl. Typecode-Modif.
+	jr	nz,lmp34w
+lmp04w:	ld	a,(lampbf)
+	ld	(lampen+lmpb34-lmp34),a
+	ld	hl,intkbd
+	ld	(hl),0cdh
+	ret
+lmp34e	equ	$
+
+lmp04:		;;Modifizierungsroutine fuer K7604
+	jr	$+(lmp04w-lmp3404);;nicht auf Antwort warten
+lmp04e	equ	$
+
+lmp36:		;;Modifizierungsroutine fuer K7636
+;;lampen:
+	ld	a,(lampbf)
+	cp	00h		;;veraendert?
+lmpb36	equ	$-1		;;Kopie Lampen-Puffer
+	ret	z		;;unveraendert
+	ld	hl,intkbd	;parall. 5ms Portabfrage verhindern
+	ld	(hl),21h	;call ... -> ld hl,...
+	and	0cfh		;;loeschen unbenutzte Bits
+	bit	7,a		;;INS-MODE ?
+	jr	z,lmp36a	;;aus
+	set	4,a
+lmp36a:	bit	6,a		;;Fehlerlampe ?
+	jr	z,lmp36b	;;aus
+	set	5,a		;;sonst zusaetzlich 'PIEP'
+lmp36b:	cpl			;;0 bedeutet ein
+	set	7,a		;;Flag LED-Aenderung
+	out	(kbdp3o),a
+lmpdg06:
+lmp36w:	call	kbdst1		;;warten auf Antwort
+	jr	z,lmp36w
+	in	a,(kbdpci)
+	and	0f0h
+	cp	typc36
+	jr	nz,lmp36w
+lmpdgw:	ld	a,(lampbf)
+	ld	(lampen+lmpb36-lmp36),a
+	ld	hl,intkbd
+	ld	(hl),0cdh	;;wieder call ...
+	ret
+lmp36e	equ	$
+
+lmpdg:		;;Modifizierungsroutine fuer K76DG
+	jr	$+(lmpdgw-lmpdg06);;nicht auf Antwort warten
+lmpdge	equ	$
+
+
+;; Tabelle physikalischer Tastencodes
+;; ###################################
+;; nicht vorhandene Tasten mit "cpxx" kennzeichnen!
+cpxx	equ	0
+
+;; K76x4.54
+;;=========
+cp0454:
+cp3454:
+	DB	001H
+;;		->|
+	db	002H
+;;		INSM
+	db	00CH,004H,005H
+;;		'\   ^    v
+	db	006H,007H
+;;		->   <-
+	db	008H,009H
+;;		EREO ERIN
+	db	00AH,00BH
+;;		<-'  |<-
+	DB	cpxx,00FH
+;;		#### |<-|
+	db	cpxx
+	db	cpxx,012H,013H,019H,01BH
+;;		#### Dzif DELL #### DEL
+    	db	01cH,01eH,01fH
+;;		DUP  INS  RESET
+;;ignor.	081h,082h,083h,084h,085h,086h,087h
+;;		VLD  KORR ROL< ROL> ,->  |<-  ->|
+;;ignor.	08bh,08ch,08dh,08eh,08fh
+;;		PA3  PA1  CLER PA2  CNCL
+	db	09dh
+;;		ENTR
+	DB	0A0H,cpxx,cpxx,cpxx,cpxx
+;;		Code
+	db	010H
+;;		OFF
+	db	011h,091h,092h,093h,094h,095h,096h,097h
+;;	 	REC  PF1,.....
+	db	098h,099h,09ah,09bh,09ch
+;;		PF8,...
+;;ex nicht:	cpxx,cpxx,cpxx
+;;		PF13,..
+	db	cpxx,cpxx
+
+;; K76x4.58
+;;=========
+cp0458:
+cp3458:
+	DB	001H
+;;		->|
+	db	002H
+;;		INSM
+	db	00CH,004H,005H
+;;		'\   ^    v
+	db	007H,006H
+;;		->   <-
+	db	008H,009H
+;;		EREO ERIN
+	db	00AH,00BH
+;;		<-'  |<-
+	DB	cpxx,00FH
+;;		#### |<-|
+	db	cpxx
+	db	cpxx,012H,013H,019H,01BH
+;;		#### Dzif DELL #### DEL
+    	db	01cH,01eH,01fH
+;;		DUP  INS  RESET
+;;ignor.	081h,082h,083h,084h,085h,086h,087h
+;;		VLD  KORR ROL< ROL> ,->  |<-  ->|
+;;ignor.	08bh,08ch,08dh,08eh,08fh
+;;		PA3  PA1  CLER PA2  CNCL
+	db	09dh
+;;		ENTR
+	DB	0A0H,cpxx,cpxx,cpxx,cpxx
+;;		Code
+	db	010H
+;;		OFF
+	db	011h,091h,092h,093h,094h,095h,096h,097h
+;;	 	REC  PF1,.....
+	db	098h,099h,09ah,09bh,09ch
+;;		PF8,...
+;;ex nicht:	cpxx,cpxx,cpxx
+;;		PF13,..
+	db	cpxx,cpxx
+
+;; K7637
+;;======
+cp37:
+	DB	091H
+;;		->|
+	db	cpxx
+	db	093H,094H,095H
+;;		INSL ^    v
+	db	096H,097H
+;;		<-   ->
+	db	cpxx,cpxx
+	db	09AH,09BH
+;;		<-'  |<-
+	DB	09CH,09FH
+;;		'\   |<-|
+	db	0b0H
+;;		MON
+	db	0b1H,cpxx,0b3H,0b9H,0bBH
+;;		00   000  DELL CE   DEL
+    	db	cpxx,cpxx,cpxx
+	db	cpxx
+	DB	0A0H,0A1H,0A2H,0A3H,0A8H,0AFH
+;;		SEL0 SEL1 SEL2 SEL3 INSM RESET
+	db	0c0h,0c1h,0c2h,0c3h,0c4h,0c5h,0c6h,0c7h
+;;		ENTR PF1  PF2  PF3  PF4  PF5  PF6  PF7
+	db	0c8h,0c9h,0cah,0cbh,0cch
+;;		PF8,...
+;;ex nicht:	cpxx,cpxx,cpxx
+;;		PF13,..
+	db	0feh,0ffh
+;;		ET2  ET1
+
+;; DEG-Spezialtastatur
+;=====================
+cpdg:	db	cpxx,0a6h,0c1h,cpxx,cpxx,013h,cpxx,0a5h
+	db	cpxx,012h,cpxx,003h,013h,059h,079h,05ah
+	db	07ah,cpxx,cpxx,cpxx,cpxx,cpxx,09dh,0a0h
+	db	0a1h,0a2h,0a3h,cpxx,0a4h,0c0h,cpxx,0c2h
+	db	0c3h,0c4h,0c5h,0c6h,0c7h,cpxx,cpxx,cpxx
+	db	cpxx,cpxx,cpxx,cpxx
+
+cppdg:	db	008h,05ah,07ah,059h,079h
+cppdgl	equ	$-cppdg
+
+coinie:
+
+	call	lampen		;alle Lampen aus
+

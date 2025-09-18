@@ -1,0 +1,151 @@
+;
+;**************************************************************
+;	Speicherschutz, Version 04.12.85
+;**************************************************************
+;
+mpinit:	ld	a,1
+	ld	(mpflg),a	;MPINIT-Aufruf-Flag setzen
+	IF	($-biosad) and 1;ungerade Adresse ?
+	nop			;dann Leerbefehl einfuegen
+	ENDIF
+; Initialisieren von bdos+40h bis bsanf-1
+	DI
+	ld	bc,0509h	;pio kanal a progr.
+	ld	hl,mpchan
+	otir
+	ld	hl,mpinte	;interr.routine
+	ld	(intvec+ivprot),hl	;interr.adr.
+	out	(02h),a
+	in	a,(0ah)
+	or	4
+	out	(0ah),a		;schutz aus
+	ld	hl,0		;gerade
+	ld	de,64		;schrittweite
+mpm1:	ld	c,(hl)		;nicht schuetzen
+	add	hl,de
+	ld	a,l
+	or	h		;fertig?
+	jr	nz,mpm1		;nein
+	nop
+	ld	bc,bdos+40h	;ab bdos+6 liegt rueckw. Stack!
+	ld	de,bsanf-1	;BDOS und BIOS schuetzen, da im
+;				 BIOS E/A-Befehle und BDOS in
+;				 Disk-Tab. des BIOS schreibt
+mpiend	equ	$-2		;wird modif. entspr. Bildsch.
+;
+mpset:	DI
+; Bereich von bc bis de schuetzen
+	ld	a,e
+	and	0c0h
+	ld	l,a		;mod 64
+	ld	h,d		;hl:=endeadr.
+	ld	a,c
+	and	0c0h
+	ld	e,a		;mod 64
+	ld	d,b		;de:=anf.adr.
+	push	de
+	xor	a
+	sbc	hl,de
+	ld	b,6
+mpm4:	srl	h
+	rr	l		;hl=>
+	djnz	mpm4
+	inc	hl		;anz. der segmente
+	ld	c,l
+	ld	b,h
+	pop	hl
+	inc	hl		;ungerade
+	ld	de,64
+	in	a,(0ah)
+	or	4
+	out	(0ah),a		;schutz aus
+	push	af
+mpm3:	ld	a,(hl)		;schuetzen
+	add	hl,de
+	dec	bc
+	ld	a,b
+	or	c		;schluss?
+	jr	nz,mpm3		;nein
+	pop	af
+	and	255-4
+	out	(0ah),a		;schutz ein-unger.adr.!
+	EI
+	ret
+;
+mpoff:	xor	a
+	ld	(mpflg),a	;MPINIT-Aufruf-Flag loeschen
+; Schutz ausschalten
+	DI
+	in	a,(0ah)
+	or	4
+	out	(0ah),a
+	EI
+	ret
+;
+mpchan:	db	ivprot,0ffh,0ffh,097h,0f7h
+;
+; Interr.routine Speicherschutz
+mpinte:	ex	(sp),hl
+	ld	(mpadr),hl
+	ex	(sp),hl
+	out	(02h),a	;Ruecksetzen Speicherschutzmerkmal
+	IF	monitor
+	ld	(mpihl+1),hl
+	ld	hl,moncal	;nach Protokoll
+	push	hl		;BIOS-Monitor aufrufen
+mpihl:	ld	hl,0
+	ENDIF
+	ld	(intsp),sp
+	ld	sp,intstk
+	push	af
+	push	hl
+	ld	hl,mptx1
+	call	mpmes
+	jp	intrhl
+;
+; Interruptroutine E/A-Schutz
+mpnmi:	ex	(sp),hl
+	ld	(mpadr),hl
+	ex	(sp),hl
+	ld	(intsp),sp
+	ld	sp,intstk
+	push	af
+	push	hl
+	ld	hl,mptx2
+	call	mpmes
+	pop	hl
+	pop	af
+	ld	sp,(intsp)
+mpnmir:	retn
+;
+mpmes:	push	de		;fehlernachr.ausg.
+	push	bc
+	call	putmes
+	ld	de,mptxad
+	ld	hl,mpadr
+	call	mareco
+	ld	hl,mptx3
+	call	putmes
+	pop	bc
+	pop	de
+	ret
+;
+mptx1:	db	0dh,0ah
+	db	'>> ILLEGAL STORE'
+	db	0
+mptx2:	db	0dh,0ah
+	db	'>> ILLEGAL I/O'
+	db	0
+mptx3:	db	' INSTRUCTION BEFORE '
+mptxad:	ds	4
+	db	'H <<'
+	db 	0dh,0ah,0
+;
+mpflg:	db	0		;MPINIT-Aufruf-Flag
+mpadr:	dw	0		;Unterbrechungsadresse
+routine
+coidum:	ret			;;abarbeiten
+kmodi2:	pop	hl
+	pop	bc
+	djnz	kmodi1
+;; End

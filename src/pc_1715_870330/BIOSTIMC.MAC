@@ -1,0 +1,25 @@
+
+; Kaltstart-Initialisierung Timer
+;================================
+
+timctc	equ	2
+	ld	hl,tim5it	;;int.adr. 5ms
+	ld	(intvec+ivctc0+timctc+timctc),hl
+	ld	hl,tim1it	;;int.adr. 1 sec
+	ld	(intvec+ivctc0+timctc+timctc+2),hl
+	ld	a,ivctc0
+	out	(sysctc),a		;;int.vekt.
+	ld	a,00110111b
+;;kein int./zeitg./vort.256/pos.flanke/naechst.zykl./zk folgt/
+;;	abbruch/1
+	out	(sysctc+timctc),a
+	ld	a,48		;;zk fuer 5ms
+	out	(sysctc+timctc),a
+	ld	a,01010111b
+;;kein int./zaehler//pos.flanke//zk folgt/abbruch/1
+	out	(sysctc+timctc+1),a
+	ld	a,200		;;zk fuer 1s
+	out	(sysctc+timctc+1),a
+
+001b
+;int./zaehler//pos.flanke//keine zk/weiter/1
