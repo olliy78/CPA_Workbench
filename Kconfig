@@ -1,62 +1,143 @@
-# Kconfig für CP/A BIOS-Konfiguration
 
-menu "CP/A BIOS Konfiguration"
 
-config RAMKB
-    int "RAM-Größe (KB)"
-    default 64
-    range 32 64
-    help
-      Größe des Arbeitsspeichers in Kilobyte (32–64).
+menu "Hardwarevariante"
 
-config CRT
-    int "Bildschirmtyp (crt)"
-    default 0
-    range 0 7
-    help
-      0=K7024, 1=DSY5, 7=B1715
+choice
+  prompt "Geraeteversion"
+  default DEV_OEM
+  config DEV_OEM
+    bool "OEM-Geraet (oem=0)"
+  config DEV_CPD
+    bool "Hardware-Variante CP/D (cpd=1)"
+  config DEV_K8915
+    bool "Hardware-Variante K8915 (k8915=2)"
+endchoice
 
-config TYP80
-    int "Tastaturtyp (typ80)"
-    default 3454
-    help
-      3454=K7634.54, 36=K7636-Familie
+choice
+  prompt "Prozessor-Takt (MHz)"
+  default CPUCLK_25
+  config CPUCLK_25
+    bool "2,5 MHz (cpuclk=25)"
+  config CPUCLK_40
+    bool "4,0 MHz (cpuclk=40)"
+endchoice
 
-config KBDOTP
-    int "Tastatur-Option (kbdotp)"
-    default 0
-    range 0 3
-    help
-      0=K7606, 1=K7604, 2=DEG, 3=K7633
+choice
+  prompt "CPU-Typ"
+  default CPU_K2526
+  config CPU_K2521
+    bool "K2521 (1)"
+  config CPU_K2526
+    bool "K2526 (6)"
+  config CPU_C1715
+    bool "C1715 (7)"
+endchoice
 
-config DISKA
-    int "Laufwerk A Typ (diskA)"
-    default 10540
-    help
-      10540=DD,SS,5",40T; 10580=DD,SS,5",80T; 11580=DD,DS,5",80T; 0=kein LW
+choice
+  prompt "Floppy-Karte"
+  default FDC_K5122
+  config FDC_K5120
+    bool "K5120 (0)"
+  config FDC_K5122
+    bool "K5122 (1)"
+  config FDC_K5126
+    bool "K5126 (6)"
+  config FDC_F1715
+    bool "PC1715 (7)"
+  config FDC_FDC3
+    bool "FDC3 (11)"
+endchoice
 
-config DISKB
-    int "Laufwerk B Typ (diskB)"
-    default 10540
-    help
-      Siehe DISKA
+choice
+  prompt "Bildschirm-Karte"
+  default CRT_K7024
+  config CRT_K7024
+    bool "K7024 (0) Bildschirm-Karte mit Kursor durch Bit 7"
+  config CRT_DSY5
+    bool "DSY5 (1) Bildschirm-Karte mit Invers durch Bit 7 (z.B. VDE Buch)"
+  config CRT_B1715
+    bool "PC 1715 (7)"
+endchoice
 
-config EM256
-    bool "RAM-Floppy EM256 aktivieren"
-    default n
+choice
+  prompt "RAM-Größe (kBytes)"
+  default RAM_64
+  config RAM_64
+    bool "64 kBytes"
+  config RAM_32
+    bool "32 kBytes"
+endchoice
 
-config RAF
-    bool "RAM-Floppy RAF aktivieren"
-    default n
+endmenu
+# Diskettenlaufwerke
+menu "Diskettenlaufwerke"
 
-config RNA
-    bool "RAM-Floppy RNA aktivieren"
-    default n
+choice
+  prompt "Laufwerk A Typ"
+  default DRIVE_A_10877
+  config DRIVE_A_10540
+    bool "DD, SS, 5\", 40 Tracks (K5600.10)"
+  config DRIVE_A_10580
+    bool "DD, SS, 5\", 80 Tracks (K5600.20)"
+  config DRIVE_A_11580
+    bool "DD, DS, 5\", 80 Tracks (K5601 !!!)"
+  config DRIVE_A_00877
+    bool "SD, SS, 8\", 77 Tracks (MF3200)"
+  config DRIVE_A_10877
+    bool "DD, SS, 8\", 77 Tracks (K5602.10, MF6400)"
+  config DRIVE_A_0
+    bool "Nicht vorhanden"
+endchoice
 
-config DBUFSZ
-    int "Diskettenpuffergröße (dbufsz, 2^n Bytes)"
-    default 10
-    help
-      Exponent von 2, z.B. 10=1024 Bytes
+choice
+  prompt "Laufwerk B Typ"
+  default DRIVE_B_10877
+  config DRIVE_B_10540
+    bool "DD, SS, 5\", 40 Tracks (K5600.10)"
+  config DRIVE_B_10580
+    bool "DD, SS, 5\", 80 Tracks (K5600.20)"
+  config DRIVE_B_11580
+    bool "DD, DS, 5\", 80 Tracks (K5601 !!!)"
+  config DRIVE_B_00877
+    bool "SD, SS, 8\", 77 Tracks (MF3200)"
+  config DRIVE_B_10877
+    bool "DD, SS, 8\", 77 Tracks (K5602.10, MF6400)"
+  config DRIVE_B_0
+    bool "Nicht vorhanden"
+endchoice
+
+choice
+  prompt "Laufwerk C Typ"
+  default DRIVE_C_0
+  config DRIVE_C_10540
+    bool "DD, SS, 5\", 40 Tracks (K5600.10)"
+  config DRIVE_C_10580
+    bool "DD, SS, 5\", 80 Tracks (K5600.20)"
+  config DRIVE_C_11580
+    bool "DD, DS, 5\", 80 Tracks (K5601 !!!)"
+  config DRIVE_C_00877
+    bool "SD, SS, 8\", 77 Tracks (MF3200)"
+  config DRIVE_C_10877
+    bool "DD, SS, 8\", 77 Tracks (K5602.10, MF6400)"
+  config DRIVE_C_0
+    bool "Nicht vorhanden"
+endchoice
+
+choice
+  prompt "Laufwerk D Typ"
+  default DRIVE_D_0
+  config DRIVE_D_10540
+    bool "DD, SS, 5\", 40 Tracks (K5600.10)"
+  config DRIVE_D_10580
+    bool "DD, SS, 5\", 80 Tracks (K5600.20)"
+  config DRIVE_D_11580
+    bool "DD, DS, 5\", 80 Tracks (K5601 !!!)"
+  config DRIVE_D_00877
+    bool "SD, SS, 8\", 77 Tracks (MF3200)"
+  config DRIVE_D_10877
+    bool "DD, SS, 8\", 77 Tracks (K5602.10, MF6400)"
+  config DRIVE_D_0
+    bool "Nicht vorhanden"
+endchoice
 
 endmenu

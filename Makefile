@@ -99,6 +99,18 @@ PC:
 	  $(MAKE) TARGET=PC $(filter-out BC PC,$(MAKECMDGOALS)); \
 	fi
 
+# menuconfig: Konfigurationsmenü für Diskettenlaufwerke
+.PHONY: menuconfig
+menuconfig:
+	@echo "Starte Kconfig-Menü..."
+	if [ "$(TARGET)" = "PC" ]; then \
+	  BIOS=src/pc_1715/bios.mac; \
+	else \
+	  BIOS=src/bc_a5120/bios.mac; \
+	fi; \
+	python3 tools/patch_bios_mac.py $$BIOS .config extract; \
+	python3 tools/menuconfig.py Kconfig; \
+	python3 tools/patch_bios_mac.py $$BIOS .config patch
 
 # Haupttargets
 .PHONY: help all os diskImage writeImage clean
