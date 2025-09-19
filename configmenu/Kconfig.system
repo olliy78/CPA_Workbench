@@ -1,0 +1,33 @@
+# Kconfig für Systemtyp-Auswahl
+mainmenu "CP/A System Konfiguration - Auswahl der zu verwendenden Variante [? für Hilfe]"
+config HINT_INFO
+    bool "=== Hinweise zur Konfiguration [? für Hilfe] ==="
+    help
+        Es können mehrere Quelltextversionen / Varianten hinterlegt sein. Hier wird ausgewählt, 
+        welche verwendet werden soll. In README.md ist beschrieben, wie und wo man neue Varianten anlegen kann.
+        Nachdem die gewünschte Variante ausgewählt wurde, das Menü mit [Q] oder [Esc] beenden und unbedingt Speichern.
+    default n
+menu "Systemtyp auswählen"
+choice
+    prompt "Systemtyp"
+    default SYSTEM_BC_A5120
+    help
+        Aktuell sind folgende Systemvarianten hinterlegt:
+        A5120 (BC) - Angeblich vom 25.09.89 - Läuft auf dem BC Vermutlich auch auf PC1715, CP/D und K8915
+        PC1715 (PC) - Angeblich vom 24.05.88 - Titel: BIOS CP/A fuer PC1715
+        PC1715 (870330) - Angeblich vom 30.03.87 
+config SYSTEM_BC_A5120
+    bool "A5120 (BC)"
+    help
+        A5120 (BC) - Angeblich vom 25.09.89 - Läuft auf dem BC Vermutlich auch auf PC1715, CP/D und K8915
+config SYSTEM_PC_1715
+    bool "PC1715 (PC)"
+    help
+        PC1715 (PC) - Angeblich vom 24.05.88 - Titel: BIOS CP/A fuer PC1715
+config SYSTEM_PC_1715_870330
+    bool "PC1715 (870330)"
+    help
+        PC1715 (870330) - Angeblich vom 30.03.87 
+endchoice
+
+endmenu

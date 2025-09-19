@@ -247,11 +247,35 @@ def patch_bios_mac(bios_path, config_path):
 
 def main():
     if len(sys.argv) < 3:
-        print("Usage: config_bios_drives.py bios.mac .config [extract|patch]")
+        print("Usage: patch_bios_mac.py <bios.mac|auto> .config [extract|patch]")
         sys.exit(1)
     bios_path = sys.argv[1]
     config_path = sys.argv[2]
     mode = sys.argv[3] if len(sys.argv) > 3 else 'extract'
+
+    # Automatische Auswahl der passenden bios.mac anhand des Systemtyps in .config
+    if bios_path == 'auto':
+        # Default-Mapping: Symbolname -> Pfad
+        system_map = {
+            'CONFIG_SYSTEM_BC_A5120': 'src/bc_a5120/bios.mac',
+            'CONFIG_SYSTEM_PC_1715': 'src/pc_1715/bios.mac',
+            'CONFIG_SYSTEM_PC_1715_870330': 'src/pc_1715_870330/bios.mac',
+        }
+        selected = None
+        if os.path.exists(config_path):
+            with open(config_path) as f:
+                for line in f:
+                    for key, path in system_map.items():
+                        if line.strip().startswith(f'{key}=y'):
+                            selected = path
+                            break
+                    if selected:
+                        break
+        if not selected:
+            print("[WARN] Konnte Systemtyp nicht aus .config erkennen. Fallback: src/bc_a5120/bios.mac")
+            selected = 'src/bc_a5120/bios.mac'
+        bios_path = selected
+
     if mode == 'extract':
         extract_bios_config(bios_path, config_path)
     elif mode == 'patch':

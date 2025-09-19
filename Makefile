@@ -1,3 +1,4 @@
+
 # ------------------------------------------------------------------------------
 # Makefile für das CP/A BIOS-Projekt und die Systemdisketten-Erstellung
 # ------------------------------------------------------------------------------
@@ -5,6 +6,18 @@
 # Dieses Makefile steuert den Bau des CP/A-Betriebssystems (@OS.COM) und die
 # Erstellung eines CP/M-kompatiblen Systemdisketten-Images. Es unterstützt die
 # Varianten BC (A5120) und PC (PC1715) und bietet flexible Targets für beide.
+#
+# Konfigurationsmenü:
+#   make menuconfig   - Startet das mehrstufige Konfigurationsmenü für Systemtyp,
+#                       Hardware- und Laufwerksauswahl sowie Build-Optionen.
+#                       Die Konfiguration wird in .config gespeichert und die
+#                       passenden BIOS-Quellen werden automatisch angepasst.
+#   Das Menü bietet:
+#     1. Auswahl des Systemtyps (z.B. A5120, PC1715)
+#     2. Auswahl der Hardware- und Diskettenlaufwerks-Varianten
+#     3. Auswahl des Build-Ausgabeformats
+#     4. Hilfetexte zu allen Optionen (mit [?] im Menü)
+#     5. Wizard-ähnliche Navigation durch die Konfigurationsschritte
 #
 # Wichtige Targets:
 #   make os           - Baut das Betriebssystem (@OS.COM) für das gewählte TARGET
@@ -24,12 +37,15 @@
 #   make writeImage        # Schreibt Diskettenimage (BC) auf Laufwerk
 #   make PC writeImage     # Schreibt Diskettenimage (PC) auf Laufwerk
 #   make clean             # Entfernt alle temporären Dateien
+#   make menuconfig        # Startet das Konfigurationsmenü
 #
 # Hinweise:
 #   - Die Quelltexte für BC liegen in src/bc_a5120, für PC in src/pc_1715
 #   - Der Bootsektor liegt in src/boot_sector/bootsecBC.bin bzw. bootsecPC.bin
 #   - Das Systemfile @OS.COM wird im build/-Verzeichnis erzeugt
 #   - Das Diskettenimage wird als build/cpadisk.img abgelegt
+#   - Die Konfiguration erfolgt über das Menü (menuconfig) und wird in .config gespeichert
+#   - Nach Änderung der Konfiguration sollte das System neu gebaut werden
 # ------------------------------------------------------------------------------
 
 
@@ -110,18 +126,11 @@ PC:
 	  $(MAKE) TARGET=PC $(filter-out BC PC,$(MAKECMDGOALS)); \
 	fi
 
-# menuconfig: Konfigurationsmenü für Diskettenlaufwerke
+# menuconfig: Wrapper für den mehrstufigen Konfigurationsprozess
 .PHONY: menuconfig
 menuconfig:
-	@echo "Starte Kconfig-Menü..."
-	if [ "$(TARGET)" = "PC" ]; then \
-	  BIOS=src/pc_1715/bios.mac; \
-	else \
-	  BIOS=src/bc_a5120/bios.mac; \
-	fi; \
-	python3 tools/patch_bios_mac.py $$BIOS .config extract; \
-	python3 tools/menuconfig.py Kconfig; \
-	python3 tools/patch_bios_mac.py $$BIOS .config patch
+	@echo "Starte CPA-Mehrstufen-Konfigurationsmenü..."
+	python3 configmenu/cpa_menuconfig.py
 
 # Haupttargets
 .PHONY: help all os diskImage writeImage clean
@@ -138,7 +147,14 @@ help:
 	@echo "  make clean        - Entfernt temporäre und finale Dateien"
 	@echo "  make BC <target>  - Baut für BC (A5120) (z.B. make BC os)"
 	@echo "  make PC <target>  - Baut für PC (PC1715) (z.B. make PC os)"
+	@echo "  make menuconfig   - Startet das mehrstufige Konfigurationsmenü (Systemtyp, Hardware, Build-Optionen)"
 	@echo "  make help         - Zeigt diese Hilfe an"
+	@echo ""
+	@echo "Konfigurationsmenü (menuconfig):"
+	@echo "  - Interaktives Menü zur Auswahl von Systemtyp, Hardware und Build-Optionen"
+	@echo "  - Hilfetexte zu allen Optionen mit [?] im Menü aufrufbar"
+	@echo "  - Wizard-ähnliche Navigation durch die Konfigurationsschritte"
+	@echo "  - Änderungen werden in .config gespeichert und automatisch übernommen"
 	@echo ""
 	@echo "Beispiele:"
 	@echo "  make os                # Baut @os.com für BC (A5120)"
@@ -148,6 +164,7 @@ help:
 	@echo "  make writeImage        # Schreibt Diskettenimage (BC) auf Laufwerk"
 	@echo "  make PC writeImage     # Schreibt Diskettenimage (PC) auf Laufwerk"
 	@echo "  make clean             # Entfernt alle temporären Dateien"
+	@echo "  make menuconfig        # Startet das Konfigurationsmenü"
 
 # OS bauen (Betriebssystem @OS.COM)
 os: $(OS_TARGET)

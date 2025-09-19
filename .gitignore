@@ -1,3 +1,9 @@
 # Ignore all files in the Disketten directory
 Disketten/
 build/
+
+# Ignore Python virtual environment
+.venv/
+
+# Ignore Python bytecode cache
+__pycache__/

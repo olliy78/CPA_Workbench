@@ -128,10 +128,10 @@ k8915	equ	2 ;Hardware-Variante K8915
 ; Buerocomputer A5120/30
 ;=====================================================================
 dev	equ	oem
-cpu	equ	k2526
+cpu	equ	c1715
 cpuclk	equ	25	;Takt der CPU; 25 bei 2,5Mhz; 40 bei 4,0Mhz
-fdc	equ	k5122
-crt	equ	k7024
+fdc	equ	f1715
+crt	equ	b1715
 
 bsanf2	equ	0f800h		;Anfang Bildschirmpuffer BAB2
 bsanf1	equ	bsanf2+400h	;Anfang Bildschirmpuffer BAB1
@@ -631,9 +631,9 @@ biosln	aset	biosln+70h
 ;diskC	equ	13580
 ;diskD	equ	0
 
-diskA	equ	10877
+diskA	equ	11580
 diskB	equ	11580
-diskC	equ	11580
+diskC	equ	0
 diskD	equ	0
 
 ; Es wird eine automatische Formaterkennung fuer gaengige CP/M-

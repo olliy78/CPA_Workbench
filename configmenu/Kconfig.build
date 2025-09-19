@@ -1,0 +1,34 @@
+# Kconfig für Build-Ausgabeformat
+mainmenu "CP/A System Konfiguration - Konfiguration Build-Ausgabeformat [? für Hilfe]"
+config HINT_BUILD
+    bool "=== Hinweise zum Build-Ziel [? für Hilfe] ==="
+    help
+        Hier wird festgelegt, welches Build-Ziel nach Abschluss der Konfiguration ausgeführt werden soll.
+        Standardmäßig wird kein Build durchgeführt. Wähle eine oder mehrere Optionen, um nach der Konfiguration
+        automatisch das gewünschte Ziel zu bauen (z.B. nur @OS.COM, ein Diskettenimage oder direkt auf Diskette schreiben).
+        Die Auswahl kann jederzeit geändert werden.
+    default n
+
+menu "Build-Ausgabeformat wählen"
+config BUILD_OS
+    bool "Nur @OS.COM bauen"
+    help
+        Erstellt nur das Betriebssystem (@OS.COM) im build/-Verzeichnis. Kein Diskettenimage, keine Ausgabe auf Diskette.
+    default n
+config BUILD_DISKIMAGE
+    bool "Diskettenimage erzeugen"
+    help
+        Erstellt nach dem Build ein Diskettenimage (build/cpadisk.img) mit dem neuen System.
+    default n
+config BUILD_WRITEIMAGE
+    bool "Diskettenimage auf Laufwerk schreiben"
+    help
+        Schreibt nach dem Build das Diskettenimage direkt auf ein physikalisches Laufwerk (z.B. mit gw).
+    default n
+config BUILD_CLEAN
+    bool "Aufräumen (clean) ausführen"
+    help
+        Führt ein 'make clean' aus und entfernt alle temporären und erzeugten Dateien.
+        Dies ist nützlich, um das Build-Verzeichnis komplett zurückzusetzen.
+    default n
+endmenu

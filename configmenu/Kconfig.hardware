@@ -1,0 +1,149 @@
+# Kconfig für Hardwarevariante und Diskettenlaufwerke
+mainmenu "CP/A System Konfiguration - Konfiguration des System Kernels @OS.COM [? für Hilfe]"
+config HINT_INFO
+    bool "=== Hinweise zur Konfiguration [? für Hilfe] ==="
+    help
+        CP/A Einstellungen können vor Allem in der bios.mac aber auch in anderen Dateien vorgenommen werden.
+        Hier können nur die wichtigsten Dinge eingestellt werden. Nach dem Speichern und Beenden werden die Änderungen in die bios.mac übernommen.
+        Nachdem die gewünschte Änderungen vorgenommen wurden, das Menü mit [Q] oder [Esc] beenden und unbedingt Speichern.
+    default n
+menu "Hardwarevariante"
+choice
+    prompt "Geraeteversion"
+    default DEV_OEM
+    config DEV_OEM
+        bool "OEM-Geraet (oem=0)"
+    config DEV_CPD
+        bool "Hardware-Variante CP/D (cpd=1)"
+    config DEV_K8915
+        bool "Hardware-Variante K8915 (k8915=2)"
+endchoice
+
+choice
+    prompt "Prozessor-Takt (MHz)"
+    default CPUCLK_25
+    config CPUCLK_25
+        bool "2,5 MHz (cpuclk=25)"
+    config CPUCLK_40
+        bool "4,0 MHz (cpuclk=40)"
+endchoice
+
+choice
+    prompt "CPU-Typ"
+    default CPU_K2526
+    config CPU_K2521
+        bool "K2521 (1)"
+    config CPU_K2526
+        bool "K2526 (6)"
+    config CPU_C1715
+        bool "C1715 (7)"
+endchoice
+
+choice
+    prompt "Floppy-Karte"
+    default FDC_K5122
+    config FDC_K5120
+        bool "K5120 (0)"
+    config FDC_K5122
+        bool "K5122 (1)"
+    config FDC_K5126
+        bool "K5126 (6)"
+    config FDC_F1715
+        bool "PC1715 (7)"
+    config FDC_FDC3
+        bool "FDC3 (11)"
+endchoice
+
+choice
+    prompt "Bildschirm-Karte"
+    default CRT_K7024
+    config CRT_K7024
+        bool "K7024 (0) Bildschirm-Karte mit Kursor durch Bit 7"
+    config CRT_DSY5
+        bool "DSY5 (1) Bildschirm-Karte mit Invers durch Bit 7 (z.B. VDE Buch)"
+    config CRT_B1715
+        bool "PC 1715 (7)"
+endchoice
+
+choice
+    prompt "RAM-Größe (kBytes)"
+    default RAM_64
+    config RAM_64
+        bool "64 kBytes"
+    config RAM_32
+        bool "32 kBytes"
+endchoice
+
+endmenu
+
+
+menu "Diskettenlaufwerke"
+choice
+    prompt "Laufwerk A Typ"
+    default DRIVE_A_10877
+    config DRIVE_A_10540
+        bool "DD, SS, 5', 40 Tracks (K5600.10)"
+    config DRIVE_A_10580
+        bool "DD, SS, 5', 80 Tracks (K5600.20)"
+    config DRIVE_A_11580
+        bool "DD, DS, 5', 80 Tracks (K5601 !!!)"
+    config DRIVE_A_00877
+        bool "SD, SS, 8', 77 Tracks (MF3200)"
+    config DRIVE_A_10877
+        bool "DD, SS, 8', 77 Tracks (K5602.10, MF6400)"
+    config DRIVE_A_0
+        bool "Nicht vorhanden"
+endchoice
+
+choice
+    prompt "Laufwerk B Typ"
+    default DRIVE_B_10877
+    config DRIVE_B_10540
+        bool "DD, SS, 5', 40 Tracks (K5600.10)"
+    config DRIVE_B_10580
+        bool "DD, SS, 5', 80 Tracks (K5600.20)"
+    config DRIVE_B_11580
+        bool "DD, DS, 5', 80 Tracks (K5601 !!!)"
+    config DRIVE_B_00877
+        bool "SD, SS, 8', 77 Tracks (MF3200)"
+    config DRIVE_B_10877
+        bool "DD, SS, 8', 77 Tracks (K5602.10, MF6400)"
+    config DRIVE_B_0
+        bool "Nicht vorhanden"
+endchoice
+
+choice
+    prompt "Laufwerk C Typ"
+    default DRIVE_C_0
+    config DRIVE_C_10540
+        bool "DD, SS, 5', 40 Tracks (K5600.10)"
+    config DRIVE_C_10580
+        bool "DD, SS, 5', 80 Tracks (K5600.20)"
+    config DRIVE_C_11580
+        bool "DD, DS, 5', 80 Tracks (K5601 !!!)"
+    config DRIVE_C_00877
+        bool "SD, SS, 8', 77 Tracks (MF3200)"
+    config DRIVE_C_10877
+        bool "DD, SS, 8', 77 Tracks (K5602.10, MF6400)"
+    config DRIVE_C_0
+        bool "Nicht vorhanden"
+endchoice
+
+choice
+    prompt "Laufwerk D Typ"
+    default DRIVE_D_0
+    config DRIVE_D_10540
+        bool "DD, SS, 5', 40 Tracks (K5600.10)"
+    config DRIVE_D_10580
+        bool "DD, SS, 5', 80 Tracks (K5600.20)"
+    config DRIVE_D_11580
+        bool "DD, DS, 5', 80 Tracks (K5601 !!!)"
+    config DRIVE_D_00877
+        bool "SD, SS, 8', 77 Tracks (MF3200)"
+    config DRIVE_D_10877
+        bool "DD, SS, 8', 77 Tracks (K5602.10, MF6400)"
+    config DRIVE_D_0
+        bool "Nicht vorhanden"
+endchoice
+
+endmenu
