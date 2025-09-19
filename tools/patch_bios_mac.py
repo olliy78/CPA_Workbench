@@ -74,62 +74,110 @@ def extract_bios_config(bios_path, config_path):
     found = { 'cpu': False, 'fdc': False, 'crt': False, 'ramkb': False, 'dev': False, 'cpuclk': False }
     with open(bios_path) as f:
         for line in f:
-            m = BIOS_PATTERN.match(line.strip())
-            if m:
-                drv = m.group(2)
-                val = m.group(3)
+            # Kommentar abtrennen (alles nach einem Semikolon ignorieren)
+            line_nocomment = line.split(';', 1)[0].strip()
+
+            # --- Laufwerkskonfiguration extrahieren ---
+            # Erkenne Zeilen wie: diskA equ 10540 (beliebige Leerzeichen/Tabs)
+            m_drive = re.match(r'^disk([A-D])\s+equ\s+(\d+)', line_nocomment, re.IGNORECASE)
+            if m_drive:
+                drv = m_drive.group(1).upper()  # A, B, C, D
+                val = m_drive.group(2)
+                # Fallback auf '0' falls Wert nicht bekannt
                 if val not in DRIVE_VALS:
                     val = '0'
+                # Setze für alle möglichen Werte das passende Flag
                 for v in DRIVE_VALS:
                     key = f'CONFIG_DRIVE_{drv}_{v}'
                     config[key] = 'y' if v == val else 'n'
-            # Hardwarevariante
-            l = line.strip().lower()
-            if l.startswith('cpu\tequ'):
-                cpu = l.split()[-1]
+
+            # --- Hardwarevariante robust extrahieren ---
+            # Erkenne Zeilen wie: cpu equ k2526 (beliebige Leerzeichen/Tabs)
+            m_cpu = re.match(r'^cpu\s+equ\s+(\w+)', line_nocomment, re.IGNORECASE)
+            if m_cpu:
+                cpu = m_cpu.group(1)
                 found['cpu'] = True
-            if l.startswith('fdc\tequ'):
-                fdc = l.split()[-1]
+            m_fdc = re.match(r'^fdc\s+equ\s+(\w+)', line_nocomment, re.IGNORECASE)
+            if m_fdc:
+                fdc = m_fdc.group(1)
                 found['fdc'] = True
-            if l.startswith('crt\tequ'):
-                crt = l.split()[-1]
+            m_crt = re.match(r'^crt\s+equ\s+(\w+)', line_nocomment, re.IGNORECASE)
+            if m_crt:
+                crt = m_crt.group(1)
                 found['crt'] = True
-            if l.startswith('ramkb\tequ'):
-                ramkb = l.split()[-1]
+            m_ramkb = re.match(r'^ramkb\s+equ\s+(\w+)', line_nocomment, re.IGNORECASE)
+            if m_ramkb:
+                ramkb = m_ramkb.group(1)
                 found['ramkb'] = True
-            if l.startswith('dev\tequ'):
-                dev = l.split()[-1]
+            m_dev = re.match(r'^dev\s+equ\s+(\w+)', line_nocomment, re.IGNORECASE)
+            if m_dev:
+                dev = m_dev.group(1)
                 found['dev'] = True
-            if l.startswith('cpuclk\tequ'):
-                cpuclk = l.split()[-1]
+            m_cpuclk = re.match(r'^cpuclk\s+equ\s+(\w+)', line_nocomment, re.IGNORECASE)
+            if m_cpuclk:
+                cpuclk = m_cpuclk.group(1)
                 found['cpuclk'] = True
     # Schreibe .config
+    # --- Patch .config im Kconfig-Stil: Nur relevante Werte ändern/ergänzen ---
+    # 1. Alle relevanten Keys und Zielwerte sammeln
+    patch_keys = {}
+    # Laufwerke
+    for drv in BIOS_DRIVES:
+        for v in DRIVE_VALS:
+            key = f'CONFIG_DRIVE_{drv}_{v}'.upper()
+            if key in config:
+                patch_keys[key] = config[key]
+    # Hardware
+    if found['cpu']:
+        for k, v in REVERSE_CPU_MAP.items():
+            patch_keys[f'CONFIG_CPU_{k}'.upper()] = 'y' if cpu == k else 'n'
+    if found['fdc']:
+        for k, v in REVERSE_FDC_MAP.items():
+            patch_keys[f'CONFIG_FDC_{k}'.upper()] = 'y' if fdc == k else 'n'
+    if found['crt']:
+        for k, v in REVERSE_CRT_MAP.items():
+            patch_keys[f'CONFIG_CRT_{k}'.upper()] = 'y' if crt == k else 'n'
+    if found['ramkb']:
+        for k, v in REVERSE_RAM_MAP.items():
+            patch_keys[f'CONFIG_RAM_{k}'.upper()] = 'y' if ramkb == k else 'n'
+    if found['dev']:
+        for k, v in REVERSE_DEV_MAP.items():
+            patch_keys[f'CONFIG_DEV_{k}'.upper()] = 'y' if dev == k else 'n'
+    if found['cpuclk']:
+        for k, v in REVERSE_CPUCLK_MAP.items():
+            patch_keys[f'CONFIG_CPUCLK_{k}'.upper()] = 'y' if cpuclk == k else 'n'
+
+    # 2. Bestehende .config einlesen und Zeilen gezielt ersetzen
+    if os.path.exists(config_path):
+        with open(config_path, 'r') as f:
+            lines = f.readlines()
+    else:
+        lines = []
+    new_lines = []
+    seen_keys = set()
+    for line in lines:
+        m = re.match(r'^(# )?(CONFIG_\w+) ?(=y|=n|is not set)?', line, re.IGNORECASE)
+        if m:
+            key = m.group(2).upper()
+            if key in patch_keys:
+                # Schreibe Wert im Kconfig-Stil
+                if patch_keys[key] == 'y':
+                    new_lines.append(f'{key}=y\n')
+                else:
+                    new_lines.append(f'# {key} is not set\n')
+                seen_keys.add(key)
+                continue
+        new_lines.append(line)
+    # 3. Fehlende Keys am Ende ergänzen
+    for key, val in patch_keys.items():
+        if key not in seen_keys:
+            if val == 'y':
+                new_lines.append(f'{key}=y\n')
+            else:
+                new_lines.append(f'# {key} is not set\n')
+    # 4. Schreibe neue .config
     with open(config_path, 'w') as f:
-        # Diskettenlaufwerke
-        for drv in BIOS_DRIVES:
-            for v in DRIVE_VALS:
-                key = f'CONFIG_DRIVE_{drv}_{v}'
-                if key in config:
-                    f.write(f'{key}={config[key]}\n')
-        # Hardwarevariante: nur schreiben, wenn in bios.mac gefunden
-        if found['cpu']:
-            for k, v in REVERSE_CPU_MAP.items():
-                f.write(f'CONFIG_CPU_{k}={"y" if cpu==k else "n"}\n')
-        if found['fdc']:
-            for k, v in REVERSE_FDC_MAP.items():
-                f.write(f'CONFIG_FDC_{k}={"y" if fdc==k else "n"}\n')
-        if found['crt']:
-            for k, v in REVERSE_CRT_MAP.items():
-                f.write(f'CONFIG_CRT_{k}={"y" if crt==k else "n"}\n')
-        if found['ramkb']:
-            for k, v in REVERSE_RAM_MAP.items():
-                f.write(f'CONFIG_RAM_{k}={"y" if ramkb==k else "n"}\n')
-        if found['dev']:
-            for k, v in REVERSE_DEV_MAP.items():
-                f.write(f'CONFIG_DEV_{k}={"y" if dev==k else "n"}\n')
-        if found['cpuclk']:
-            for k, v in REVERSE_CPUCLK_MAP.items():
-                f.write(f'CONFIG_CPUCLK_{k}={"y" if cpuclk==k else "n"}\n')
+        f.writelines(new_lines)
 
 
 def patch_bios_mac(bios_path, config_path):
@@ -162,30 +210,37 @@ def patch_bios_mac(bios_path, config_path):
                 cpuclk = CPUCLK_MAP.get('CPUCLK_' + m.group(1))
     # Patch bios.mac
     out = []
+    # Patterns for hardware config lines (preserve comments)
+    hw_patterns = {
+        'cpu':   (re.compile(r'^(cpu\s+equ\s+)(\w+)(.*)$', re.IGNORECASE), cpu),
+        'fdc':   (re.compile(r'^(fdc\s+equ\s+)(\w+)(.*)$', re.IGNORECASE), fdc),
+        'crt':   (re.compile(r'^(crt\s+equ\s+)(\w+)(.*)$', re.IGNORECASE), crt),
+        'ramkb': (re.compile(r'^(ramkb\s+equ\s+)(\w+)(.*)$', re.IGNORECASE), ramkb),
+        'dev':   (re.compile(r'^(dev\s+equ\s+)(\w+)(.*)$', re.IGNORECASE), dev),
+        'cpuclk':(re.compile(r'^(cpuclk\s+equ\s+)(\w+)(.*)$', re.IGNORECASE), cpuclk),
+    }
     with open(bios_path, 'r', newline='') as f:
         for line in f:
-            l = line.strip().lower()
-            m = BIOS_PATTERN.match(l)
-            if m:
-                drv = m.group(2)
-                val = chosen.get(drv, m.group(3))
-                out.append(f'disk{drv}\tequ\t{val}\r\n')
-            elif l.startswith('cpu\tequ') and cpu:
-                out.append(f'cpu\tequ\t{cpu}\r\n')
-            elif l.startswith('fdc\tequ') and fdc:
-                out.append(f'fdc\tequ\t{fdc}\r\n')
-            elif l.startswith('crt\tequ') and crt:
-                out.append(f'crt\tequ\t{crt}\r\n')
-            elif l.startswith('ramkb\tequ') and ramkb:
-                out.append(f'ramkb\tequ\t{ramkb}\r\n')
-            elif l.startswith('dev\tequ') and dev:
-                out.append(f'dev\tequ\t{dev}\r\n')
-            elif l.startswith('cpuclk\tequ') and cpuclk:
-                out.append(f'cpuclk\tequ\t{cpuclk}\r\n')
-            else:
-                # Stelle sicher, dass alle Zeilen mit CRLF enden
-                l2 = line.rstrip('\r\n')
-                out.append(l2 + '\r\n')
+            l = line.rstrip('\r\n')
+            # Robustly match diskA..diskD lines, preserving comments and formatting
+            m_drive = re.match(r'^(disk([A-D])\s+equ\s+)([0-9]+)(.*)$', l, re.IGNORECASE)
+            if m_drive:
+                drv = m_drive.group(2).upper()
+                orig_val = m_drive.group(3)
+                rest = m_drive.group(4)
+                # Use value from .config if present, else keep original
+                val = chosen.get(drv, orig_val)
+                out.append(f'{m_drive.group(1)}{val}{rest}\r\n')
+                continue
+            replaced = False
+            for key, (pat, value) in hw_patterns.items():
+                m_hw = pat.match(l)
+                if m_hw and value is not None:
+                    out.append(f"{m_hw.group(1)}{value}{m_hw.group(3)}\r\n")
+                    replaced = True
+                    break
+            if not replaced:
+                out.append(l + '\r\n')
     with open(bios_path, 'w', newline='') as f:
         f.writelines(out)
 

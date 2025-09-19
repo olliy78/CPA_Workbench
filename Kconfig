@@ -1,5 +1,18 @@
 
 
+
+# Systemtyp-Auswahl (ganz oben)
+menu "Systemtyp auswählen"
+choice
+  prompt "Systemtyp für Generierung"
+  default SYSTEM_BC
+  config SYSTEM_BC
+    bool "BC A5120 (Bürocomputer)"
+  config SYSTEM_PC
+    bool "PC 1715"
+endchoice
+endmenu
+
 menu "Hardwarevariante"
 
 choice

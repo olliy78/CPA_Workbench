@@ -32,8 +32,19 @@
 #   - Das Diskettenimage wird als build/cpadisk.img abgelegt
 # ------------------------------------------------------------------------------
 
-# Default TARGET ist BC (A5120)
-TARGET ?= BC
+
+# Default TARGET-Logik: Wenn kein explizites Target (BC/PC) übergeben wird,
+# lese aus .config (CONFIG_SYSTEM_BC/CONFIG_SYSTEM_PC), sonst BC.
+ifeq ($(origin TARGET), undefined)
+	ifeq (,$(filter BC PC,$(MAKECMDGOALS)))
+		ifeq (,$(wildcard .config))
+			TARGET := BC
+		else
+			SYSTEM_TARGET := $(shell grep '^CONFIG_SYSTEM_PC=y' .config >/dev/null && echo PC || echo BC)
+			TARGET := $(SYSTEM_TARGET)
+		endif
+	endif
+endif
 
 # Betriebssystem erkennen (für Wine unter Linux)
 OS := $(shell uname)
