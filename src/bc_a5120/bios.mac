@@ -128,10 +128,10 @@ k8915	equ	2 ;Hardware-Variante K8915
 ; Buerocomputer A5120/30
 ;=====================================================================
 dev	equ	oem
-cpu	equ	c1715
+cpu	equ	k2526
 cpuclk	equ	25	;Takt der CPU; 25 bei 2,5Mhz; 40 bei 4,0Mhz
-fdc	equ	f1715
-crt	equ	b1715
+fdc	equ	k5122
+crt	equ	k7024
 
 bsanf2	equ	0f800h		;Anfang Bildschirmpuffer BAB2
 bsanf1	equ	bsanf2+400h	;Anfang Bildschirmpuffer BAB1
