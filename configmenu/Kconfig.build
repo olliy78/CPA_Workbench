@@ -9,16 +9,28 @@ config HINT_BUILD
         Die Auswahl kann jederzeit geändert werden.
     default n
 
-menu "Build-Ausgabeformat wählen"
+
+
+
 config BUILD_OS
     bool "Nur @OS.COM bauen"
     help
         Erstellt nur das Betriebssystem (@OS.COM) im build/-Verzeichnis. Kein Diskettenimage, keine Ausgabe auf Diskette.
     default n
 config BUILD_DISKIMAGE
-    bool "Diskettenimage erzeugen"
+    bool "Diskettenimage als *.img erzeugen"
     help
         Erstellt nach dem Build ein Diskettenimage (build/cpadisk.img) mit dem neuen System.
+    default n
+config BUILD_DISKIMAGEHFE
+    bool "Diskettenimage als *.hfe erzeugen"
+    help
+        Erstellt nach dem Build ein Diskettenimage (build/cpadisk.hfe) mit dem neuen System.
+    default n
+config BUILD_DISKIMAGESCP
+    bool "Diskettenimage als *.scp erzeugen"
+    help
+        Erstellt nach dem Build ein Diskettenimage (build/cpadisk.scp) mit dem neuen System.
     default n
 config BUILD_WRITEIMAGE
     bool "Diskettenimage auf Laufwerk schreiben"
@@ -31,4 +43,23 @@ config BUILD_CLEAN
         Führt vor dem eigentlichen Build automatisch ein 'make clean' aus und entfernt alle temporären und erzeugten Dateien.
         Dies ist nützlich, um das Build-Verzeichnis komplett zurückzusetzen, bevor das gewünschte Build-Target gebaut wird.
     default y
+
+menu "Diskettenformat wählen"
+choice
+    prompt "Auswahl Diskettentyp"
+    default DISKTYPE_780K
+    help
+        Wähle den Diskettentyp für das erzeugte Image. Es muss genau eine Option gewählt werden.
+
+config DISKTYPE_780K
+    bool "780 kByte mit 3 System-Spuren und A5120 CP/A loader"
+    help
+        Format für A5120: 780 kByte, 3 Systemspuren, CP/A Bootloader.
+
+config DISKTYPE_800K
+    bool "800 kByte für PC 1715"
+    help
+        Format für PC 1715: 800 kByte, geeignet für PC 1715 Hardware.
+
+endchoice
 endmenu

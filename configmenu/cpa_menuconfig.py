@@ -206,11 +206,12 @@ def main():
         sys.exit(1)
     run_patch_bios_mac(bios_mac_path, config_file, "patch")
 
+
     # Menü 3: Build-Ausgabeformat
     run_menu(os.path.join("configmenu", "Kconfig.build"), config_file)
-    # Nach Menü 3: Build-Optionen mergen
+    # Nach Menü 3: Build- und Diskettenformat-Optionen mergen
     if os.path.exists(config_file+".old"):
-        merge_config(config_file+".old", config_file, ["CONFIG_BUILD_"])
+        merge_config(config_file+".old", config_file, ["CONFIG_BUILD_", "CONFIG_DISKTYPE_"])
         shutil.move(config_file+".old", config_file)
 
     # Build-Target aus .config auslesen

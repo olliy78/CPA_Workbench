@@ -33,11 +33,13 @@
 #     5. Wizard-ähnliche Navigation durch die Konfigurationsschritte
 #
 # Wichtige Targets:
-#   make config <target> - Baut das gewünschte Target (os, diskImage, ...) gemäß .config (empfohlen, reproduzierbar)
-#   make os              - Baut das Betriebssystem (@OS.COM) für das gewählte TARGET (Standard: BC, ggf. Warnung)
-#   make diskImage       - Erstellt das Diskettenimage im build/-Verzeichnis
-#   make writeImage      - Schreibt das Diskettenimage auf ein physikalisches Laufwerk
-#   make clean           - Entfernt temporäre und finale Dateien
+#   make config <target>      - Baut das gewünschte Target (os, diskImage, diskImage.hfe, diskImage.scp, ...) gemäß .config (empfohlen, reproduzierbar)
+#   make os                   - Baut das Betriebssystem (@OS.COM) für das gewählte TARGET (Standard: BC, ggf. Warnung)
+#   make diskImage            - Erstellt das Diskettenimage im build/-Verzeichnis (IMG-Format)
+#   make diskImage.hfe        - Erstellt ein HFE-Diskettenimage im build/-Verzeichnis
+#   make diskImage.scp        - Erstellt ein SCP-Diskettenimage im build/-Verzeichnis
+#   make writeImage           - Schreibt das Diskettenimage auf ein physikalisches Laufwerk
+#   make clean                - Entfernt temporäre und finale Dateien
 #
 # Systemvarianten:
 #   Der Name der Systemvariante entspricht dem Unterordner in src/<system> und prebuilt/<system>.
@@ -46,6 +48,8 @@
 # Beispiele:
 #   make config os                # Baut @os.com gemäß .config (empfohlen)
 #   make config diskImage         # Erstellt Diskettenimage gemäß .config
+#   make config diskImage.hfe     # Erstellt HFE-Image gemäß .config (wenn aktiviert)
+#   make config diskImage.scp     # Erstellt SCP-Image gemäß .config (wenn aktiviert)
 #   make config pc_1715 os        # Baut @os.com für pc_1715 (überschreibt .config)
 #   make pc_1715 os               # Baut @os.com für pc_1715
 #   make menuconfig               # Startet das Konfigurationsmenü
@@ -55,6 +59,7 @@
 #   - Der Bootsektor liegt in prebuilt/<systemvariante>/bootsec.bin
 #   - Das Systemfile @OS.COM wird im build/-Verzeichnis erzeugt
 #   - Das Diskettenimage wird als build/cpadisk.img abgelegt
+#   - HFE- und SCP-Images werden als build/cpadisk.hfe bzw. build/cpadisk.scp abgelegt (wenn aktiviert)
 #   - Die Konfiguration erfolgt über das Menü (menuconfig) und wird in .config gespeichert
 #   - Nach Änderung der Konfiguration sollte das System neu gebaut werden
 #   - Für reproduzierbare Builds immer 'make config <target>' verwenden!
@@ -77,7 +82,7 @@ ifeq ($(firstword $(MAKECMDGOALS)),config)
 	endif
 else
 	# make <system> <target> → Systemvariante ist erstes Argument, falls kein bekanntes Target
-	ifneq ($(filter-out os diskImage writeImage clean help all menuconfig,$(firstword $(MAKECMDGOALS))),)
+	ifneq ($(filter-out os diskImage diskImage.hfe diskImage.scp writeImage clean help all menuconfig,$(firstword $(MAKECMDGOALS))),)
 		SYSTEMVAR := $(firstword $(MAKECMDGOALS))
 		override MAKECMDGOALS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 	else
@@ -100,17 +105,27 @@ config:
 		echo "[INFO] Bitte gib ein Target an, z.B. 'make config os' oder 'make config diskImage'"; \
 		exit 1; \
 	fi; \
-	target=$(word 2,$(MAKECMDGOALS)); \
-	shift=1; \
-	if [ "$$target" = "PC" ] || [ "$$target" = "BC" ]; then \
-		target=$(word 3,$(MAKECMDGOALS)); shift=2; \
+	user_target=$(word 2,$(MAKECMDGOALS)); \
+	if [ "$$user_target" = "PC" ] || [ "$$user_target" = "BC" ]; then \
+		user_target=$(word 3,$(MAKECMDGOALS)); \
 	fi; \
-	if [ -z "$$target" ]; then \
-		echo "[INFO] Bitte gib ein Target an, z.B. 'make config os' oder 'make config diskImage'"; \
+	targets=""; \
+	if [ -n "$$user_target" ]; then \
+		targets="$$user_target"; \
+	fi; \
+	if [ -f .config ]; then \
+		grep -q '^CONFIG_BUILD_OS=y' .config && case " $$targets " in *" os "*) : ;; *) targets="$$targets os";; esac; \
+		grep -q '^CONFIG_BUILD_DISKIMAGE=y' .config && case " $$targets " in *" diskImage "*) : ;; *) targets="$$targets diskImage";; esac; \
+		grep -q '^CONFIG_BUILD_WRITEIMAGE=y' .config && case " $$targets " in *" writeImage "*) : ;; *) targets="$$targets writeImage";; esac; \
+		grep -q '^CONFIG_BUILD_DISKIMAGEHFE=y' .config && case " $$targets " in *" diskImage.hfe "*) : ;; *) targets="$$targets diskImage.hfe";; esac; \
+		grep -q '^CONFIG_BUILD_DISKIMAGESCP=y' .config && case " $$targets " in *" diskImage.scp "*) : ;; *) targets="$$targets diskImage.scp";; esac; \
+	fi; \
+	if [ -z "$$targets" ]; then \
+		echo "[INFO] Keine Build-Ziele in .config gefunden und kein Target angegeben."; \
 		exit 1; \
 	fi; \
-	echo "[INFO] Baue explizit mit Konfiguration aus .config: Target='$$target'"; \
-	exec $(MAKE) FROM_CONFIG=1 $$target;
+	echo "[INFO] Baue explizit mit Konfiguration aus .config: Targets='$$targets'"; \
+	exec $(MAKE) FROM_CONFIG=1 $$targets;
 
 # Warnung bei direktem Aufruf ohne config (aber nicht aus config-Target oder Wrapper heraus)
 ifeq ($(FROM_CONFIG)$(FROM_WRAPPER),)
@@ -147,6 +162,8 @@ endif
 # Systemdisk-Image-Konfiguration
 TMP_IMAGE = $(BUILD_DIR)/cpadisk.img.tmp
 FINAL_IMAGE = $(BUILD_DIR)/cpadisk.img
+HFE_IMAGE = $(BUILD_DIR)/cpadisk.hfe
+SCP_IMAGE = $(BUILD_DIR)/cpadisk.scp
 SYSTEMNAME = 0:@os.com
 ADDITIONS_DIR = additions
 CPMCP = $(TOOLS_DIR)/cpmcp
@@ -180,16 +197,18 @@ menuconfig:
 all: help
 
 # Hilfe-Target
-help:
+	help:
 	@echo "Verfügbare Targets für das CP/A-Projekt:"
-	@echo "  make config <target>     - Baut das gewünschte Target (os, diskImage, ...) gemäß .config (empfohlen, reproduzierbar)"
-	@echo "  make <system> <target>   - Baut für die angegebene Systemvariante (z.B. make pc_1715 os)"
-	@echo "  make os                  - Baut das Betriebssystem (@os.com) für die Standard-Variante ($(DEFAULT_SYSTEMVAR))"
-	@echo "  make diskImage           - Erstellt das Diskettenimage im build/-Verzeichnis"
-	@echo "  make writeImage          - Schreibt das Diskettenimage auf ein physikalisches Laufwerk"
-	@echo "  make clean               - Entfernt temporäre und finale Dateien"
-	@echo "  make menuconfig          - Startet das mehrstufige Konfigurationsmenü (Systemtyp, Hardware, Build-Optionen)"
-	@echo "  make help                - Zeigt diese Hilfe an"
+	@echo "  make config <target>      - Baut das gewünschte Target (os, diskImage, diskImage.hfe, diskImage.scp, ...) gemäß .config (empfohlen, reproduzierbar)"
+	@echo "  make <system> <target>    - Baut für die angegebene Systemvariante (z.B. make pc_1715 os)"
+	@echo "  make os                   - Baut das Betriebssystem (@os.com) für die Standard-Variante ($(DEFAULT_SYSTEMVAR))"
+	@echo "  make diskImage            - Erstellt das Diskettenimage im build/-Verzeichnis (IMG-Format)"
+	@echo "  make diskImage.hfe        - Erstellt ein HFE-Diskettenimage im build/-Verzeichnis"
+	@echo "  make diskImage.scp        - Erstellt ein SCP-Diskettenimage im build/-Verzeichnis"
+	@echo "  make writeImage           - Schreibt das Diskettenimage auf ein physikalisches Laufwerk"
+	@echo "  make clean                - Entfernt temporäre und finale Dateien"
+	@echo "  make menuconfig           - Startet das mehrstufige Konfigurationsmenü (Systemtyp, Hardware, Build-Optionen)"
+	@echo "  make help                 - Zeigt diese Hilfe an"
 	@echo ""
 	@echo "Hinweis: Wenn du nicht das Menü oder die .config verwenden möchtest, setze die Zeile DEFAULT_SYSTEMVAR := <dein_systemname> am Anfang dieses Makefiles."
 	@echo "Die verwendeten Ordner leiten sich direkt vom Namen der Systemvariante ab:"
@@ -206,6 +225,8 @@ help:
 	@echo "Beispiele:"
 	@echo "  make config os                # Baut @os.com gemäß .config (empfohlen)"
 	@echo "  make config diskImage         # Erstellt Diskettenimage gemäß .config"
+	@echo "  make config diskImage.hfe     # Erstellt HFE-Image gemäß .config (wenn aktiviert)"
+	@echo "  make config diskImage.scp     # Erstellt SCP-Image gemäß .config (wenn aktiviert)"
 	@echo "  make config pc_1715 os        # Baut @os.com für pc_1715 (überschreibt .config)"
 	@echo "  make pc_1715 os               # Baut @os.com für pc_1715"
 	@echo "  make menuconfig               # Startet das Konfigurationsmenü"
@@ -241,7 +262,7 @@ $(OS_TARGET): $(SRC_DIR)/bios.mac $(PREBUILT_DIR)/bdos.erl $(PREBUILT_DIR)/ccp.e
 
 # Diskettenimage erzeugen
 diskImage: .config $(FINAL_IMAGE)
-	@echo "[INFO] Target 'diskImage' abgeschlossen. Diskettenimage ist bereit für TARGET=$(TARGET)."
+	@echo "[INFO] Target 'diskImage' abgeschlossen."
 
 # Image bauen: Abhängigkeit von OS und Bootsektor
 $(FINAL_IMAGE): $(BOOTSECTOR) $(OS_TARGET)
@@ -263,6 +284,26 @@ $(FINAL_IMAGE): $(BOOTSECTOR) $(OS_TARGET)
 	(dd if=$(BOOTSECTOR) bs=128 2>/dev/null; dd if=$(TMP_IMAGE) bs=1024 2>/dev/null) > $(FINAL_IMAGE)
 	rm -f $(TMP_IMAGE)
 	@echo "[DONE] Diskettenimage erstellt: $(FINAL_IMAGE)"
+
+# Diskettenimage im HFE-Format erzeugen
+diskImage.hfe: .config $(HFE_IMAGE)
+	@echo "[INFO] Target 'diskImage.hfe' abgeschlossen."
+
+# Diskettenimage im SCP-Format erzeugen
+diskImage.scp: .config $(SCP_IMAGE)
+	@echo "[INFO] Target 'diskImage.scp' abgeschlossen."
+
+# Regel für HFE-Image
+$(HFE_IMAGE): $(FINAL_IMAGE)
+	@echo "[STEP] Konvertiere $(FINAL_IMAGE) nach $(HFE_IMAGE) (Format: HFE)"
+	$(GW) convert --diskdefs=$(CFG) --format=$(FORMAT) $(FINAL_IMAGE) $(HFE_IMAGE)
+	@echo "[DONE] HFE-Image erstellt: $(HFE_IMAGE)"
+
+# Regel für SCP-Image
+$(SCP_IMAGE): $(FINAL_IMAGE)
+	@echo "[STEP] Konvertiere $(FINAL_IMAGE) nach $(SCP_IMAGE) (Format: SCP)"
+	$(GW) convert --diskdefs=$(CFG) --format=$(FORMAT) $(FINAL_IMAGE) $(SCP_IMAGE)
+	@echo "[DONE] SCP-Image erstellt: $(SCP_IMAGE)"
 
 # Diskettenimage auf physikalisches Laufwerk schreiben
 writeImage: .config $(FINAL_IMAGE)
