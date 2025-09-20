@@ -1,11 +1,24 @@
-
 # ------------------------------------------------------------------------------
 # Makefile für das CP/A BIOS-Projekt und die Systemdisketten-Erstellung
 # ------------------------------------------------------------------------------
 #
 # Dieses Makefile steuert den Bau des CP/A-Betriebssystems (@OS.COM) und die
-# Erstellung eines CP/M-kompatiblen Systemdisketten-Images. Es unterstützt die
-# Varianten BC (A5120) und PC (PC1715) und bietet flexible Targets für beide.
+# Erstellung eines CP/M-kompatiblen Systemdisketten-Images. Es unterstützt beliebige
+# Systemvarianten, die als Unterordner in src/<systemvariante> und prebuilt/<systemvariante> existieren.
+#
+# WICHTIG: Wenn du NICHT das Konfigurationsmenü oder die .config verwenden möchtest,
+# kannst du die Zeile
+#   DEFAULT_SYSTEMVAR := <dein_systemname>
+# am Anfang dieses Makefiles anpassen, um die gewünschte Systemvariante festzulegen.
+# Beispiel: DEFAULT_SYSTEMVAR := pc_1715
+#
+# Die Namen der verwendeten Ordner leiten sich direkt vom Namen der Systemvariante ab:
+#   - Quelltexte:      src/<systemvariante> (z.B. src/pc_1715)
+#   - Prebuilt-Files:  prebuilt/<systemvariante> (z.B. prebuilt/pc_1715)
+#   - Bootsektor:      prebuilt/<systemvariante>/bootsec.bin
+#
+# Das Buildsystem verwendet diese Ordner automatisch, sobald du z.B. 'make pc_1715 os' aufrufst
+# oder DEFAULT_SYSTEMVAR entsprechend setzt.
 #
 # Konfigurationsmenü:
 #   make menuconfig   - Startet das mehrstufige Konfigurationsmenü für Systemtyp,
@@ -26,21 +39,20 @@
 #   make writeImage      - Schreibt das Diskettenimage auf ein physikalisches Laufwerk
 #   make clean           - Entfernt temporäre und finale Dateien
 #
-# TARGET-Auswahl:
-#   Standard ist BC (A5120). Für PC1715: make config PC os, make config PC diskImage, ...
-#   Alternativ: make TARGET=PC os (nicht empfohlen)
+# Systemvarianten:
+#   Der Name der Systemvariante entspricht dem Unterordner in src/<system> und prebuilt/<system>.
+#   Beispiel: make pc_1715 os verwendet src/pc_1715 und prebuilt/pc_1715.
 #
 # Beispiele:
-#   make config os                # Baut @OS.COM gemäß .config (empfohlen)
+#   make config os                # Baut @os.com gemäß .config (empfohlen)
 #   make config diskImage         # Erstellt Diskettenimage gemäß .config
-#   make config PC os             # Baut @OS.COM für PC1715 (überschreibt .config)
-#   make os                      # Baut @OS.COM für BC (A5120), ggf. Warnung
-#   make PC os                   # Baut @OS.COM für PC1715, ggf. Warnung
-#   make menuconfig              # Startet das Konfigurationsmenü
+#   make config pc_1715 os        # Baut @os.com für pc_1715 (überschreibt .config)
+#   make pc_1715 os               # Baut @os.com für pc_1715
+#   make menuconfig               # Startet das Konfigurationsmenü
 #
 # Hinweise:
-#   - Die Quelltexte für BC liegen in src/bc_a5120, für PC in src/pc_1715
-#   - Der Bootsektor liegt in src/boot_sector/bootsecBC.bin bzw. bootsecPC.bin
+#   - Die Quelltexte liegen in src/<systemvariante> (z.B. src/pc_1715)
+#   - Der Bootsektor liegt in prebuilt/<systemvariante>/bootsec.bin
 #   - Das Systemfile @OS.COM wird im build/-Verzeichnis erzeugt
 #   - Das Diskettenimage wird als build/cpadisk.img abgelegt
 #   - Die Konfiguration erfolgt über das Menü (menuconfig) und wird in .config gespeichert
@@ -48,15 +60,37 @@
 #   - Für reproduzierbare Builds immer 'make config <target>' verwenden!
 # ------------------------------------------------------------------------------
 
+# Zentraler Default für Systemvariante (wird überall als Fallback verwendet)
+DEFAULT_SYSTEMVAR := pc_1715
 
-# TARGET immer aus .config bestimmen, wenn vorhanden
-ifeq ($(wildcard .config),)
-TARGET := BC
+# SYSTEMVAR: Name der Systemvariante (z.B. bc_a5120, pc_1715, ...)
+SYSTEMVAR :=
+ifeq ($(firstword $(MAKECMDGOALS)),config)
+	# make config <system> <target> → Systemvariante aus .config lesen
+	ifeq ($(wildcard .config),)
+		SYSTEMVAR := $(DEFAULT_SYSTEMVAR)
+	else
+		SYSTEMVAR := $(shell awk -F'CONFIG_SYSTEM_' '/^CONFIG_SYSTEM_/ && $$2 ~ /=y/ {sub(/=y/,"",$$2); print tolower($$2)}' .config | head -1)
+		ifeq ($(SYSTEMVAR),)
+			SYSTEMVAR := $(DEFAULT_SYSTEMVAR)
+		endif
+	endif
 else
-TARGET := $(shell \
-	if grep -q '^CONFIG_SYSTEM_PC_1715=y' .config; then echo PC; \
-	elif grep -q '^CONFIG_SYSTEM_PC_1715_870330=y' .config; then echo PC; \
-	else echo BC; fi)
+	# make <system> <target> → Systemvariante ist erstes Argument, falls kein bekanntes Target
+	ifneq ($(filter-out os diskImage writeImage clean help all menuconfig,$(firstword $(MAKECMDGOALS))),)
+		SYSTEMVAR := $(firstword $(MAKECMDGOALS))
+		override MAKECMDGOALS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+	else
+		# Fallback: aus .config
+		ifeq ($(wildcard .config),)
+			SYSTEMVAR := $(DEFAULT_SYSTEMVAR)
+		else
+			SYSTEMVAR := $(shell awk -F'CONFIG_SYSTEM_' '/^CONFIG_SYSTEM_/ && $$2 ~ /=y/ {sub(/=y/,"",$$2); print tolower($$2)}' .config | head -1)
+			ifeq ($(SYSTEMVAR),)
+				SYSTEMVAR := $(DEFAULT_SYSTEMVAR)
+			endif
+		endif
+	endif
 endif
 
 # Konfigurations-Wrapper: explizit aus .config bauen
@@ -82,7 +116,7 @@ config:
 ifeq ($(FROM_CONFIG)$(FROM_WRAPPER),)
 ifneq ($(MAKECMDGOALS),)
 ifneq ($(firstword $(MAKECMDGOALS)),config)
-$(info [WARNUNG] Du hast 'make $(MAKECMDGOALS)' direkt aufgerufen. Das Build-Ergebnis kann von der aktuellen .config abweichen. Für reproduzierbare Builds verwende bitte 'make config $(MAKECMDGOALS)')
+$(info [WARNUNG] Du hast 'make $(MAKECMDGOALS)' aufgerufen.)
 endif
 endif
 endif
@@ -95,16 +129,10 @@ CPMEXE = cpm.exe
 BUILD_DIR = build
 # Verzeichnis mit Build-Tools (z.B. m80.com, linkmt.com)
 TOOLS_DIR = tools
-# Verzeichnisse je nach TARGET
-ifeq ($(TARGET),PC)
-SRC_DIR = src/pc_1715
-PREBUILT_DIR = prebuilt/pc_1715
-BOOTSECTOR = src/boot_sector/bootsecPC.bin
-else
-SRC_DIR = src/bc_a5120
-PREBUILT_DIR = prebuilt/bc_a5120
-BOOTSECTOR = src/boot_sector/bootsecBC.bin
-endif
+# Quell- und Prebuilt-Verzeichnisse dynamisch
+SRC_DIR = src/$(SYSTEMVAR)
+PREBUILT_DIR = prebuilt/$(SYSTEMVAR)
+BOOTSECTOR = prebuilt/$(SYSTEMVAR)/bootsec.bin
 
 # Name und Pfad der Zieldatei
 OS_TARGET = $(BUILD_DIR)/@os.com
@@ -126,30 +154,18 @@ CPMLS = $(TOOLS_DIR)/cpmls
 GW = gw
 CFG = cpaFormates.cfg
 
-ifeq ($(TARGET),PC)
-	DISKDEF = cpa800_withoutBoot
-	FORMAT = cpa800
-	IMAGE_SIZE = 800
+# Disk-Image-Parameter je nach Systemvariante (Beispiel: pc_1715 = 800K, sonst 780K)
+ifeq ($(SYSTEMVAR),pc_1715)
+  DISKDEF = cpa800_withoutBoot
+  FORMAT = cpa800
+  IMAGE_SIZE = 800
 else
-	DISKDEF = cpa780_withoutBoot
-	FORMAT = cpa780
-	IMAGE_SIZE = 780
+  DISKDEF = cpa780_withoutBoot
+  FORMAT = cpa780
+  IMAGE_SIZE = 780
 endif
 
-# Targets für TARGET-Auswahl
-.PHONY: BC PC
-BC:
-			 @if [ "$(filter-out BC PC,$(MAKECMDGOALS))" = "" ]; then \
-				 $(MAKE) help; \
-			 else \
-				 $(MAKE) FROM_WRAPPER=1 TARGET=BC $(filter-out BC PC,$(MAKECMDGOALS)); \
-			 fi
-PC:
-			 @if [ "$(filter-out BC PC,$(MAKECMDGOALS))" = "" ]; then \
-				 $(MAKE) help; \
-			 else \
-				 $(MAKE) FROM_WRAPPER=1 TARGET=PC $(filter-out BC PC,$(MAKECMDGOALS)); \
-			 fi
+# Keine expliziten Targets für Systemvarianten mehr nötig
 
 # menuconfig: Wrapper für den mehrstufigen Konfigurationsprozess
 .PHONY: menuconfig
@@ -166,15 +182,20 @@ all: help
 # Hilfe-Target
 help:
 	@echo "Verfügbare Targets für das CP/A-Projekt:"
-	@echo "  make config <target> - Baut das gewünschte Target (os, diskImage, ...) gemäß .config (empfohlen, reproduzierbar)"
-	@echo "  make os              - Baut das Betriebssystem (@OS.COM) für das gewählte TARGET (Standard: BC, ggf. Warnung)"
-	@echo "  make diskImage       - Erstellt das Diskettenimage im build/-Verzeichnis"
-	@echo "  make writeImage      - Schreibt das Diskettenimage auf ein physikalisches Laufwerk"
-	@echo "  make clean           - Entfernt temporäre und finale Dateien"
-	@echo "  make BC <target>     - Baut für BC (A5120) (z.B. make BC os)"
-	@echo "  make PC <target>     - Baut für PC (PC1715) (z.B. make PC os)"
-	@echo "  make menuconfig      - Startet das mehrstufige Konfigurationsmenü (Systemtyp, Hardware, Build-Optionen)"
-	@echo "  make help            - Zeigt diese Hilfe an"
+	@echo "  make config <target>     - Baut das gewünschte Target (os, diskImage, ...) gemäß .config (empfohlen, reproduzierbar)"
+	@echo "  make <system> <target>   - Baut für die angegebene Systemvariante (z.B. make pc_1715 os)"
+	@echo "  make os                  - Baut das Betriebssystem (@os.com) für die Standard-Variante ($(DEFAULT_SYSTEMVAR))"
+	@echo "  make diskImage           - Erstellt das Diskettenimage im build/-Verzeichnis"
+	@echo "  make writeImage          - Schreibt das Diskettenimage auf ein physikalisches Laufwerk"
+	@echo "  make clean               - Entfernt temporäre und finale Dateien"
+	@echo "  make menuconfig          - Startet das mehrstufige Konfigurationsmenü (Systemtyp, Hardware, Build-Optionen)"
+	@echo "  make help                - Zeigt diese Hilfe an"
+	@echo ""
+	@echo "Hinweis: Wenn du nicht das Menü oder die .config verwenden möchtest, setze die Zeile DEFAULT_SYSTEMVAR := <dein_systemname> am Anfang dieses Makefiles."
+	@echo "Die verwendeten Ordner leiten sich direkt vom Namen der Systemvariante ab:"
+	@echo "  - Quelltexte:      src/<systemvariante> (z.B. src/pc_1715)"
+	@echo "  - Prebuilt-Files:  prebuilt/<systemvariante> (z.B. prebuilt/pc_1715)"
+	@echo "  - Bootsektor:      prebuilt/<systemvariante>/bootsec.bin"
 	@echo ""
 	@echo "Konfigurationsmenü (menuconfig):"
 	@echo "  - Interaktives Menü zur Auswahl von Systemtyp, Hardware und Build-Optionen"
@@ -185,10 +206,9 @@ help:
 	@echo "Beispiele:"
 	@echo "  make config os                # Baut @os.com gemäß .config (empfohlen)"
 	@echo "  make config diskImage         # Erstellt Diskettenimage gemäß .config"
-	@echo "  make config PC os             # Baut @OS.COM für PC1715 (überschreibt .config)"
-	@echo "  make os                      # Baut @os.com für BC (A5120), ggf. Warnung"
-	@echo "  make PC os                   # Baut @os.com für PC1715, ggf. Warnung"
-	@echo "  make menuconfig              # Startet das Konfigurationsmenü"
+	@echo "  make config pc_1715 os        # Baut @os.com für pc_1715 (überschreibt .config)"
+	@echo "  make pc_1715 os               # Baut @os.com für pc_1715"
+	@echo "  make menuconfig               # Startet das Konfigurationsmenü"
 	@echo ""
 	@echo "[HINWEIS] Für reproduzierbare Builds immer 'make config <target>' verwenden!"
 

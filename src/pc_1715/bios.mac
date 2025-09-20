@@ -167,7 +167,7 @@ oss	equ	0	;keine OSS-Karte unterstuetzt
 ; rungskarte getestet. Bei vorhandener EM256 wird beim Kaltstart
 ; die RAM-Floppy eingerichtet.
 ;
-em256	equ	0	;=0 ,wenn keine 16-Bit-Erweiterung
+em256	equ	1	;=0 ,wenn keine 16-Bit-Erweiterung
 			;=1 ,wenn 16-Bit-Erweiterung vorhanden
 	IF 	em256
 biosln	aset	biosln+2a0h

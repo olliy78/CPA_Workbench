@@ -26,9 +26,9 @@ config BUILD_WRITEIMAGE
         Schreibt nach dem Build das Diskettenimage direkt auf ein physikalisches Laufwerk (z.B. mit gw).
     default n
 config BUILD_CLEAN
-    bool "Aufräumen (clean) ausführen"
+    bool "Aufräumen (clean) vor dem Build durchführen"
     help
-        Führt ein 'make clean' aus und entfernt alle temporären und erzeugten Dateien.
-        Dies ist nützlich, um das Build-Verzeichnis komplett zurückzusetzen.
-    default n
+        Führt vor dem eigentlichen Build automatisch ein 'make clean' aus und entfernt alle temporären und erzeugten Dateien.
+        Dies ist nützlich, um das Build-Verzeichnis komplett zurückzusetzen, bevor das gewünschte Build-Target gebaut wird.
+    default y
 endmenu

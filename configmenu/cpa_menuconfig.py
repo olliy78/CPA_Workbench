@@ -60,6 +60,18 @@ def run_patch_bios_mac(bios_mac_path, config_file, mode):
 def run_build(target):
     """Starte den Build-Prozess mit make <target>."""
     try:
+        # Prüfe, ob BUILD_CLEAN aktiv ist
+        clean_first = False
+        config_file = ".config"
+        if os.path.exists(config_file):
+            with open(config_file) as f:
+                for line in f:
+                    if line.strip() == "CONFIG_BUILD_CLEAN=y":
+                        clean_first = True
+                        break
+        if clean_first:
+            print("[INFO] Führe vor dem Build: make clean aus...")
+            subprocess.run(["make", "clean"], check=True)
         cmd = ["make", "config", target]
         print(f"[DEBUG] Starte Build mit: {' '.join(cmd)}")
         subprocess.run(cmd, check=True)
