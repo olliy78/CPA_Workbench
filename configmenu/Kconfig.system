@@ -1,4 +1,4 @@
-# Kconfig für Systemtyp-Auswahl
+# Kconfig für Auswahl Systemvariante
 mainmenu "CP/A System Konfiguration - Auswahl der zu verwendenden Variante [? für Hilfe]"
 config HINT_INFO
     bool "=== Hinweise zur Konfiguration [? für Hilfe] ==="
@@ -9,25 +9,23 @@ config HINT_INFO
     default n
 menu "Systemtyp auswählen"
 choice
-    prompt "Systemtyp"
-    default SYSTEM_BC_A5120
+    prompt "Systemvariante"
+    default SYSTEM_bc_a5120
     help
-        Aktuell sind folgende Systemvarianten hinterlegt:
-        A5120 (BC) - Angeblich vom 25.09.89 - Läuft auf dem BC Vermutlich auch auf PC1715, CP/D und K8915
-        PC1715 (PC) - Angeblich vom 24.05.88 - Titel: BIOS CP/A fuer PC1715
-        PC1715 (870330) - Angeblich vom 30.03.87 
-config SYSTEM_BC_A5120
-    bool "A5120 (BC)"
+        Mit [?] kann zu jeder Systemvariante der Inhalt der about.txt Datei
+        aus dem jeweiligen src Ordner angezeigt werden.
+config SYSTEM_bc_a5120
+    bool "bc_a5120"
     help
-        A5120 (BC) - Angeblich vom 25.09.89 - Läuft auf dem BC Vermutlich auch auf PC1715, CP/D und K8915
-config SYSTEM_PC_1715
-    bool "PC1715 (PC)"
+        Angeblich vom 25.09.89 - Läuft auf dem BC Vermutlich auch auf PC1715, CP/D und K8915
+config SYSTEM_pc_1715
+    bool "pc_1715"
     help
-        PC1715 (PC) - Angeblich vom 24.05.88 - Titel: BIOS CP/A fuer PC1715
-config SYSTEM_PC_1715_870330
-    bool "PC1715 (870330)"
+        Angeblich vom 24.05.88 - Titel: BIOS CP/A fuer PC1715
+config SYSTEM_pc_1715_870330
+    bool "pc_1715_870330"
     help
-        PC1715 (870330) - Angeblich vom 30.03.87 
+        Angeblich vom 30.03.87
 endchoice
 
 endmenu

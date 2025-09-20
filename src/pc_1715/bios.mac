@@ -486,8 +486,8 @@ biosln	aset	biosln+70h
 ; 10877		DD, SS, 8", 77 Tracks (z.B. K5602.10, MF6400))
 ; 0		nicht ex. (immer am Ende!)
 
-diskA	equ	11580
-diskB	equ	11580
+diskA	equ	10877
+diskB	equ	10877
 diskC	equ	0
 diskD	equ	0
 

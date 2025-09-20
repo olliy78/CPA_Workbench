@@ -631,9 +631,9 @@ biosln	aset	biosln+70h
 ;diskC	equ	13580
 ;diskD	equ	0
 
-diskA	equ	11580
+diskA	equ	00877
 diskB	equ	11580
-diskC	equ	0
+diskC	equ	11580
 diskD	equ	0
 
 ; Es wird eine automatische Formaterkennung fuer gaengige CP/M-
@@ -1582,3 +1582,107 @@ uc1i	equ	dumi
 biosce: ;Code-Ende fuer BIOS
 
 	END
+CONFIG_DRIVE_A_10540=y
+# CONFIG_DRIVE_A_10580 is not set
+# CONFIG_DRIVE_A_11580 is not set
+# CONFIG_DRIVE_A_00877 is not set
+# CONFIG_DRIVE_A_10877 is not set
+# CONFIG_DRIVE_A_0 is not set
+CONFIG_DRIVE_B_10540=y
+# CONFIG_DRIVE_B_10580 is not set
+# CONFIG_DRIVE_B_11580 is not set
+# CONFIG_DRIVE_B_00877 is not set
+# CONFIG_DRIVE_B_10877 is not set
+# CONFIG_DRIVE_B_0 is not set
+CONFIG_DRIVE_C_10540=y
+# CONFIG_DRIVE_C_10580 is not set
+# CONFIG_DRIVE_C_11580 is not set
+# CONFIG_DRIVE_C_00877 is not set
+# CONFIG_DRIVE_C_10877 is not set
+# CONFIG_DRIVE_C_0 is not set
+# CONFIG_DRIVE_D_10540 is not set
+# CONFIG_DRIVE_D_10580 is not set
+# CONFIG_DRIVE_D_11580 is not set
+# CONFIG_DRIVE_D_00877 is not set
+# CONFIG_DRIVE_D_10877 is not set
+CONFIG_DRIVE_D_0=y
+# CONFIG_CPU_k2521 is not set
+CONFIG_CPU_k2526=y
+# CONFIG_CPU_c1715 is not set
+# CONFIG_FDC_k5120 is not set
+CONFIG_FDC_k5122=y
+# CONFIG_FDC_k5126 is not set
+# CONFIG_FDC_f1715 is not set
+# CONFIG_FDC_fdc3 is not set
+CONFIG_CRT_k7024=y
+# CONFIG_CRT_dsy5 is not set
+# CONFIG_CRT_b1715 is not set
+CONFIG_RAM_64=y
+# CONFIG_RAM_32 is not set
+CONFIG_DEV_oem=y
+# CONFIG_DEV_cpd is not set
+# CONFIG_DEV_k8915 is not set
+CONFIG_CPUCLK_25=y
+# CONFIG_CPUCLK_40 is not set
+CONFIG_RAMDISK_NONE=y
+# CONFIG_RAMDISK_OSS is not set
+# CONFIG_RAMDISK_EM256 is not set
+# CONFIG_RAMDISK_MKD256 is not set
+# CONFIG_RAMDISK_RAF is not set
+# CONFIG_RAMDISK_NANOS is not set
+# CONFIG_CPU_k2521 is not set
+CONFIG_CPU_k2526=y
+# CONFIG_CPU_c1715 is not set
+# CONFIG_FDC_k5120 is not set
+CONFIG_FDC_k5122=y
+# CONFIG_FDC_k5126 is not set
+# CONFIG_FDC_f1715 is not set
+# CONFIG_FDC_fdc3 is not set
+CONFIG_CRT_k7024=y
+# CONFIG_CRT_dsy5 is not set
+# CONFIG_CRT_b1715 is not set
+CONFIG_DEV_oem=y
+# CONFIG_DEV_cpd is not set
+# CONFIG_DEV_k8915 is not set
+# CONFIG_CPU_k2521 is not set
+CONFIG_CPU_k2526=y
+# CONFIG_CPU_c1715 is not set
+# CONFIG_FDC_k5120 is not set
+CONFIG_FDC_k5122=y
+# CONFIG_FDC_k5126 is not set
+# CONFIG_FDC_f1715 is not set
+# CONFIG_FDC_fdc3 is not set
+CONFIG_CRT_k7024=y
+# CONFIG_CRT_dsy5 is not set
+# CONFIG_CRT_b1715 is not set
+CONFIG_DEV_oem=y
+# CONFIG_DEV_cpd is not set
+# CONFIG_DEV_k8915 is not set
+# CONFIG_CPU_k2521 is not set
+CONFIG_CPU_k2526=y
+# CONFIG_CPU_c1715 is not set
+# CONFIG_FDC_k5120 is not set
+CONFIG_FDC_k5122=y
+# CONFIG_FDC_k5126 is not set
+# CONFIG_FDC_f1715 is not set
+# CONFIG_FDC_fdc3 is not set
+CONFIG_CRT_k7024=y
+# CONFIG_CRT_dsy5 is not set
+# CONFIG_CRT_b1715 is not set
+CONFIG_DEV_oem=y
+# CONFIG_DEV_cpd is not set
+# CONFIG_DEV_k8915 is not set
+# CONFIG_CPU_k2521 is not set
+CONFIG_CPU_k2526=y
+# CONFIG_CPU_c1715 is not set
+# CONFIG_FDC_k5120 is not set
+CONFIG_FDC_k5122=y
+# CONFIG_FDC_k5126 is not set
+# CONFIG_FDC_f1715 is not set
+# CONFIG_FDC_fdc3 is not set
+CONFIG_CRT_k7024=y
+# CONFIG_CRT_dsy5 is not set
+# CONFIG_CRT_b1715 is not set
+CONFIG_DEV_oem=y
+# CONFIG_DEV_cpd is not set
+# CONFIG_DEV_k8915 is not set
