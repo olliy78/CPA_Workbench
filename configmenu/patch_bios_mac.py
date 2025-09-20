@@ -28,6 +28,7 @@ CONFIG_CHOICES = {
 }
 BIOS_PATTERN = re.compile(r'^(disk([A-D])\s+equ\s+)([0-9]+)$')
 
+
 # Hardwarevariante: Mapping für Kconfig <-> bios.mac
 CPU_MAP = {
     'CPU_K2521': 'k2521',
@@ -59,6 +60,15 @@ CPUCLK_MAP = {
     'CPUCLK_25': '25',
     'CPUCLK_40': '40',
 }
+# Mapping für RAM-Disk-Optionen (Kconfig -> bios.mac)
+RAMDISK_MAP = {
+    'RAMDISK_NONE':  {'oss': '0', 'em256': '0', 'mkd256': '0', 'raf': '0', 'rna': '0'},
+    'RAMDISK_OSS':   {'oss': '1', 'em256': '0', 'mkd256': '0', 'raf': '0', 'rna': '0'},
+    'RAMDISK_EM256': {'oss': '0', 'em256': '1', 'mkd256': '0', 'raf': '0', 'rna': '0'},
+    'RAMDISK_MKD256':{'oss': '0', 'em256': '0', 'mkd256': '1', 'raf': '0', 'rna': '0'},
+    'RAMDISK_RAF':   {'oss': '0', 'em256': '0', 'mkd256': '0', 'raf': '1', 'rna': '0'},
+    'RAMDISK_NANOS': {'oss': '0', 'em256': '0', 'mkd256': '0', 'raf': '0', 'rna': '1'},
+}
 REVERSE_CPU_MAP = {v: k for k, v in CPU_MAP.items()}
 REVERSE_FDC_MAP = {v: k for k, v in FDC_MAP.items()}
 REVERSE_CRT_MAP = {v: k for k, v in CRT_MAP.items()}
@@ -71,11 +81,18 @@ def extract_bios_config(bios_path, config_path):
     """Liest bios.mac und schreibt .config mit aktuellen Einstellungen"""
     config = {}
     cpu = fdc = crt = ramkb = dev = cpuclk = None
+    # RAM-Disk: Werte initialisieren
+    ramdisk_vals = {'oss': None, 'em256': None, 'mkd256': None, 'raf': None, 'rna': None}
     found = { 'cpu': False, 'fdc': False, 'crt': False, 'ramkb': False, 'dev': False, 'cpuclk': False }
     with open(bios_path) as f:
         for line in f:
             # Kommentar abtrennen (alles nach einem Semikolon ignorieren)
             line_nocomment = line.split(';', 1)[0].strip()
+            # --- RAM-Disk-Parameter extrahieren ---
+            for ramkey in ramdisk_vals.keys():
+                m_ram = re.match(rf'^{ramkey}\s+equ\s+(\w+)', line_nocomment, re.IGNORECASE)
+                if m_ram:
+                    ramdisk_vals[ramkey] = m_ram.group(1)
 
             # --- Laufwerkskonfiguration extrahieren ---
             # Erkenne Zeilen wie: diskA equ 10540 (beliebige Leerzeichen/Tabs)
@@ -147,6 +164,19 @@ def extract_bios_config(bios_path, config_path):
         for k, v in REVERSE_CPUCLK_MAP.items():
             patch_keys[f'CONFIG_CPUCLK_{k}'.upper()] = 'y' if cpuclk == k else 'n'
 
+    # RAM-Disk: Aus bios.mac extrahieren und Mapping auf CONFIG_RAMDISK_*
+    # Nur wenn alle Werte (oss, em256, mkd256, raf, rna) gefunden wurden
+    if all(v is not None for v in ramdisk_vals.values()):
+        # Finde das passende Mapping
+        ramdisk_config = None
+        for k, v in RAMDISK_MAP.items():
+            if all(str(ramdisk_vals[key]) == str(val) for key, val in v.items()):
+                ramdisk_config = k
+                break
+        # Setze alle RAMDISK-Optionen
+        for k in RAMDISK_MAP.keys():
+            patch_keys[f'CONFIG_{k}'] = 'y' if k == ramdisk_config else 'n'
+
     # 2. Bestehende .config einlesen und Zeilen gezielt ersetzen
     if os.path.exists(config_path):
         with open(config_path, 'r') as f:
@@ -185,6 +215,7 @@ def patch_bios_mac(bios_path, config_path):
     # Lese Auswahl aus .config
     chosen = {}
     cpu = fdc = crt = ramkb = dev = cpuclk = None
+    ramdisk_choice = None
     with open(config_path) as f:
         for line in f:
             m = re.match(r'CONFIG_DRIVE_([A-D])_([0-9]+)=(y|n)', line)
@@ -208,6 +239,9 @@ def patch_bios_mac(bios_path, config_path):
             m = re.match(r'CONFIG_CPUCLK_(\w+)=(y|n)', line)
             if m and m.group(2) == 'y':
                 cpuclk = CPUCLK_MAP.get('CPUCLK_' + m.group(1))
+            m = re.match(r'CONFIG_RAMDISK_(\w+)=(y|n)', line)
+            if m and m.group(2) == 'y':
+                ramdisk_choice = 'RAMDISK_' + m.group(1)
     # Patch bios.mac
     out = []
     # Patterns for hardware config lines (preserve comments)
@@ -218,7 +252,17 @@ def patch_bios_mac(bios_path, config_path):
         'ramkb': (re.compile(r'^(ramkb\s+equ\s+)(\w+)(.*)$', re.IGNORECASE), ramkb),
         'dev':   (re.compile(r'^(dev\s+equ\s+)(\w+)(.*)$', re.IGNORECASE), dev),
         'cpuclk':(re.compile(r'^(cpuclk\s+equ\s+)(\w+)(.*)$', re.IGNORECASE), cpuclk),
+        # RAM-Disk Optionen
+        'oss':   (re.compile(r'^(oss\s+equ\s+)(\w+)(.*)$', re.IGNORECASE), None),
+        'em256': (re.compile(r'^(em256\s+equ\s+)(\w+)(.*)$', re.IGNORECASE), None),
+        'mkd256':(re.compile(r'^(mkd256\s+equ\s+)(\w+)(.*)$', re.IGNORECASE), None),
+        'raf':   (re.compile(r'^(raf\s+equ\s+)(\w+)(.*)$', re.IGNORECASE), None),
+        'rna':   (re.compile(r'^(rna\s+equ\s+)(\w+)(.*)$', re.IGNORECASE), None),
     }
+    # Werte für RAM-Disk aus Kconfig übernehmen
+    ramdisk_vals = None
+    if ramdisk_choice and ramdisk_choice in RAMDISK_MAP:
+        ramdisk_vals = RAMDISK_MAP[ramdisk_choice]
     with open(bios_path, 'r', newline='') as f:
         for line in f:
             l = line.rstrip('\r\n')
@@ -235,7 +279,12 @@ def patch_bios_mac(bios_path, config_path):
             replaced = False
             for key, (pat, value) in hw_patterns.items():
                 m_hw = pat.match(l)
-                if m_hw and value is not None:
+                # RAM-Disk: Wert aus Mapping nehmen
+                if key in ('oss','em256','mkd256','raf','rna') and m_hw and ramdisk_vals is not None:
+                    out.append(f"{m_hw.group(1)}{ramdisk_vals[key]}{m_hw.group(3)}\r\n")
+                    replaced = True
+                    break
+                elif m_hw and value is not None:
                     out.append(f"{m_hw.group(1)}{value}{m_hw.group(3)}\r\n")
                     replaced = True
                     break

@@ -1,6 +1,7 @@
 # Ignore all files in the Disketten directory
 Disketten/
 build/
+.config
 
 # Ignore Python virtual environment
 .venv/

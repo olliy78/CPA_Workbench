@@ -77,6 +77,83 @@ endchoice
 endmenu
 
 
+# Menü für RAM Disk Optionen
+
+menu "RAM Disk (RAM-Floppy) Optionen"
+config HINT_BUILD
+    bool "=== Hinweise zum Build-Ziel [? für Hilfe] ==="
+    help
+        Hier können Sie konfigurieren, ob beim Systemstart eine RAM-Floppy (RAM Disk 'M:') eingerichtet werden soll.
+        Es stehen verschiedene Hardware-Erweiterungen zur Verfügung, die als RAM-Floppy genutzt werden können.
+        Die Auswahl wirkt sich auf die Generierung der bios.mac aus.
+
+        Technische Hinweise (aus bios.mac):
+        - OSS 48k: Falls eine 48k Speichererweiterung (OSS 062-8471) vorhanden ist, wird beim Kaltstart 
+          eine RAM-Floppy "M:" für diesen Bereich angelegt. Bei "oss=0" erfolgt kein Test auf eine evtl. 
+          vorhandene OSS-Karte.
+        - EM256: Wenn eine 16-Bit-Erweiterungskarte mit 256k-Speicher EM256 installiert ist, kann dieser 
+          Speicher als RAM-Floppy 'M:' genutzt werden. Bei "em256" ungleich Null wird das Vorhandensein 
+          einer Erweiterungskarte getestet. Bei vorhandener EM256 wird beim Kaltstart die RAM-Floppy 
+          eingerichtet.
+        - MKD256: Die RAM-Floppy mkd256 kann als Laufwerk 'M:' angesprochen werden. Bei "mkd256" ungleich 
+          Null wird das Vorhandensein einer entsprechenden Karte getestet. Ist diese vorhanden, wird 
+          sie beim Kaltstart initialisiert.
+        - RAF: Wenn mindestens eine RAF-Karte des ZWG der AdW vorhanden ist (beliebig bestückt, max. 
+          2M Byte pro Karte, max. 4 Karten), so kann bzw. können diese als RAM-Floppy 'M:' benutzt 
+          werden (über "SWAP A: M:" bei Bedarf auch als LW A:). Bei "raf" ungleich Null wird das 
+          Vorhandensein von RAF-Karten getestet. Bei vorhandener(n) Karte(n) wird beim erstmaligen 
+          Kaltstart nach dem Einschalten des Stromes die RAM-Floppy eingerichtet, bei RESET bleibt 
+          ihr Inhalt erhalten.
+        - NANOS-RAF: Wenn mindestens eine NANOS-256k-DRAM-Karte vorhanden ist (beliebig bestückt, max. 
+          256k Byte pro Karte, max. 4 Karten), so kann bzw. können diese als RAM-Floppy 'M:' benutzt 
+          werden (über "SWAP A: M:" bei Bedarf auch als LW A:). Bei "rna" ungleich Null wird das 
+          Vorhandensein von NANOS-RAF-Karten getestet. Bei vorhandener(n) Karte(n) wird beim erstmaligen 
+          Kaltstart nach dem Einschalten des Stromes die RAM-Floppy eingerichtet, bei RESET bleibt 
+          ihr Inhalt erhalten.
+
+        Allgemeiner Hinweis: Die RAM-Floppy ist ein schneller, flüchtiger Massenspeicher und wird beim Kaltstart initialisiert. Daten gehen beim Ausschalten verloren!
+    default n
+
+choice
+    prompt "RAM Disk Typ (RAM-Floppy)"
+    default RAMDISK_NONE
+    help
+        Wählen Sie die gewünschte RAM-Floppy-Option:
+        - Keine: Es wird keine RAM-Floppy eingerichtet.
+        - OSS 48k: RAM-Floppy mit OSS 062-8471 Speichererweiterung (48k)
+        - EM256: RAM-Floppy mit 16-Bit-Erweiterungskarte EM256 (256k)
+        - MKD256: RAM-Floppy mit MKD256-Karte
+        - RAF: RAM-Floppy mit RAF-Karte (max. 4 Karten, je 2MB)
+        - NANOS-RAF: RAM-Floppy mit NANOS-256k-DRAM-Karte (max. 4 Karten)
+    config RAMDISK_NONE
+        bool "Keine RAM-Floppy (oss=0, em256=0, mkd256=0, raf=0, rna=0)"
+        help
+            Es wird keine RAM-Floppy eingerichtet.
+    config RAMDISK_OSS
+        bool "OSS 48k Speichererweiterung (oss=1)"
+        help
+            Nutzt eine OSS 062-8471 Speichererweiterung (48k) als RAM-Floppy 'M:'.
+    config RAMDISK_EM256
+        bool "EM256 16-Bit-Erweiterung (em256=1)"
+        help
+            Nutzt eine 16-Bit-Erweiterungskarte EM256 (256k) als RAM-Floppy 'M:'.
+    config RAMDISK_MKD256
+        bool "MKD256 RAM-Floppy (mkd256=1)"
+        help
+            Nutzt eine MKD256-Karte als RAM-Floppy 'M:'.
+    config RAMDISK_RAF
+        bool "RAF-Karte (raf=1)"
+        help
+            Nutzt mindestens eine RAF-Karte (max. 4, je 2MB) als RAM-Floppy 'M:'.
+    config RAMDISK_NANOS
+        bool "NANOS-256k-DRAM-Karte (rna=1)"
+        help
+            Nutzt mindestens eine NANOS-256k-DRAM-Karte (max. 4) als RAM-Floppy 'M:'.
+endchoice
+
+endmenu
+
+
 menu "Diskettenlaufwerke"
 choice
     prompt "Laufwerk A Typ"
