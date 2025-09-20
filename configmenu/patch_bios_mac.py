@@ -9,7 +9,17 @@ import re
 import os
 
 
-# Mapping: Auswahltext <-> Wert für Diskettenlaufwerke
+
+# Kompakte Mapping-Struktur für alle Hardware-Parameter
+PARAMS = [
+    # (Kconfig-Prefix, bios.mac-Key, Mapping)
+    ("CPU",    "cpu",    { 'CPU_K2521': 'k2521', 'CPU_K2526': 'k2526', 'CPU_C1715': 'c1715' }),
+    ("FDC",    "fdc",    { 'FDC_K5120': 'k5120', 'FDC_K5122': 'k5122', 'FDC_K5126': 'k5126', 'FDC_F1715': 'f1715', 'FDC_FDC3': 'fdc3' }),
+    ("CRT",    "crt",    { 'CRT_K7024': 'k7024', 'CRT_DSY5': 'dsy5', 'CRT_B1715': 'b1715' }),
+    ("RAM",    "ramkb",  { 'RAM_64': '64', 'RAM_32': '32' }),
+    ("DEV",    "dev",    { 'DEV_OEM': 'oem', 'DEV_CPD': 'cpd', 'DEV_K8915': 'k8915' }),
+    ("CPUCLK", "cpuclk", { 'CPUCLK_25': '25', 'CPUCLK_40': '40' }),
+]
 DRIVE_MAP = {
     '10540': 'DD, SS, 5", 40 Tracks (K5600.10)',
     '10580': 'DD, SS, 5", 80 Tracks (K5600.20)',
@@ -20,47 +30,6 @@ DRIVE_MAP = {
 }
 DRIVE_VALS = list(DRIVE_MAP.keys())
 BIOS_DRIVES = ['A', 'B', 'C', 'D']
-CONFIG_CHOICES = {
-    'A': 'DRIVE_A_',
-    'B': 'DRIVE_B_',
-    'C': 'DRIVE_C_',
-    'D': 'DRIVE_D_',
-}
-BIOS_PATTERN = re.compile(r'^(disk([A-D])\s+equ\s+)([0-9]+)$')
-
-
-# Hardwarevariante: Mapping für Kconfig <-> bios.mac
-CPU_MAP = {
-    'CPU_K2521': 'k2521',
-    'CPU_K2526': 'k2526',
-    'CPU_C1715': 'c1715',
-}
-FDC_MAP = {
-    'FDC_K5120': 'k5120',
-    'FDC_K5122': 'k5122',
-    'FDC_K5126': 'k5126',
-    'FDC_F1715': 'f1715',
-    'FDC_FDC3':  'fdc3',
-}
-CRT_MAP = {
-    'CRT_K7024': 'k7024',
-    'CRT_DSY5': 'dsy5',
-    'CRT_B1715': 'b1715',
-}
-RAM_MAP = {
-    'RAM_64': '64',
-    'RAM_32': '32',
-}
-DEV_MAP = {
-    'DEV_OEM': 'oem',
-    'DEV_CPD': 'cpd',
-    'DEV_K8915': 'k8915',
-}
-CPUCLK_MAP = {
-    'CPUCLK_25': '25',
-    'CPUCLK_40': '40',
-}
-# Mapping für RAM-Disk-Optionen (Kconfig -> bios.mac)
 RAMDISK_MAP = {
     'RAMDISK_NONE':  {'oss': '0', 'em256': '0', 'mkd256': '0', 'raf': '0', 'rna': '0'},
     'RAMDISK_OSS':   {'oss': '1', 'em256': '0', 'mkd256': '0', 'raf': '0', 'rna': '0'},
@@ -69,115 +38,57 @@ RAMDISK_MAP = {
     'RAMDISK_RAF':   {'oss': '0', 'em256': '0', 'mkd256': '0', 'raf': '1', 'rna': '0'},
     'RAMDISK_NANOS': {'oss': '0', 'em256': '0', 'mkd256': '0', 'raf': '0', 'rna': '1'},
 }
-REVERSE_CPU_MAP = {v: k for k, v in CPU_MAP.items()}
-REVERSE_FDC_MAP = {v: k for k, v in FDC_MAP.items()}
-REVERSE_CRT_MAP = {v: k for k, v in CRT_MAP.items()}
-REVERSE_RAM_MAP = {v: k for k, v in RAM_MAP.items()}
-REVERSE_DEV_MAP = {v: k for k, v in DEV_MAP.items()}
-REVERSE_CPUCLK_MAP = {v: k for k, v in CPUCLK_MAP.items()}
+
+def reverse_map(mapping):
+    return {v: k for k, v in mapping.items()}
 
 
 def extract_bios_config(bios_path, config_path):
     """Liest bios.mac und schreibt .config mit aktuellen Einstellungen"""
     config = {}
-    cpu = fdc = crt = ramkb = dev = cpuclk = None
-    # RAM-Disk: Werte initialisieren
-    ramdisk_vals = {'oss': None, 'em256': None, 'mkd256': None, 'raf': None, 'rna': None}
-    found = { 'cpu': False, 'fdc': False, 'crt': False, 'ramkb': False, 'dev': False, 'cpuclk': False }
+    # Hardware- und RAMDISK-Parameter initialisieren
+    param_vals = {p[1]: None for p in PARAMS}
+    found = {p[1]: False for p in PARAMS}
+    ramdisk_vals = {k: None for k in RAMDISK_MAP['RAMDISK_NONE'].keys()}
     with open(bios_path) as f:
         for line in f:
-            # Kommentar abtrennen (alles nach einem Semikolon ignorieren)
             line_nocomment = line.split(';', 1)[0].strip()
-            # --- RAM-Disk-Parameter extrahieren ---
-            for ramkey in ramdisk_vals.keys():
-                m_ram = re.match(rf'^{ramkey}\s+equ\s+(\w+)', line_nocomment, re.IGNORECASE)
-                if m_ram:
-                    ramdisk_vals[ramkey] = m_ram.group(1)
-
-            # --- Laufwerkskonfiguration extrahieren ---
-            # Erkenne Zeilen wie: diskA equ 10540 (beliebige Leerzeichen/Tabs)
+            # RAMDISK-Parameter
+            for ramkey in ramdisk_vals:
+                m = re.match(rf'^{ramkey}\s+equ\s+(\w+)', line_nocomment, re.IGNORECASE)
+                if m:
+                    ramdisk_vals[ramkey] = m.group(1)
+            # Laufwerke
             m_drive = re.match(r'^disk([A-D])\s+equ\s+(\d+)', line_nocomment, re.IGNORECASE)
             if m_drive:
-                drv = m_drive.group(1).upper()  # A, B, C, D
-                val = m_drive.group(2)
-                # Fallback auf '0' falls Wert nicht bekannt
-                if val not in DRIVE_VALS:
-                    val = '0'
-                # Setze für alle möglichen Werte das passende Flag
+                drv = m_drive.group(1).upper()
+                val = m_drive.group(2) if m_drive.group(2) in DRIVE_VALS else '0'
                 for v in DRIVE_VALS:
-                    key = f'CONFIG_DRIVE_{drv}_{v}'
-                    config[key] = 'y' if v == val else 'n'
-
-            # --- Hardwarevariante robust extrahieren ---
-            # Erkenne Zeilen wie: cpu equ k2526 (beliebige Leerzeichen/Tabs)
-            m_cpu = re.match(r'^cpu\s+equ\s+(\w+)', line_nocomment, re.IGNORECASE)
-            if m_cpu:
-                cpu = m_cpu.group(1)
-                found['cpu'] = True
-            m_fdc = re.match(r'^fdc\s+equ\s+(\w+)', line_nocomment, re.IGNORECASE)
-            if m_fdc:
-                fdc = m_fdc.group(1)
-                found['fdc'] = True
-            m_crt = re.match(r'^crt\s+equ\s+(\w+)', line_nocomment, re.IGNORECASE)
-            if m_crt:
-                crt = m_crt.group(1)
-                found['crt'] = True
-            m_ramkb = re.match(r'^ramkb\s+equ\s+(\w+)', line_nocomment, re.IGNORECASE)
-            if m_ramkb:
-                ramkb = m_ramkb.group(1)
-                found['ramkb'] = True
-            m_dev = re.match(r'^dev\s+equ\s+(\w+)', line_nocomment, re.IGNORECASE)
-            if m_dev:
-                dev = m_dev.group(1)
-                found['dev'] = True
-            m_cpuclk = re.match(r'^cpuclk\s+equ\s+(\w+)', line_nocomment, re.IGNORECASE)
-            if m_cpuclk:
-                cpuclk = m_cpuclk.group(1)
-                found['cpuclk'] = True
-    # Schreibe .config
-    # --- Patch .config im Kconfig-Stil: Nur relevante Werte ändern/ergänzen ---
-    # 1. Alle relevanten Keys und Zielwerte sammeln
-    patch_keys = {}
-    # Laufwerke
-    for drv in BIOS_DRIVES:
-        for v in DRIVE_VALS:
-            key = f'CONFIG_DRIVE_{drv}_{v}'.upper()
-            if key in config:
-                patch_keys[key] = config[key]
-    # Hardware
-    if found['cpu']:
-        for k, v in REVERSE_CPU_MAP.items():
-            patch_keys[f'CONFIG_CPU_{k}'.upper()] = 'y' if cpu == k else 'n'
-    if found['fdc']:
-        for k, v in REVERSE_FDC_MAP.items():
-            patch_keys[f'CONFIG_FDC_{k}'.upper()] = 'y' if fdc == k else 'n'
-    if found['crt']:
-        for k, v in REVERSE_CRT_MAP.items():
-            patch_keys[f'CONFIG_CRT_{k}'.upper()] = 'y' if crt == k else 'n'
-    if found['ramkb']:
-        for k, v in REVERSE_RAM_MAP.items():
-            patch_keys[f'CONFIG_RAM_{k}'.upper()] = 'y' if ramkb == k else 'n'
-    if found['dev']:
-        for k, v in REVERSE_DEV_MAP.items():
-            patch_keys[f'CONFIG_DEV_{k}'.upper()] = 'y' if dev == k else 'n'
-    if found['cpuclk']:
-        for k, v in REVERSE_CPUCLK_MAP.items():
-            patch_keys[f'CONFIG_CPUCLK_{k}'.upper()] = 'y' if cpuclk == k else 'n'
-
-    # RAM-Disk: Aus bios.mac extrahieren und Mapping auf CONFIG_RAMDISK_*
-    # Nur wenn alle Werte (oss, em256, mkd256, raf, rna) gefunden wurden
+                    config[f'CONFIG_DRIVE_{drv}_{v}'] = 'y' if v == val else 'n'
+            # Hardware-Parameter generisch extrahieren
+            for kconf, bioskey, mapping in PARAMS:
+                m = re.match(rf'^{bioskey}\s+equ\s+(\w+)', line_nocomment, re.IGNORECASE)
+                if m:
+                    param_vals[bioskey] = m.group(1)
+                    found[bioskey] = True
+    # Patch-Keys für .config generieren
+    patch_keys = {k: v for k, v in config.items()}
+    # Hardware-Parameter generisch
+    for kconf, bioskey, mapping in PARAMS:
+        if found[bioskey]:
+            rev = reverse_map(mapping)
+            for k, v in rev.items():
+                patch_keys[f'CONFIG_{kconf}_{k}'] = 'y' if param_vals[bioskey] == k else 'n'
+    # RAMDISK
     if all(v is not None for v in ramdisk_vals.values()):
-        # Finde das passende Mapping
         ramdisk_config = None
         for k, v in RAMDISK_MAP.items():
             if all(str(ramdisk_vals[key]) == str(val) for key, val in v.items()):
                 ramdisk_config = k
                 break
-        # Setze alle RAMDISK-Optionen
         for k in RAMDISK_MAP.keys():
             patch_keys[f'CONFIG_{k}'] = 'y' if k == ramdisk_config else 'n'
-
-    # 2. Bestehende .config einlesen und Zeilen gezielt ersetzen
+    # .config patchen (bestehende Zeilen ersetzen, fehlende ergänzen)
     if os.path.exists(config_path):
         with open(config_path, 'r') as f:
             lines = f.readlines()
@@ -190,22 +101,13 @@ def extract_bios_config(bios_path, config_path):
         if m:
             key = m.group(2).upper()
             if key in patch_keys:
-                # Schreibe Wert im Kconfig-Stil
-                if patch_keys[key] == 'y':
-                    new_lines.append(f'{key}=y\n')
-                else:
-                    new_lines.append(f'# {key} is not set\n')
+                new_lines.append(f'{key}=y\n' if patch_keys[key] == 'y' else f'# {key} is not set\n')
                 seen_keys.add(key)
                 continue
         new_lines.append(line)
-    # 3. Fehlende Keys am Ende ergänzen
     for key, val in patch_keys.items():
         if key not in seen_keys:
-            if val == 'y':
-                new_lines.append(f'{key}=y\n')
-            else:
-                new_lines.append(f'# {key} is not set\n')
-    # 4. Schreibe neue .config
+            new_lines.append(f'{key}=y\n' if val == 'y' else f'# {key} is not set\n')
     with open(config_path, 'w') as f:
         f.writelines(new_lines)
 
@@ -214,80 +116,63 @@ def patch_bios_mac(bios_path, config_path):
     """Patches bios.mac gemäß .config"""
     # Lese Auswahl aus .config
     chosen = {}
-    cpu = fdc = crt = ramkb = dev = cpuclk = None
+    param_vals = {p[1]: None for p in PARAMS}
     ramdisk_choice = None
     with open(config_path) as f:
         for line in f:
             m = re.match(r'CONFIG_DRIVE_([A-D])_([0-9]+)=(y|n)', line)
             if m and m.group(3) == 'y':
                 chosen[m.group(1)] = m.group(2)
-            m = re.match(r'CONFIG_CPU_(\w+)=(y|n)', line)
-            if m and m.group(2) == 'y':
-                cpu = CPU_MAP.get('CPU_' + m.group(1))
-            m = re.match(r'CONFIG_FDC_(\w+)=(y|n)', line)
-            if m and m.group(2) == 'y':
-                fdc = FDC_MAP.get('FDC_' + m.group(1))
-            m = re.match(r'CONFIG_CRT_(\w+)=(y|n)', line)
-            if m and m.group(2) == 'y':
-                crt = CRT_MAP.get('CRT_' + m.group(1))
-            m = re.match(r'CONFIG_RAM_(\w+)=(y|n)', line)
-            if m and m.group(2) == 'y':
-                ramkb = RAM_MAP.get('RAM_' + m.group(1))
-            m = re.match(r'CONFIG_DEV_(\w+)=(y|n)', line)
-            if m and m.group(2) == 'y':
-                dev = DEV_MAP.get('DEV_' + m.group(1))
-            m = re.match(r'CONFIG_CPUCLK_(\w+)=(y|n)', line)
-            if m and m.group(2) == 'y':
-                cpuclk = CPUCLK_MAP.get('CPUCLK_' + m.group(1))
+            for kconf, bioskey, mapping in PARAMS:
+                m2 = re.match(rf'CONFIG_{kconf}_(\w+)=(y|n)', line)
+                if m2 and m2.group(2) == 'y':
+                    val = mapping.get(f'{kconf}_{m2.group(1)}')
+                    if val:
+                        param_vals[bioskey] = val
             m = re.match(r'CONFIG_RAMDISK_(\w+)=(y|n)', line)
             if m and m.group(2) == 'y':
                 ramdisk_choice = 'RAMDISK_' + m.group(1)
     # Patch bios.mac
     out = []
-    # Patterns for hardware config lines (preserve comments)
-    hw_patterns = {
-        'cpu':   (re.compile(r'^(cpu\s+equ\s+)(\w+)(.*)$', re.IGNORECASE), cpu),
-        'fdc':   (re.compile(r'^(fdc\s+equ\s+)(\w+)(.*)$', re.IGNORECASE), fdc),
-        'crt':   (re.compile(r'^(crt\s+equ\s+)(\w+)(.*)$', re.IGNORECASE), crt),
-        'ramkb': (re.compile(r'^(ramkb\s+equ\s+)(\w+)(.*)$', re.IGNORECASE), ramkb),
-        'dev':   (re.compile(r'^(dev\s+equ\s+)(\w+)(.*)$', re.IGNORECASE), dev),
-        'cpuclk':(re.compile(r'^(cpuclk\s+equ\s+)(\w+)(.*)$', re.IGNORECASE), cpuclk),
-        # RAM-Disk Optionen
-        'oss':   (re.compile(r'^(oss\s+equ\s+)(\w+)(.*)$', re.IGNORECASE), None),
-        'em256': (re.compile(r'^(em256\s+equ\s+)(\w+)(.*)$', re.IGNORECASE), None),
-        'mkd256':(re.compile(r'^(mkd256\s+equ\s+)(\w+)(.*)$', re.IGNORECASE), None),
-        'raf':   (re.compile(r'^(raf\s+equ\s+)(\w+)(.*)$', re.IGNORECASE), None),
-        'rna':   (re.compile(r'^(rna\s+equ\s+)(\w+)(.*)$', re.IGNORECASE), None),
-    }
-    # Werte für RAM-Disk aus Kconfig übernehmen
+    # Patterns für Hardware-Parameter generisch erzeugen
+    hw_patterns = {bioskey: re.compile(rf'^({bioskey}\s+equ\s+)(\w+)(.*)$', re.IGNORECASE) for _, bioskey, _ in PARAMS}
+    # RAM-Disk Patterns
+    for ramkey in RAMDISK_MAP['RAMDISK_NONE'].keys():
+        hw_patterns[ramkey] = re.compile(rf'^({ramkey}\s+equ\s+)(\w+)(.*)$', re.IGNORECASE)
+    # RAM-Disk Werte aus Kconfig übernehmen
     ramdisk_vals = None
     if ramdisk_choice and ramdisk_choice in RAMDISK_MAP:
         ramdisk_vals = RAMDISK_MAP[ramdisk_choice]
     with open(bios_path, 'r', newline='') as f:
         for line in f:
             l = line.rstrip('\r\n')
-            # Robustly match diskA..diskD lines, preserving comments and formatting
+            # diskA..diskD
             m_drive = re.match(r'^(disk([A-D])\s+equ\s+)([0-9]+)(.*)$', l, re.IGNORECASE)
             if m_drive:
                 drv = m_drive.group(2).upper()
                 orig_val = m_drive.group(3)
                 rest = m_drive.group(4)
-                # Use value from .config if present, else keep original
                 val = chosen.get(drv, orig_val)
                 out.append(f'{m_drive.group(1)}{val}{rest}\r\n')
                 continue
             replaced = False
-            for key, (pat, value) in hw_patterns.items():
+            # Hardware-Parameter generisch patchen
+            for kconf, bioskey, mapping in PARAMS:
+                pat = hw_patterns[bioskey]
                 m_hw = pat.match(l)
-                # RAM-Disk: Wert aus Mapping nehmen
-                if key in ('oss','em256','mkd256','raf','rna') and m_hw and ramdisk_vals is not None:
-                    out.append(f"{m_hw.group(1)}{ramdisk_vals[key]}{m_hw.group(3)}\r\n")
+                if m_hw and param_vals[bioskey] is not None:
+                    out.append(f"{m_hw.group(1)}{param_vals[bioskey]}{m_hw.group(3)}\r\n")
                     replaced = True
                     break
-                elif m_hw and value is not None:
-                    out.append(f"{m_hw.group(1)}{value}{m_hw.group(3)}\r\n")
-                    replaced = True
-                    break
+            if not replaced:
+                # RAMDISK generisch patchen
+                for ramkey in RAMDISK_MAP['RAMDISK_NONE'].keys():
+                    pat = hw_patterns[ramkey]
+                    m_hw = pat.match(l)
+                    if m_hw and ramdisk_vals is not None:
+                        out.append(f"{m_hw.group(1)}{ramdisk_vals[ramkey]}{m_hw.group(3)}\r\n")
+                        replaced = True
+                        break
             if not replaced:
                 out.append(l + '\r\n')
     with open(bios_path, 'w', newline='') as f:
@@ -315,7 +200,8 @@ def main():
             with open(config_path) as f:
                 for line in f:
                     for key, path in system_map.items():
-                        if line.strip().startswith(f'{key}=y'):
+                        if line.strip() == f'{key}=y':
+                            print(f"[DEBUG] Gefundener Systemtyp: {key} -> {path}")
                             selected = path
                             break
                     if selected:

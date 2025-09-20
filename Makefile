@@ -20,24 +20,23 @@
 #     5. Wizard-ähnliche Navigation durch die Konfigurationsschritte
 #
 # Wichtige Targets:
-#   make os           - Baut das Betriebssystem (@OS.COM) für das gewählte TARGET
-#   make diskImage    - Erstellt das Diskettenimage im build/-Verzeichnis
-#   make writeImage   - Schreibt das Diskettenimage auf ein physikalisches Laufwerk
-#   make clean        - Entfernt temporäre und finale Dateien
+#   make config <target> - Baut das gewünschte Target (os, diskImage, ...) gemäß .config (empfohlen, reproduzierbar)
+#   make os              - Baut das Betriebssystem (@OS.COM) für das gewählte TARGET (Standard: BC, ggf. Warnung)
+#   make diskImage       - Erstellt das Diskettenimage im build/-Verzeichnis
+#   make writeImage      - Schreibt das Diskettenimage auf ein physikalisches Laufwerk
+#   make clean           - Entfernt temporäre und finale Dateien
 #
 # TARGET-Auswahl:
-#   Standard ist BC (A5120). Für PC1715: make PC os, make PC diskImage, ...
-#   Alternativ: make TARGET=PC os
+#   Standard ist BC (A5120). Für PC1715: make config PC os, make config PC diskImage, ...
+#   Alternativ: make TARGET=PC os (nicht empfohlen)
 #
 # Beispiele:
-#   make os                # Baut @OS.COM für BC (A5120)
-#   make PC os             # Baut @OS.COM für PC1715
-#   make diskImage         # Erstellt Diskettenimage für BC
-#   make PC diskImage      # Erstellt Diskettenimage für PC1715
-#   make writeImage        # Schreibt Diskettenimage (BC) auf Laufwerk
-#   make PC writeImage     # Schreibt Diskettenimage (PC) auf Laufwerk
-#   make clean             # Entfernt alle temporären Dateien
-#   make menuconfig        # Startet das Konfigurationsmenü
+#   make config os                # Baut @OS.COM gemäß .config (empfohlen)
+#   make config diskImage         # Erstellt Diskettenimage gemäß .config
+#   make config PC os             # Baut @OS.COM für PC1715 (überschreibt .config)
+#   make os                      # Baut @OS.COM für BC (A5120), ggf. Warnung
+#   make PC os                   # Baut @OS.COM für PC1715, ggf. Warnung
+#   make menuconfig              # Startet das Konfigurationsmenü
 #
 # Hinweise:
 #   - Die Quelltexte für BC liegen in src/bc_a5120, für PC in src/pc_1715
@@ -46,20 +45,46 @@
 #   - Das Diskettenimage wird als build/cpadisk.img abgelegt
 #   - Die Konfiguration erfolgt über das Menü (menuconfig) und wird in .config gespeichert
 #   - Nach Änderung der Konfiguration sollte das System neu gebaut werden
+#   - Für reproduzierbare Builds immer 'make config <target>' verwenden!
 # ------------------------------------------------------------------------------
 
 
-# Default TARGET-Logik: Wenn kein explizites Target (BC/PC) übergeben wird,
-# lese aus .config (CONFIG_SYSTEM_BC/CONFIG_SYSTEM_PC), sonst BC.
-ifeq ($(origin TARGET), undefined)
-	ifeq (,$(filter BC PC,$(MAKECMDGOALS)))
-		ifeq (,$(wildcard .config))
-			TARGET := BC
-		else
-			SYSTEM_TARGET := $(shell grep '^CONFIG_SYSTEM_PC=y' .config >/dev/null && echo PC || echo BC)
-			TARGET := $(SYSTEM_TARGET)
-		endif
-	endif
+# TARGET immer aus .config bestimmen, wenn vorhanden
+ifeq ($(wildcard .config),)
+TARGET := BC
+else
+TARGET := $(shell \
+	if grep -q '^CONFIG_SYSTEM_PC_1715=y' .config; then echo PC; \
+	elif grep -q '^CONFIG_SYSTEM_PC_1715_870330=y' .config; then echo PC; \
+	else echo BC; fi)
+endif
+
+# Konfigurations-Wrapper: explizit aus .config bauen
+.PHONY: config
+config:
+	@if [ "$(filter-out config,$(MAKECMDGOALS))" = "" ]; then \
+		echo "[INFO] Bitte gib ein Target an, z.B. 'make config os' oder 'make config diskImage'"; \
+		exit 1; \
+	fi; \
+	target=$(word 2,$(MAKECMDGOALS)); \
+	shift=1; \
+	if [ "$$target" = "PC" ] || [ "$$target" = "BC" ]; then \
+		target=$(word 3,$(MAKECMDGOALS)); shift=2; \
+	fi; \
+	if [ -z "$$target" ]; then \
+		echo "[INFO] Bitte gib ein Target an, z.B. 'make config os' oder 'make config diskImage'"; \
+		exit 1; \
+	fi; \
+	echo "[INFO] Baue explizit mit Konfiguration aus .config: Target='$$target'"; \
+	exec $(MAKE) FROM_CONFIG=1 $$target;
+
+# Warnung bei direktem Aufruf ohne config (aber nicht aus config-Target oder Wrapper heraus)
+ifeq ($(FROM_CONFIG)$(FROM_WRAPPER),)
+ifneq ($(MAKECMDGOALS),)
+ifneq ($(firstword $(MAKECMDGOALS)),config)
+$(info [WARNUNG] Du hast 'make $(MAKECMDGOALS)' direkt aufgerufen. Das Build-Ergebnis kann von der aktuellen .config abweichen. Für reproduzierbare Builds verwende bitte 'make config $(MAKECMDGOALS)')
+endif
+endif
 endif
 
 # Betriebssystem erkennen (für Wine unter Linux)
@@ -114,17 +139,17 @@ endif
 # Targets für TARGET-Auswahl
 .PHONY: BC PC
 BC:
-	@if [ "$(filter-out BC PC,$(MAKECMDGOALS))" = "" ]; then \
-	  $(MAKE) help; \
-	else \
-	  $(MAKE) TARGET=BC $(filter-out BC PC,$(MAKECMDGOALS)); \
-	fi
+			 @if [ "$(filter-out BC PC,$(MAKECMDGOALS))" = "" ]; then \
+				 $(MAKE) help; \
+			 else \
+				 $(MAKE) FROM_WRAPPER=1 TARGET=BC $(filter-out BC PC,$(MAKECMDGOALS)); \
+			 fi
 PC:
-	@if [ "$(filter-out BC PC,$(MAKECMDGOALS))" = "" ]; then \
-	  $(MAKE) help; \
-	else \
-	  $(MAKE) TARGET=PC $(filter-out BC PC,$(MAKECMDGOALS)); \
-	fi
+			 @if [ "$(filter-out BC PC,$(MAKECMDGOALS))" = "" ]; then \
+				 $(MAKE) help; \
+			 else \
+				 $(MAKE) FROM_WRAPPER=1 TARGET=PC $(filter-out BC PC,$(MAKECMDGOALS)); \
+			 fi
 
 # menuconfig: Wrapper für den mehrstufigen Konfigurationsprozess
 .PHONY: menuconfig
@@ -141,14 +166,15 @@ all: help
 # Hilfe-Target
 help:
 	@echo "Verfügbare Targets für das CP/A-Projekt:"
-	@echo "  make os           - Baut das Betriebssystem (@os.com) für das gewählte TARGET (BC/PC)"
-	@echo "  make diskImage    - Erstellt das Diskettenimage im build/-Verzeichnis"
-	@echo "  make writeImage   - Schreibt das Diskettenimage auf ein physikalisches Laufwerk"
-	@echo "  make clean        - Entfernt temporäre und finale Dateien"
-	@echo "  make BC <target>  - Baut für BC (A5120) (z.B. make BC os)"
-	@echo "  make PC <target>  - Baut für PC (PC1715) (z.B. make PC os)"
-	@echo "  make menuconfig   - Startet das mehrstufige Konfigurationsmenü (Systemtyp, Hardware, Build-Optionen)"
-	@echo "  make help         - Zeigt diese Hilfe an"
+	@echo "  make config <target> - Baut das gewünschte Target (os, diskImage, ...) gemäß .config (empfohlen, reproduzierbar)"
+	@echo "  make os              - Baut das Betriebssystem (@OS.COM) für das gewählte TARGET (Standard: BC, ggf. Warnung)"
+	@echo "  make diskImage       - Erstellt das Diskettenimage im build/-Verzeichnis"
+	@echo "  make writeImage      - Schreibt das Diskettenimage auf ein physikalisches Laufwerk"
+	@echo "  make clean           - Entfernt temporäre und finale Dateien"
+	@echo "  make BC <target>     - Baut für BC (A5120) (z.B. make BC os)"
+	@echo "  make PC <target>     - Baut für PC (PC1715) (z.B. make PC os)"
+	@echo "  make menuconfig      - Startet das mehrstufige Konfigurationsmenü (Systemtyp, Hardware, Build-Optionen)"
+	@echo "  make help            - Zeigt diese Hilfe an"
 	@echo ""
 	@echo "Konfigurationsmenü (menuconfig):"
 	@echo "  - Interaktives Menü zur Auswahl von Systemtyp, Hardware und Build-Optionen"
@@ -157,17 +183,18 @@ help:
 	@echo "  - Änderungen werden in .config gespeichert und automatisch übernommen"
 	@echo ""
 	@echo "Beispiele:"
-	@echo "  make os                # Baut @os.com für BC (A5120)"
-	@echo "  make PC os             # Baut @os.com für PC1715"
-	@echo "  make diskImage         # Erstellt Diskettenimage für BC"
-	@echo "  make PC diskImage      # Erstellt Diskettenimage für PC1715"
-	@echo "  make writeImage        # Schreibt Diskettenimage (BC) auf Laufwerk"
-	@echo "  make PC writeImage     # Schreibt Diskettenimage (PC) auf Laufwerk"
-	@echo "  make clean             # Entfernt alle temporären Dateien"
-	@echo "  make menuconfig        # Startet das Konfigurationsmenü"
+	@echo "  make config os                # Baut @os.com gemäß .config (empfohlen)"
+	@echo "  make config diskImage         # Erstellt Diskettenimage gemäß .config"
+	@echo "  make config PC os             # Baut @OS.COM für PC1715 (überschreibt .config)"
+	@echo "  make os                      # Baut @os.com für BC (A5120), ggf. Warnung"
+	@echo "  make PC os                   # Baut @os.com für PC1715, ggf. Warnung"
+	@echo "  make menuconfig              # Startet das Konfigurationsmenü"
+	@echo ""
+	@echo "[HINWEIS] Für reproduzierbare Builds immer 'make config <target>' verwenden!"
+
 
 # OS bauen (Betriebssystem @OS.COM)
-os: $(OS_TARGET)
+os: .config $(OS_TARGET)
 
 # Build-Regel: Erzeuge @OS.COM im build/-Verzeichnis
 # Abhaengigkeiten: Quelltexte und vorgefertigte ERL
@@ -193,7 +220,7 @@ $(OS_TARGET): $(SRC_DIR)/bios.mac $(PREBUILT_DIR)/bdos.erl $(PREBUILT_DIR)/ccp.e
 	@echo "[FERTIG] @OS.COM wurde erfolgreich erzeugt."
 
 # Diskettenimage erzeugen
-diskImage: $(FINAL_IMAGE)
+diskImage: .config $(FINAL_IMAGE)
 	@echo "[INFO] Target 'diskImage' abgeschlossen. Diskettenimage ist bereit für TARGET=$(TARGET)."
 
 # Image bauen: Abhängigkeit von OS und Bootsektor
@@ -218,7 +245,7 @@ $(FINAL_IMAGE): $(BOOTSECTOR) $(OS_TARGET)
 	@echo "[DONE] Diskettenimage erstellt: $(FINAL_IMAGE)"
 
 # Diskettenimage auf physikalisches Laufwerk schreiben
-writeImage: $(FINAL_IMAGE)
+writeImage: .config $(FINAL_IMAGE)
 	@echo "[STEP] Schreibe Diskettenimage mit gw auf physikalisches Laufwerk (TARGET=$(TARGET))"
 	$(GW) write --diskdefs=$(CFG) --format=$(FORMAT) $(FINAL_IMAGE)
 	@echo "[FERTIG] Diskettenimage mit gw auf Laufwerk geschrieben."
