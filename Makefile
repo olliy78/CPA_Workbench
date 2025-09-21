@@ -116,31 +116,21 @@ endif
 # Konfigurations-Wrapper: explizit aus .config bauen
 .PHONY: config
 config:
-	@if [ "$(filter-out config,$(MAKECMDGOALS))" = "" ]; then \
-		echo "[INFO] Bitte gib ein Target an, z.B. 'make config os' oder 'make config diskImage'"; \
-		exit 1; \
+	@user_target=$(word 2,$(MAKECMDGOALS)); \
+	if [ -z "$$user_target" ]; then \
+		if [ -f .config ]; then \
+			target=$$(awk -F'CONFIG_BUILD_' '/^CONFIG_BUILD_/ && $$2 ~ /=y/ {sub(/=y/,"",$$2); print tolower($$2)}' .config | head -1); \
+			if [ -z "$$target" ]; then \
+				echo "[INFO] Keine Build-Ziele in .config gefunden und kein Target angegeben."; exit 1; \
+			fi; \
+		else \
+			echo "[INFO] Bitte gib ein Target an, z.B. 'make config os' oder 'make config diskImage'"; exit 1; \
+		fi; \
+	else \
+		target="$$user_target"; \
 	fi; \
-	user_target=$(word 2,$(MAKECMDGOALS)); \
-	if [ "$$user_target" = "PC" ] || [ "$$user_target" = "BC" ]; then \
-		user_target=$(word 3,$(MAKECMDGOALS)); \
-	fi; \
-	targets=""; \
-	if [ -n "$$user_target" ]; then \
-		targets="$$user_target"; \
-	fi; \
-	if [ -f .config ]; then \
-		grep -q '^CONFIG_BUILD_OS=y' .config && case " $$targets " in *" os "*) : ;; *) targets="$$targets os";; esac; \
-		grep -q '^CONFIG_BUILD_DISKIMAGE=y' .config && case " $$targets " in *" diskImage "*) : ;; *) targets="$$targets diskImage";; esac; \
-		grep -q '^CONFIG_BUILD_WRITEIMAGE=y' .config && case " $$targets " in *" writeImage "*) : ;; *) targets="$$targets writeImage";; esac; \
-		grep -q '^CONFIG_BUILD_DISKIMAGEHFE=y' .config && case " $$targets " in *" diskImage.hfe "*) : ;; *) targets="$$targets diskImage.hfe";; esac; \
-		grep -q '^CONFIG_BUILD_DISKIMAGESCP=y' .config && case " $$targets " in *" diskImage.scp "*) : ;; *) targets="$$targets diskImage.scp";; esac; \
-	fi; \
-	if [ -z "$$targets" ]; then \
-		echo "[INFO] Keine Build-Ziele in .config gefunden und kein Target angegeben."; \
-		exit 1; \
-	fi; \
-	echo "[INFO] Baue explizit mit Konfiguration aus .config: Targets='$$targets'"; \
-	exec $(MAKE) FROM_CONFIG=1 $$targets;
+	echo "[INFO] Baue explizit mit Konfiguration aus .config: Target='$$target'"; \
+	exec $(MAKE) FROM_CONFIG=1 $$target;
 
 # Warnung bei direktem Aufruf ohne config (aber nicht aus config-Target oder Wrapper heraus)
 ifeq ($(FROM_CONFIG)$(FROM_WRAPPER),)
