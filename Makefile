@@ -67,6 +67,21 @@
 
 # Zentraler Default für Systemvariante (wird überall als Fallback verwendet)
 DEFAULT_SYSTEMVAR := pc_1715
+# Systemdisk-Image-Konfiguration
+TMP_IMAGE = $(BUILD_DIR)/cpadisk.img.tmp
+FINAL_IMAGE = $(BUILD_DIR)/cpadisk.img
+HFE_IMAGE = $(BUILD_DIR)/cpadisk.hfe
+SCP_IMAGE = $(BUILD_DIR)/cpadisk.scp
+SYSTEMNAME = 0:@os.com
+ADDITIONS_DIR = additions
+CPMCP = $(TOOLS_DIR)/cpmcp
+CPMLS = $(TOOLS_DIR)/cpmls
+GW = gw
+CFG = cpaFormates.cfg
+# Default Diskettenformat (wird ggf. durch .config überschrieben)
+DEFAULT_FORMAT = cpa780
+DEFAULT_IMAGE_SIZE = 780
+DEFAULT_DISKDEF = cpa780_withoutBoot
 
 # SYSTEMVAR: Name der Systemvariante (z.B. bc_a5120, pc_1715, ...)
 SYSTEMVAR :=
@@ -159,29 +174,6 @@ else
 CPM = $(CPMEXE)
 endif
 
-# Systemdisk-Image-Konfiguration
-TMP_IMAGE = $(BUILD_DIR)/cpadisk.img.tmp
-FINAL_IMAGE = $(BUILD_DIR)/cpadisk.img
-HFE_IMAGE = $(BUILD_DIR)/cpadisk.hfe
-SCP_IMAGE = $(BUILD_DIR)/cpadisk.scp
-SYSTEMNAME = 0:@os.com
-ADDITIONS_DIR = additions
-CPMCP = $(TOOLS_DIR)/cpmcp
-CPMLS = $(TOOLS_DIR)/cpmls
-GW = gw
-CFG = cpaFormates.cfg
-
-# Disk-Image-Parameter je nach Systemvariante (Beispiel: pc_1715 = 800K, sonst 780K)
-ifeq ($(SYSTEMVAR),pc_1715)
-  DISKDEF = cpa800_withoutBoot
-  FORMAT = cpa800
-  IMAGE_SIZE = 800
-else
-  DISKDEF = cpa780_withoutBoot
-  FORMAT = cpa780
-  IMAGE_SIZE = 780
-endif
-
 # Keine expliziten Targets für Systemvarianten mehr nötig
 
 # menuconfig: Wrapper für den mehrstufigen Konfigurationsprozess
@@ -264,27 +256,55 @@ $(OS_TARGET): $(SRC_DIR)/bios.mac $(PREBUILT_DIR)/bdos.erl $(PREBUILT_DIR)/ccp.e
 diskImage: .config $(FINAL_IMAGE)
 	@echo "[INFO] Target 'diskImage' abgeschlossen."
 
+# Diskettenformat aus .config ermitteln (cpa780 oder cpa800)
+FORMAT := $(DEFAULT_FORMAT)
+IMAGE_SIZE := $(DEFAULT_IMAGE_SIZE)
+DISKDEF := $(DEFAULT_DISKDEF)
+ifeq ($(wildcard .config),.config)
+	ifneq ($(shell grep -q '^CONFIG_DISKTYPE_800K=y' .config && echo yes),)
+		FORMAT := cpa800
+		IMAGE_SIZE := 800
+		DISKDEF := cpa800
+		USEBOOTSECTOR := 0
+	endif
+	ifneq ($(shell grep -q '^CONFIG_DISKTYPE_780K=y' .config && echo yes),)
+		FORMAT := cpa780
+		IMAGE_SIZE := 780
+		DISKDEF := cpa780_withoutBoot
+		USEBOOTSECTOR := 1
+	endif
+endif
+
 # Image bauen: Abhängigkeit von OS und Bootsektor
 $(FINAL_IMAGE): $(BOOTSECTOR) $(OS_TARGET)
-			 @echo "[STEP 1] Erzeuge leeres temporäres Image: $(TMP_IMAGE) (Größe: $(IMAGE_SIZE)K, Format: $(FORMAT))"
-			 dd if=/dev/zero bs=1024 count=$(IMAGE_SIZE) 2>/dev/null | tr '\0' '\345' | dd of=$(TMP_IMAGE) bs=1024 count=$(IMAGE_SIZE) 2>/dev/null
-			 @echo "[STEP 2] Kopiere CPA-System (@os.com) ins Image (Format: $(FORMAT))"
-			 $(CPMCP) -f $(DISKDEF) $(TMP_IMAGE) $(OS_TARGET) $(SYSTEMNAME)
-			 @echo "[STEP 3] Kopiere Dateien aus '$(ADDITIONS_DIR)' ins Image"
-			 @for f in $(ADDITIONS_DIR)/*; do \
-				 if [ -f "$$f" ]; then \
-					 fname=$$(basename "$$f"); \
-	    echo "  [ADD] $$fname"; \
-	    $(CPMCP) -f $(DISKDEF) $(TMP_IMAGE) $$f 0:$$fname; \
-	  fi; \
-	done
+	@echo "[STEP 1] Erzeuge leeres temporäres Image: $(TMP_IMAGE) (Größe: $(IMAGE_SIZE)K, Format: $(FORMAT))"
+	dd if=/dev/zero bs=1024 count=$(IMAGE_SIZE) 2>/dev/null | tr '\0' '\345' | dd of=$(TMP_IMAGE) bs=1024 count=$(IMAGE_SIZE) 2>/dev/null
+	@echo "[STEP 2] Kopiere CPA-System (@os.com) ins Image (Format: $(FORMAT))"
+	$(CPMCP) -f $(DISKDEF) $(TMP_IMAGE) $(OS_TARGET) $(SYSTEMNAME)
+	@echo "[STEP 3] Kopiere Dateien aus '$(ADDITIONS_DIR)' ins Image"
+	@for f in $(ADDITIONS_DIR)/*; do \
+		if [ -f "$$f" ]; then \
+			fname=$$(basename "$$f"); \
+			# echo "  [ADD] $$fname"; \
+			$(CPMCP) -f $(DISKDEF) $(TMP_IMAGE) $$f 0:$$fname; \
+		fi; \
+	done; 
 	@echo "[STEP 4] Zeige Dateien im Image (nach dem Kopieren):"
 	$(CPMLS) -Ff $(DISKDEF) $(TMP_IMAGE)
-	@echo "[STEP 5] Füge Bootsektor hinzu und erstelle finales Image: $(FINAL_IMAGE)"
-	(dd if=$(BOOTSECTOR) bs=128 2>/dev/null; dd if=$(TMP_IMAGE) bs=1024 2>/dev/null) > $(FINAL_IMAGE)
+	@if [ "$(USEBOOTSECTOR)" = "1" ]; then \
+		if [ -f "$(BOOTSECTOR)" ]; then \
+			echo "[STEP 5] Füge Bootsektor aus $(BOOTSECTOR) hinzu"; \
+			(dd if=$(BOOTSECTOR) bs=128 2>/dev/null; dd if=$(TMP_IMAGE) bs=1024 2>/dev/null) > $(FINAL_IMAGE); \
+		else \
+			echo "[WARNUNG] Bootsektor $(BOOTSECTOR) nicht gefunden!"; \
+		fi; \
+	else \
+		echo "[STEP 5] Kein Bootsektor hinzufügen (CONFIG_DISKTYPE_800K=y)"; \
+		#(cp $(TMP_IMAGE) $(FINAL_IMAGE); dd if=$(FINAL_IMAGE) bs=32 count=128 seek=1 conv=notrunc of=$(FINAL_IMAGE) 2>/dev/null); \
+		(cp $(TMP_IMAGE) $(FINAL_IMAGE)); \
+	fi
 	rm -f $(TMP_IMAGE)
 	@echo "[DONE] Diskettenimage erstellt: $(FINAL_IMAGE)"
-
 # Diskettenimage im HFE-Format erzeugen
 diskImage.hfe: .config $(HFE_IMAGE)
 	@echo "[INFO] Target 'diskImage.hfe' abgeschlossen."
