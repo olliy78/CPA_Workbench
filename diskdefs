@@ -90,7 +90,7 @@ diskdef cpa800
   tracks 160
   sectrk 5
   blocksize 2048
-  maxdir 128
+  maxdir 132
   skew 0
   boottrk 0
   os 2.2

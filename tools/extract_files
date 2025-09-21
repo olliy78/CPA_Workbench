@@ -180,6 +180,6 @@ if [ -n "$GW_TEMP_IMG" ]; then
     echo "Temporäres Disketten-Image $GW_TEMP_IMG wurde gelöscht."
 fi
 if [ -n "$CONVERT_TEMP_IMG" ]; then
-    #rm -f "$CONVERT_TEMP_IMG"
+    rm -f "$CONVERT_TEMP_IMG"
     echo "Temporäres konvertiertes Image $CONVERT_TEMP_IMG wurde gelöscht."
 fi

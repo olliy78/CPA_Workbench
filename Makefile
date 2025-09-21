@@ -146,7 +146,7 @@ config:
 ifeq ($(FROM_CONFIG)$(FROM_WRAPPER),)
 ifneq ($(MAKECMDGOALS),)
 ifneq ($(firstword $(MAKECMDGOALS)),config)
-$(info [WARNUNG] Du hast 'make $(MAKECMDGOALS)' aufgerufen.)
+$(info [INFO] Du hast 'make $(MAKECMDGOALS)' aufgerufen.)
 endif
 endif
 endif
@@ -277,21 +277,32 @@ endif
 
 # Image bauen: Abhängigkeit von OS und Bootsektor
 $(FINAL_IMAGE): $(BOOTSECTOR) $(OS_TARGET)
-	@echo "[STEP 1] Erzeuge leeres temporäres Image: $(TMP_IMAGE) (Größe: $(IMAGE_SIZE)K, Format: $(FORMAT))"
-	dd if=/dev/zero bs=1024 count=$(IMAGE_SIZE) 2>/dev/null | tr '\0' '\345' | dd of=$(TMP_IMAGE) bs=1024 count=$(IMAGE_SIZE) 2>/dev/null
-	@echo "[STEP 2] Kopiere CPA-System (@os.com) ins Image (Format: $(FORMAT))"
-	$(CPMCP) -f $(DISKDEF) $(TMP_IMAGE) $(OS_TARGET) $(SYSTEMNAME)
+	@if [ "$(FORMAT)" = "cpa780" ]; then \
+		echo "[STEP 1] Erzeuge leeres temporäres Image: $(TMP_IMAGE) (Größe: 780k, Format: $(FORMAT))"; \
+		dd if=/dev/zero bs=1024 count=780 2>/dev/null | tr '\0' '\345' | dd of=$(TMP_IMAGE) bs=1024 count=780 2>/dev/null; \
+		echo "[STEP 2] Kopiere CPA-System (@os.com) ins Image (Format: $(FORMAT))"; \
+		$(CPMCP) -f $(DISKDEF) $(TMP_IMAGE) $(OS_TARGET) $(SYSTEMNAME); \
+	else \
+		echo "[STEP 1] Erzeuge leeres temporäres Image: $(TMP_IMAGE) (Größe: 800k, Format: $(FORMAT))"; \
+		dd if=/dev/zero bs=1024 count=800 2>/dev/null | tr '\0' '\345' | dd of=$(TMP_IMAGE) bs=1024 count=800 2>/dev/null; \
+		echo "[STEP 1b] Erzeuge pseudo-Bootblock am Anfang der Dateizuordnungstabelle"; \
+		dd if=$(BOOTSECTOR) bs=32 count=1 conv=notrunc of=$(TMP_IMAGE); \
+		echo "[STEP 2] Kopiere CPA-System (@os.com) ins Image (Format: $(FORMAT))"; \
+		$(CPMCP) -f $(DISKDEF) $(TMP_IMAGE) $(OS_TARGET) $(SYSTEMNAME); \
+		echo "[STEP 2b] Fixe Spur 0 damit sie bootfähig wird"; \
+		dd if=$(BOOTSECTOR) bs=32 count=4 conv=notrunc of=$(TMP_IMAGE); \
+	fi
 	@echo "[STEP 3] Kopiere Dateien aus '$(ADDITIONS_DIR)' ins Image"
 	@for f in $(ADDITIONS_DIR)/*; do \
 		if [ -f "$$f" ]; then \
 			fname=$$(basename "$$f"); \
-			# echo "  [ADD] $$fname"; \
+			echo "  [ADD] $$fname"; \
 			$(CPMCP) -f $(DISKDEF) $(TMP_IMAGE) $$f 0:$$fname; \
 		fi; \
 	done; 
 	@echo "[STEP 4] Zeige Dateien im Image (nach dem Kopieren):"
 	$(CPMLS) -Ff $(DISKDEF) $(TMP_IMAGE)
-	@if [ "$(USEBOOTSECTOR)" = "1" ]; then \
+	@if [ "$(FORMAT)" = "cpa780" ]; then \
 		if [ -f "$(BOOTSECTOR)" ]; then \
 			echo "[STEP 5] Füge Bootsektor aus $(BOOTSECTOR) hinzu"; \
 			(dd if=$(BOOTSECTOR) bs=128 2>/dev/null; dd if=$(TMP_IMAGE) bs=1024 2>/dev/null) > $(FINAL_IMAGE); \
@@ -299,9 +310,8 @@ $(FINAL_IMAGE): $(BOOTSECTOR) $(OS_TARGET)
 			echo "[WARNUNG] Bootsektor $(BOOTSECTOR) nicht gefunden!"; \
 		fi; \
 	else \
-		echo "[STEP 5] Kein Bootsektor hinzufügen (CONFIG_DISKTYPE_800K=y)"; \
-		#(cp $(TMP_IMAGE) $(FINAL_IMAGE); dd if=$(FINAL_IMAGE) bs=32 count=128 seek=1 conv=notrunc of=$(FINAL_IMAGE) 2>/dev/null); \
-		(cp $(TMP_IMAGE) $(FINAL_IMAGE)); \
+		echo "[STEP 5] Bootsektor braucht nicht hinzugefügt zu werden"; \
+		cp $(TMP_IMAGE) $(FINAL_IMAGE); \
 	fi
 	rm -f $(TMP_IMAGE)
 	@echo "[DONE] Diskettenimage erstellt: $(FINAL_IMAGE)"
