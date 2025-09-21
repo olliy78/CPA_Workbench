@@ -60,7 +60,8 @@ def run_patch_bios_mac(bios_mac_path, config_file, mode):
 def run_build(target):
     """Starte den Build-Prozess mit make <target>."""
     try:
-        # Prüfe, ob BUILD_CLEAN aktiv ist
+        # Ermittle das Build-Target (nur eines erlaubt)
+        build_targets = []
         clean_first = False
         config_file = ".config"
         if os.path.exists(config_file):
@@ -68,15 +69,24 @@ def run_build(target):
                 for line in f:
                     if line.strip() == "CONFIG_BUILD_CLEAN=y":
                         clean_first = True
-                        break
+                    elif line.strip().startswith("CONFIG_BUILD_") and line.strip().endswith("=y") and not line.strip().startswith("CONFIG_BUILD_CLEAN"):
+                        # z.B. CONFIG_BUILD_OS=y -> os
+                        build_targets.append(line.strip()[len("CONFIG_BUILD_"):-2].lower())
+        if len(build_targets) > 1:
+            print("[FEHLER] Es darf nur EIN Build-Target ausgewählt werden!")
+            sys.exit(1)
+        if not build_targets:
+            print("[INFO] Kein Build-Target ausgewählt. Es wird nichts gebaut.")
+            return
+        build_target = build_targets[0]
         if clean_first:
             print("[INFO] Führe vor dem Build: make clean aus...")
             subprocess.run(["make", "clean"], check=True)
-        cmd = ["make", "config", target]
+        cmd = ["make", "config", build_target]
         print(f"[DEBUG] Starte Build mit: {' '.join(cmd)}")
         subprocess.run(cmd, check=True)
     except subprocess.CalledProcessError as e:
-        print(f"[FEHLER] Build für Target {target} fehlgeschlagen: {e}")
+        print(f"[FEHLER] Build fehlgeschlagen: {e}")
         sys.exit(1)
 
 
@@ -214,16 +224,8 @@ def main():
         merge_config(config_file+".old", config_file, ["CONFIG_BUILD_", "CONFIG_DISKTYPE_"])
         shutil.move(config_file+".old", config_file)
 
-    # Build-Target aus .config auslesen
-    build_target = "os"  # Default
-    if os.path.exists(config_file):
-        with open(config_file) as f:
-            for line in f:
-                if line.startswith("CONFIG_BUILD_DISKIMAGE=y"):
-                    build_target = "diskImage"
-                elif line.startswith("CONFIG_BUILD_WRITEIMAGE=y"):
-                    build_target = "writeImage"
-    run_build(build_target)
+    # Build nur über .config steuern, nicht explizit Target übergeben
+    run_build(None)
 
 if __name__ == "__main__":
     main()

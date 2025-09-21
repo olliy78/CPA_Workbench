@@ -1,42 +1,47 @@
+
 # Kconfig für Build-Ausgabeformat
 mainmenu "CP/A System Konfiguration - Konfiguration Build-Ausgabeformat [? für Hilfe]"
 config HINT_BUILD
     bool "=== Hinweise zum Build-Ziel [? für Hilfe] ==="
     help
         Hier wird festgelegt, welches Build-Ziel nach Abschluss der Konfiguration ausgeführt werden soll.
-        Standardmäßig wird kein Build durchgeführt. Wähle eine oder mehrere Optionen, um nach der Konfiguration
-        automatisch das gewünschte Ziel zu bauen (z.B. nur @OS.COM, ein Diskettenimage oder direkt auf Diskette schreiben).
+        Standardmäßig wird kein Build durchgeführt. Wähle genau ein Build-Ziel aus.
         Die Auswahl kann jederzeit geändert werden.
     default n
 
-
-
+choice
+    prompt "Build-Ziel auswählen"
+    default BUILD_OS
+    help
+        Wähle genau ein Build-Ziel aus.
 
 config BUILD_OS
     bool "Nur @OS.COM bauen"
     help
         Erstellt nur das Betriebssystem (@OS.COM) im build/-Verzeichnis. Kein Diskettenimage, keine Ausgabe auf Diskette.
-    default n
+
 config BUILD_DISKIMAGE
     bool "Diskettenimage als *.img erzeugen"
     help
         Erstellt nach dem Build ein Diskettenimage (build/cpadisk.img) mit dem neuen System.
-    default n
+
 config BUILD_DISKIMAGEHFE
     bool "Diskettenimage als *.hfe erzeugen"
     help
         Erstellt nach dem Build ein Diskettenimage (build/cpadisk.hfe) mit dem neuen System.
-    default n
+
 config BUILD_DISKIMAGESCP
     bool "Diskettenimage als *.scp erzeugen"
     help
         Erstellt nach dem Build ein Diskettenimage (build/cpadisk.scp) mit dem neuen System.
-    default n
+
 config BUILD_WRITEIMAGE
     bool "Diskettenimage auf Laufwerk schreiben"
     help
         Schreibt nach dem Build das Diskettenimage direkt auf ein physikalisches Laufwerk (z.B. mit gw).
-    default n
+
+endchoice
+
 config BUILD_CLEAN
     bool "Aufräumen (clean) vor dem Build durchführen"
     help
@@ -44,7 +49,6 @@ config BUILD_CLEAN
         Dies ist nützlich, um das Build-Verzeichnis komplett zurückzusetzen, bevor das gewünschte Build-Target gebaut wird.
     default y
 
-menu "Diskettenformat wählen"
 choice
     prompt "Auswahl Diskettentyp"
     default DISKTYPE_780K
@@ -62,4 +66,3 @@ config DISKTYPE_800K
         Format für PC 1715: 800 kByte, geeignet für PC 1715 Hardware.
 
 endchoice
-endmenu
