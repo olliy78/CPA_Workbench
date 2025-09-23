@@ -89,7 +89,7 @@ exec bash --rcfile <(echo "
 alias ll='ls -alh'
 export PS1='\[\033[1;32m\][CP/A]\[\033[0m\] \[\033[1;34m\]\w\[\033[0m\]$ '
 echo -e '\033[1;32m[CP/A Build Environment aktiv]\033[0m'
-echo -e 'Verwenden Sie \"exit\" um die Umgebung zu verlassen.'
+echo -e 'Verwende \"exit\" um die Umgebung zu verlassen.'
 ")
 
 # Diese Zeile wird nach exec nicht mehr ausgeführt

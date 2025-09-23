@@ -66,7 +66,7 @@
 #   - Fuer reproduzierbare Builds immer 'make config <target>' verwenden!
 # ------------------------------------------------------------------------------
 
-# Zentraler Default für Systemvariante (wird überall als Fallback verwendet)
+# Zentraler Default fuer Systemvariante (wird ueberall als Fallback verwendet)
 DEFAULT_SYSTEMVAR := pc_1715
 # Systemdisk-Image-Konfiguration
 TMP_IMAGE = $(BUILD_DIR)/cpadisk.img.tmp
@@ -77,7 +77,7 @@ SYSTEMNAME = 0:@os.com
 ADDITIONS_DIR = additions
 GW = gw
 CFG = cpaFormates.cfg
-# Default Diskettenformat (wird ggf. durch .config überschrieben)
+# Default Diskettenformat (wird ggf. durch .config ueberschrieben)
 DEFAULT_FORMAT = cpa780
 DEFAULT_IMAGE_SIZE = 780
 DEFAULT_DISKDEF = cpa780_withoutBoot
@@ -131,11 +131,17 @@ endif
 endif
 endif
 
-# Betriebssystem erkennen (für Wine unter Linux)
+# Betriebssystem erkennen (fuer Wine unter Linux)
 OS := $(shell uname)
 # Name des CP/M-Emulators
 CPMEXE = cpm.exe
-# Arbeits- und Ausgabeverzeichnis für Build-Produkte
+# Wie CP/M-Tools auf diesem Host gestartet werden (unter Linux via wine)
+ifeq ($(OS),Linux)
+CPM = wine $(CPMEXE)
+else
+CPM = $(CPMEXE)
+endif
+# Arbeits- und Ausgabeverzeichnis fuer Build-Produkte
 BUILD_DIR = build
 # Verzeichnis mit Build-Tools (z.B. m80.com, linkmt.com)
 TOOLS_DIR = tools
@@ -156,12 +162,12 @@ CPMCP = $(TOOLS_DIR)/cpmcp.exe
 CPMLS = $(TOOLS_DIR)/cpmls.exe
 endif
 
-# Keine expliziten Targets für Systemvarianten mehr nötig
+# Keine expliziten Targets fuer Systemvarianten mehr noetig
 
-# menuconfig: Wrapper für den mehrstufigen Konfigurationsprozess
+# menuconfig: Wrapper fuer den mehrstufigen Konfigurationsprozess
 .PHONY: menuconfig
 menuconfig:
-	@echo "Starte CPA-Mehrstufen-Konfigurationsmenü..."
+	@echo "Starte CPA-Mehrstufen-Konfigurationsmenue..."
 	python3 configmenu/cpa_menuconfig.py
 
 
@@ -174,40 +180,40 @@ all: help
 
 # Hilfe-Target
 help:
-	@echo "Verfügbare Targets für das CP/A-Projekt:"
-	@echo "  make config <target>      - Baut das gewünschte Target (os, diskimage, diskimagehfe, diskimagescp, writeimage, ...) gemäß .config (empfohlen, reproduzierbar)"
-	@echo "  make <system> <target>    - Baut für die angegebene Systemvariante (z.B. make pc_1715 os)"
-	@echo "  make os                   - Baut das Betriebssystem (@OS.COM) für die Standard-Variante ($(DEFAULT_SYSTEMVAR))"
+	@echo "Verfuegbare Targets fuer das CP/A-Projekt:"
+	@echo "  make config <target>      - Baut das gewuenschte Target (os, diskimage, diskimagehfe, diskimagescp, writeimage, ...) gemaess .config (empfohlen, reproduzierbar)"
+	@echo "  make <system> <target>    - Baut fuer die angegebene Systemvariante (z.B. make pc_1715 os)"
+	@echo "  make os                   - Baut das Betriebssystem (@OS.COM) fuer die Standard-Variante ($(DEFAULT_SYSTEMVAR))"
 	@echo "  make diskimage            - Erstellt das Diskettenimage im build/-Verzeichnis (IMG-Format)"
 	@echo "  make diskimagehfe         - Erstellt ein HFE-Diskettenimage im build/-Verzeichnis"
 	@echo "  make diskimagescp         - Erstellt ein SCP-Diskettenimage im build/-Verzeichnis"
 	@echo "  make writeimage           - Schreibt das Diskettenimage auf ein physikalisches Laufwerk"
-	@echo "  make clean                - Entfernt temporäre und finale Dateien"
-	@echo "  make menuconfig           - Startet das mehrstufige Konfigurationsmenü (Systemtyp, Hardware, Build-Optionen)"
+	@echo "  make clean                - Entfernt temporaere und finale Dateien"
+	@echo "  make menuconfig           - Startet das mehrstufige Konfigurationsmenue (Systemtyp, Hardware, Build-Optionen)"
 	@echo "  make help                 - Zeigt diese Hilfe an"
 	@echo ""
-	@echo "Hinweis: Wenn du nicht das Menü oder die .config verwenden möchtest, setze die Zeile DEFAULT_SYSTEMVAR := <dein_systemname> am Anfang dieses Makefiles."
+	@echo "Hinweis: Wenn du nicht das Menue oder die .config verwenden moechtest, setze die Zeile DEFAULT_SYSTEMVAR := <dein_systemname> am Anfang dieses Makefiles."
 	@echo "Die verwendeten Ordner leiten sich direkt vom Namen der Systemvariante ab:"
 	@echo "  - Quelltexte:      src/<systemvariante> (z.B. src/pc_1715)"
 	@echo "  - Prebuilt-Files:  prebuilt/<systemvariante> (z.B. prebuilt/pc_1715)"
 	@echo "  - Bootsektor:      prebuilt/<systemvariante>/bootsec.bin"
 	@echo ""
-	@echo "Konfigurationsmenü (menuconfig):"
-	@echo "  - Interaktives Menü zur Auswahl von Systemtyp, Hardware und Build-Optionen"
-	@echo "  - Hilfetexte zu allen Optionen mit [?] im Menü aufrufbar"
-	@echo "  - Wizard-ähnliche Navigation durch die Konfigurationsschritte"
-	@echo "  - Änderungen werden in .config gespeichert und automatisch übernommen"
+	@echo "Konfigurationsmenue (menuconfig):"
+	@echo "  - Interaktives Menue zur Auswahl von Systemtyp, Hardware und Build-Optionen"
+	@echo "  - Hilfetexte zu allen Optionen mit [?] im Menue aufrufbar"
+	@echo "  - Wizard-aehnliche Navigation durch die Konfigurationsschritte"
+	@echo "  - Aenderungen werden in .config gespeichert und automatisch uebernommen"
 	@echo ""
 	@echo "Beispiele:"
-	@echo "  make config os                # Baut @os.com gemäß .config (empfohlen)"
-	@echo "  make config diskimage         # Erstellt Diskettenimage gemäß .config"
-	@echo "  make config diskimagehfe      # Erstellt HFE-Image gemäß .config (wenn aktiviert)"
-	@echo "  make config diskimagescp      # Erstellt SCP-Image gemäß .config (wenn aktiviert)"
-	@echo "  make config pc_1715 os        # Baut @os.com für pc_1715 (überschreibt .config)"
-	@echo "  make pc_1715 os               # Baut @os.com für pc_1715"
-	@echo "  make menuconfig               # Startet das Konfigurationsmenü"
+	@echo "  make config os                # Baut @os.com gemaess .config (empfohlen)"
+	@echo "  make config diskimage         # Erstellt Diskettenimage gemaess .config"
+	@echo "  make config diskimagehfe      # Erstellt HFE-Image gemaess .config (wenn aktiviert)"
+	@echo "  make config diskimagescp      # Erstellt SCP-Image gemaess .config (wenn aktiviert)"
+	@echo "  make config pc_1715 os        # Baut @os.com fuer pc_1715 (ueberschreibt .config)"
+	@echo "  make pc_1715 os               # Baut @os.com fuer pc_1715"
+	@echo "  make menuconfig               # Startet das Konfigurationsmenue"
 	@echo ""
-	@echo "[HINWEIS] Für reproduzierbare Builds immer 'make config <target>' verwenden!"
+	@echo "[HINWEIS] Fuer reproduzierbare Builds immer 'make config <target>' verwenden!"
 
 
 # OS bauen (Betriebssystem @OS.COM)
@@ -232,7 +238,7 @@ $(OS_TARGET): $(SRC_DIR)/bios.mac $(PREBUILT_DIR)/bdos.erl $(PREBUILT_DIR)/ccp.e
 	if [ -z "$$diff" ]; then echo "Fehler: Kein /p:-Wert in bios.log gefunden!"; exit 1; fi; \
 	echo "Verwende berechneten Linkwert: $$diff"; \
 	cd $(BUILD_DIR) && $(CPM) linkmt @OS=cpabas,ccp,bdos,bios/p:$$diff
-	@echo "[STEP 7] Aufräumen temporärer Dateien"
+	@echo "[STEP 7] Aufraeumen temporaerer Dateien"
 	rm -f $(BUILD_DIR)/*.syp $(BUILD_DIR)/*.rel $(BUILD_DIR)/*.mac $(BUILD_DIR)/*.erl $(BUILD_DIR)/bios.log $(BUILD_DIR)/$(CPMEXE) $(BUILD_DIR)/m80.com $(BUILD_DIR)/linkmt.com
 	@echo "[FERTIG] @OS.COM wurde erfolgreich erzeugt."
 
@@ -259,42 +265,69 @@ ifeq ($(wildcard .config),.config)
 endif
 
 $(FINAL_IMAGE): $(BOOTSECTOR) $(OS_TARGET)
+
+# Erzeugt das Diskettenimage fuer das CP/A-System
+# Diese Regel erstellt ein bootfaehiges Diskettenimage (IMG-Format) fuer Emulatoren oder echte Hardware
+# Schritte:
+# 1. Erzeuge eine leere Image-Datei mit der gewuenschten Groesse und fuelle sie mit 0xE5 (CP/M-Standardwert)
+# 2. Kopiere die Systemdatei (@os.com) mit cpmcp ins Image
+# 3. Fuer das 800K-Format: Bootsektor am Anfang einfuegen und Spur 0 fuer Bootfaehigkeit anpassen
+# 4. Fuer das 780K-Format: Bootsektor wird am Ende angehaengt (konkateniert)
+# 5. Fuege alle Dateien aus dem Verzeichnis 'additions' ins Image ein
+# 6. Zeige die Dateien im Image zur Kontrolle an
+# 7. Entferne temporaere Dateien
 	@if [ "$(FORMAT)" = "cpa780" ]; then \
-		echo "[STEP 1] Erzeuge leeres temporäres Image: $(TMP_IMAGE) (Größe: 780k, Format: $(FORMAT))"; \
+		echo "[STEP 1] Erzeuge leeres temporaeres Image: $(TMP_IMAGE) (Groesse: 780k, Format: $(FORMAT))"; \
 		dd if=/dev/zero bs=1024 count=780 2>/dev/null | tr '\0' '\345' | dd of=$(TMP_IMAGE) bs=1024 count=780 2>/dev/null; \
 		echo "[STEP 2] Kopiere CPA-System (@os.com) ins Image (Format: $(FORMAT))"; \
 		$(CPMCP) -f $(DISKDEF) $(TMP_IMAGE) $(OS_TARGET) $(SYSTEMNAME); \
 	else \
-		echo "[STEP 1] Erzeuge leeres temporäres Image: $(TMP_IMAGE) (Größe: 800k, Format: $(FORMAT))"; \
+		echo "[STEP 1] Erzeuge leeres temporaeres Image: $(TMP_IMAGE) (Groesse: 800k, Format: $(FORMAT))"; \
 		dd if=/dev/zero bs=1024 count=800 2>/dev/null | tr '\0' '\345' | dd of=$(TMP_IMAGE) bs=1024 count=800 2>/dev/null; \
 		echo "[STEP 1b] Erzeuge pseudo-Bootblock am Anfang der Dateizuordnungstabelle"; \
 		dd if=$(BOOTSECTOR) bs=32 count=1 conv=notrunc of=$(TMP_IMAGE); \
 		echo "[STEP 2] Kopiere CPA-System (@os.com) ins Image (Format: $(FORMAT))"; \
 		$(CPMCP) -f $(DISKDEF) $(TMP_IMAGE) $(OS_TARGET) $(SYSTEMNAME); \
-		echo "[STEP 2b] Fixe Spur 0 damit sie bootfähig wird"; \
+		echo "[STEP 2b] Fixe Spur 0 damit sie bootfaehig wird"; \
 		dd if=$(BOOTSECTOR) bs=32 count=4 conv=notrunc of=$(TMP_IMAGE); \
 	fi
 	@echo "[STEP 3] Kopiere Dateien aus '$(ADDITIONS_DIR)' ins Image"
-	@for f in $(ADDITIONS_DIR)/*; do \
+# Fuegt alle Dateien aus dem additions-Verzeichnis ins Diskettenimage ein
+	# Pruefe, ob ein Unterordner mit dem Namen der Systemvariante existiert
+	if [ -d "$(ADDITIONS_DIR)/$(SYSTEMVAR)" ]; then \
+		echo "[STEP 3a] Kopiere Dateien aus '$(ADDITIONS_DIR)/$(SYSTEMVAR)' ins Image"; \
+		for f in $(ADDITIONS_DIR)/$(SYSTEMVAR)/*; do \
+			if [ -f "$$f" ]; then \
+				fname=$$(basename "$$f"); \
+				echo "  [ADD] $$fname (system-specific)"; \
+				$(CPMCP) -f $(DISKDEF) $(TMP_IMAGE) $$f 0:$$fname; \
+			fi; \
+		done; \
+	fi; \
+	echo "[STEP 3b] Kopiere Dateien aus '$(ADDITIONS_DIR)' ins Image"; \
+	for f in $(ADDITIONS_DIR)/*; do \
 		if [ -f "$$f" ]; then \
 			fname=$$(basename "$$f"); \
 			echo "  [ADD] $$fname"; \
 			$(CPMCP) -f $(DISKDEF) $(TMP_IMAGE) $$f 0:$$fname; \
 		fi; \
 	done; 
+#	@echo "[STEP 4] Zeige Dateien im Image (nach dem Kopieren):"
 	@echo "[STEP 4] Zeige Dateien im Image (nach dem Kopieren):"
+# Listet alle Dateien im Image zur Kontrolle auf
 	$(CPMLS) -Ff $(DISKDEF) $(TMP_IMAGE)
 	@if [ "$(FORMAT)" = "cpa780" ]; then \
 		if [ -f "$(BOOTSECTOR)" ]; then \
-			echo "[STEP 5] Füge Bootsektor aus $(BOOTSECTOR) hinzu"; \
+			echo "[STEP 5] Fuege Bootsektor aus $(BOOTSECTOR) hinzu"; \
 			(dd if=$(BOOTSECTOR) bs=128 2>/dev/null; dd if=$(TMP_IMAGE) bs=1024 2>/dev/null) > $(FINAL_IMAGE); \
 		else \
 			echo "[WARNUNG] Bootsektor $(BOOTSECTOR) nicht gefunden!"; \
 		fi; \
 	else \
-		echo "[STEP 5] Bootsektor braucht nicht hinzugefügt zu werden"; \
+		echo "[STEP 5] Bootsektor braucht nicht hinzugefuegt zu werden"; \
 		cp $(TMP_IMAGE) $(FINAL_IMAGE); \
 	fi
+	# Entfernt die temporaere Image-Datei
 	rm -f $(TMP_IMAGE)
 	@echo "[DONE] Diskettenimage erstellt: $(FINAL_IMAGE)"
 
@@ -306,13 +339,13 @@ diskimagehfe: diskimage $(HFE_IMAGE)
 diskimagescp: diskimage $(SCP_IMAGE)
 	@echo "[INFO] Target 'diskimagescp' abgeschlossen."
 
-# Regel für HFE-Image
+# Regel fuer HFE-Image
 $(HFE_IMAGE): $(FINAL_IMAGE)
 	@echo "[STEP] Konvertiere $(FINAL_IMAGE) nach $(HFE_IMAGE) (Format: HFE)"
 	$(GW) convert --diskdefs=$(CFG) --format=$(FORMAT) $(FINAL_IMAGE) $(HFE_IMAGE)
 	@echo "[DONE] HFE-Image erstellt: $(HFE_IMAGE)"
 
-# Regel für SCP-Image
+# Regel fuer SCP-Image
 $(SCP_IMAGE): $(FINAL_IMAGE)
 	@echo "[STEP] Konvertiere $(FINAL_IMAGE) nach $(SCP_IMAGE) (Format: SCP)"
 	$(GW) convert --diskdefs=$(CFG) --format=$(FORMAT) $(FINAL_IMAGE) $(SCP_IMAGE)
@@ -329,7 +362,7 @@ clean_writeimage_log:
 	@if [ -f "$(WRITEIMAGE_LOG)" ]; then \
 		age=$$(($(shell date +%s) - $(shell date +%s -r $(WRITEIMAGE_LOG)))); \
 		if [ $$age -gt 30 ]; then \
-			echo "[INFO] $(WRITEIMAGE_LOG) ist älter als 30s, wird gelöscht..."; \
+			echo "[INFO] $(WRITEIMAGE_LOG) ist aelter als 30s, wird geloescht..."; \
 			rm -f $(WRITEIMAGE_LOG); \
 		fi; \
 	fi
@@ -339,6 +372,6 @@ $(WRITEIMAGE_LOG): clean_writeimage_log $(FINAL_IMAGE)
 	@$(GW) write --diskdefs=$(CFG) --format=$(FORMAT) $(FINAL_IMAGE) 2>&1 | tee $@
 	@echo "[FERTIG] Diskettenimage mit gw auf Laufwerk geschrieben." 2>&1 | tee $@
 
-# Aufräumen
+# Aufraeumen
 clean:
 	rm  $(BUILD_DIR)/*

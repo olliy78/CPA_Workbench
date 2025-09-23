@@ -28,7 +28,7 @@ if exist "%~dp0..\PortableGit\bin\bash.exe" set "GIT_BASH=%~dp0..\PortableGit\bi
 if "%GIT_BASH%"=="" (
     echo [FEHLER] Git Bash nicht gefunden!
     echo.
-    echo Bitte installiere Git oder gib den Pfad an (innerhalb dieser Datei).
+    echo Bitte installiere Git oder gib den Pfad innerhalb dieser Datei an.
     echo Git Download: https://git-scm.com/
     pause
     exit /b 1
