@@ -285,16 +285,16 @@ $(FINAL_IMAGE): $(BOOTSECTOR) $(OS_TARGET)
 		echo "[STEP 1] Erzeuge leeres temporaeres Image: $(TMP_IMAGE) (Groesse: 800k, Format: $(FORMAT))"; \
 		dd if=/dev/zero bs=1024 count=800 2>/dev/null | tr '\0' '\345' | dd of=$(TMP_IMAGE) bs=1024 count=800 2>/dev/null; \
 		echo "[STEP 1b] Erzeuge pseudo-Bootblock am Anfang der Dateizuordnungstabelle"; \
-		dd if=$(BOOTSECTOR) bs=32 count=1 conv=notrunc of=$(TMP_IMAGE); \
+		dd if=$(BOOTSECTOR) bs=32 count=1 conv=notrunc of=$(TMP_IMAGE) 2>/dev/null; \
 		echo "[STEP 2] Kopiere CPA-System (@os.com) ins Image (Format: $(FORMAT))"; \
 		$(CPMCP) -f $(DISKDEF) $(TMP_IMAGE) $(OS_TARGET) $(SYSTEMNAME); \
 		echo "[STEP 2b] Fixe Spur 0 damit sie bootfaehig wird"; \
-		dd if=$(BOOTSECTOR) bs=32 count=4 conv=notrunc of=$(TMP_IMAGE); \
+		dd if=$(BOOTSECTOR) bs=32 count=4 conv=notrunc of=$(TMP_IMAGE) 2>/dev/null; \
 	fi
 	@echo "[STEP 3] Kopiere Dateien aus '$(ADDITIONS_DIR)' ins Image"
 # Fuegt alle Dateien aus dem additions-Verzeichnis ins Diskettenimage ein
 	# Pruefe, ob ein Unterordner mit dem Namen der Systemvariante existiert
-	if [ -d "$(ADDITIONS_DIR)/$(SYSTEMVAR)" ]; then \
+	@if [ -d "$(ADDITIONS_DIR)/$(SYSTEMVAR)" ]; then \
 		echo "[STEP 3a] Kopiere Dateien aus '$(ADDITIONS_DIR)/$(SYSTEMVAR)' ins Image"; \
 		for f in $(ADDITIONS_DIR)/$(SYSTEMVAR)/*; do \
 			if [ -f "$$f" ]; then \

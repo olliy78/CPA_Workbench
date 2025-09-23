@@ -1,11 +1,20 @@
 
-# CPA Wirkbench – Tool zur Konfiguration des CPA Betriebssystems für Rechner der K1520-Reihe und des PC1715
+# CPA Workbench – Tool zur Konfiguration des CPA Betriebssystems für Rechner der K1520-Reihe und des PC1715
 
 Dieses Projekt stellt ein Konfigurationswerkzeug bereit, mit dem das CPA-Betriebssystem für verschiedene Rechner der K1520-Reihe und den PC1715 flexibel angepasst und gebaut werden kann. Über ein menübasiertes System lassen sich Systemvarianten, Hardwareoptionen und Build-Parameter komfortabel auswählen und in reproduzierbaren Builds umsetzen.
 
+![CPA Workbench Hauptfenster](doc/hardwarevariante.png)
+*Abbildung 1: Konfigurationsmenü - Hardwarevariante BC A5120
+
 Das CPA-Betriebssystem wurde ursprünglich in den 1980er Jahren für verschiedene 8-Bit-Computer entwickelt und jeweils an die spezifische Hardware angepasst. Daher existieren unterschiedliche Varianten im Quelltext, die sich im Detail durch Anpassungen an die Hardware und die im System verbauten EPROMs (Firmware) unterscheiden. In jüngerer Zeit wurden zudem inoffizielle Erweiterungen geschaffen, um neue oder geänderte Hardware zu unterstützen und die Funktionalität zu erweitern.
 
+![CPA Wirkbench Build-Details](doc/build_ziel.png)
+*Abbildung 2: Konfigurationsmenü - Auswahl Build Ziel
+
 Dieses Konfigurations- und Buildsystem hilft dabei, verschiedene CP/A-Varianten komfortabel zu konfigurieren und zu generieren. Es unterstützt Entwickler und Anwender bei der Anpassung, Weiterentwicklung und dem Test von Erweiterungen und ermöglicht reproduzierbare Builds für unterschiedliche Zielsysteme.
+
+![CPA Wirkbench Disketten-Image](doc/asembler_linker.png)
+*Abbildung 3: Ausgabe Asembler und Linker mit Übergabe der Adresse
 
 Durch die automatisierte Erstellung und das Schreiben von bootfähigen Systemdisketten oder Images für Diskettenemulatoren wird der Aufwand für das Testen und die Inbetriebnahme neuer Varianten erheblich reduziert.
 
