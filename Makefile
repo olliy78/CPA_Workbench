@@ -75,8 +75,6 @@ HFE_IMAGE = $(BUILD_DIR)/cpadisk.hfe
 SCP_IMAGE = $(BUILD_DIR)/cpadisk.scp
 SYSTEMNAME = 0:@os.com
 ADDITIONS_DIR = additions
-CPMCP = $(TOOLS_DIR)/cpmcp.exe
-CPMLS = $(TOOLS_DIR)/cpmls.exe
 GW = gw
 CFG = cpaFormates.cfg
 # Default Diskettenformat (wird ggf. durch .config überschrieben)
@@ -151,9 +149,11 @@ OS_TARGET = $(BUILD_DIR)/@os.com
 
 # CPM-Tool-Aufruf je nach Betriebssystem
 ifeq ($(OS),Linux)
-CPM = wine $(CPMEXE)
+CPMCP = $(TOOLS_DIR)/cpmcp
+CPMLS = $(TOOLS_DIR)/cpmls
 else
-CPM = $(CPMEXE)
+CPMCP = $(TOOLS_DIR)/cpmcp.exe
+CPMLS = $(TOOLS_DIR)/cpmls.exe
 endif
 
 # Keine expliziten Targets für Systemvarianten mehr nötig
@@ -341,4 +341,4 @@ $(WRITEIMAGE_LOG): clean_writeimage_log $(FINAL_IMAGE)
 
 # Aufräumen
 clean:
-	rm -f $(TMP_IMAGE) $(FINAL_IMAGE) $(BUILD_DIR)/* $(SRC_DIR)/*.erl $(SRC_DIR)/*.rel $(SRC_DIR)/*.syp $(BUILD_DIR)/writeimage.log
+	rm  $(BUILD_DIR)/*
