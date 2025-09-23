@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # ------------------------------------------------------------------------------
 # Makefile für das CP/A BIOS-Projekt und die Systemdisketten-Erstellung
 # ------------------------------------------------------------------------------
@@ -74,8 +75,8 @@ HFE_IMAGE = $(BUILD_DIR)/cpadisk.hfe
 SCP_IMAGE = $(BUILD_DIR)/cpadisk.scp
 SYSTEMNAME = 0:@os.com
 ADDITIONS_DIR = additions
-CPMCP = $(TOOLS_DIR)/cpmcp
-CPMLS = $(TOOLS_DIR)/cpmls
+CPMCP = $(TOOLS_DIR)/cpmcp.exe
+CPMLS = $(TOOLS_DIR)/cpmls.exe
 GW = gw
 CFG = cpaFormates.cfg
 # Default Diskettenformat (wird ggf. durch .config überschrieben)
@@ -322,10 +323,21 @@ $(SCP_IMAGE): $(FINAL_IMAGE)
 WRITEIMAGE_LOG = $(BUILD_DIR)/writeimage.log
 writeimage: $(WRITEIMAGE_LOG)
 
-$(WRITEIMAGE_LOG): $(FINAL_IMAGE)
+.PHONY: clean_writeimage_log
+
+clean_writeimage_log:
+	@if [ -f "$(WRITEIMAGE_LOG)" ]; then \
+		age=$$(($(shell date +%s) - $(shell date +%s -r $(WRITEIMAGE_LOG)))); \
+		if [ $$age -gt 30 ]; then \
+			echo "[INFO] $(WRITEIMAGE_LOG) ist älter als 30s, wird gelöscht..."; \
+			rm -f $(WRITEIMAGE_LOG); \
+		fi; \
+	fi
+
+$(WRITEIMAGE_LOG): clean_writeimage_log $(FINAL_IMAGE)
 	@echo "[STEP] Schreibe Diskettenimage mit gw auf physikalisches Laufwerk"
 	@$(GW) write --diskdefs=$(CFG) --format=$(FORMAT) $(FINAL_IMAGE) 2>&1 | tee $@
-	@echo "[FERTIG] Diskettenimage mit gw auf Laufwerk geschrieben."
+	@echo "[FERTIG] Diskettenimage mit gw auf Laufwerk geschrieben." 2>&1 | tee $@
 
 # Aufräumen
 clean:
