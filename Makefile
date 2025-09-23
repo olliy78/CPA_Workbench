@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 # ------------------------------------------------------------------------------
-# Makefile für das CP/A BIOS-Projekt und die Systemdisketten-Erstellung
+# Makefile fuer das CP/A BIOS-Projekt und die Systemdisketten-Erstellung
 # ------------------------------------------------------------------------------
 #
 # Dieses Makefile steuert den Bau des CP/A-Betriebssystems (@OS.COM) und die
-# Erstellung eines CP/M-kompatiblen Systemdisketten-Images. Es unterstützt beliebige
+# Erstellung eines CP/M-kompatiblen Systemdisketten-Images. Es unterstuetzt beliebige
 # Systemvarianten, die als Unterordner in src/<systemvariante> und prebuilt/<systemvariante> existieren.
 #
-# WICHTIG: Wenn du NICHT das Konfigurationsmenü oder die .config verwenden möchtest,
+# WICHTIG: Wenn du NICHT das Konfigurationsmenue oder die .config verwenden moechtest,
 # kannst du die Zeile
 #   DEFAULT_SYSTEMVAR := <dein_systemname>
-# am Anfang dieses Makefiles anpassen, um die gewünschte Systemvariante festzulegen.
+# am Anfang dieses Makefiles anpassen, um die gewuenschte Systemvariante festzulegen.
 # Beispiel: DEFAULT_SYSTEMVAR := pc_1715
 #
 # Die Namen der verwendeten Ordner leiten sich direkt vom Namen der Systemvariante ab:
@@ -21,39 +21,39 @@
 # Das Buildsystem verwendet diese Ordner automatisch, sobald du z.B. 'make pc_1715 os' aufrufst
 # oder DEFAULT_SYSTEMVAR entsprechend setzt.
 #
-# Konfigurationsmenü:
-#   make menuconfig   - Startet das mehrstufige Konfigurationsmenü für Systemtyp,
+# Konfigurationsmenue:
+#   make menuconfig   - Startet das mehrstufige Konfigurationsmenue fuer Systemtyp,
 #                       Hardware- und Laufwerksauswahl sowie Build-Optionen.
 #                       Die Konfiguration wird in .config gespeichert und die
 #                       passenden BIOS-Quellen werden automatisch angepasst.
-#   Das Menü bietet:
+#   Das Menue bietet:
 #     1. Auswahl des Systemtyps (z.B. A5120, PC1715)
 #     2. Auswahl der Hardware- und Diskettenlaufwerks-Varianten
 #     3. Auswahl des Build-Ausgabeformats
-#     4. Hilfetexte zu allen Optionen (mit [?] im Menü)
-#     5. Wizard-ähnliche Navigation durch die Konfigurationsschritte
+#     4. Hilfetexte zu allen Optionen (mit [?] im Menue)
+#     5. Wizard-aehnliche Navigation durch die Konfigurationsschritte
 #
 # Wichtige Targets:
-#   make config <target>      - Baut das gewünschte Target (os, diskimage, diskimagehfe, diskimagescp, writeimage, ...) gemäß .config (empfohlen, reproduzierbar)
-#   make os                   - Baut das Betriebssystem (@OS.COM) für das gewählte TARGET (Standard: BC, ggf. Warnung)
+#   make config <target>      - Baut das gewuenschte Target (os, diskimage, diskimagehfe, diskimagescp, writeimage, ...) gemaess .config (empfohlen, reproduzierbar)
+#   make os                   - Baut das Betriebssystem (@OS.COM) fuer das gewaehlte TARGET (Standard: BC, ggf. Warnung)
 #   make diskimage            - Erstellt das Diskettenimage im build/-Verzeichnis (IMG-Format)
 #   make diskimagehfe         - Erstellt ein HFE-Diskettenimage im build/-Verzeichnis
 #   make diskimagescp         - Erstellt ein SCP-Diskettenimage im build/-Verzeichnis
 #   make writeimage           - Schreibt das Diskettenimage auf ein physikalisches Laufwerk
-#   make clean                - Entfernt temporäre und finale Dateien
+#   make clean                - Entfernt temporaere und finale Dateien
 #
 # Systemvarianten:
 #   Der Name der Systemvariante entspricht dem Unterordner in src/<system> und prebuilt/<system>.
 #   Beispiel: make pc_1715 os verwendet src/pc_1715 und prebuilt/pc_1715.
 #
 # Beispiele:
-#   make config os                # Baut @os.com gemäß .config (empfohlen)
-#   make config diskimage         # Erstellt Diskettenimage gemäß .config
-#   make config diskimagehfe      # Erstellt HFE-Image gemäß .config (wenn aktiviert)
-#   make config diskimagescp      # Erstellt SCP-Image gemäß .config (wenn aktiviert)
-#   make config pc_1715 os        # Baut @os.com für pc_1715 (überschreibt .config)
-#   make pc_1715 os               # Baut @os.com für pc_1715
-#   make menuconfig               # Startet das Konfigurationsmenü
+#   make config os                # Baut @os.com gemaess .config (empfohlen)
+#   make config diskimage         # Erstellt Diskettenimage gemaess .config
+#   make config diskimagehfe      # Erstellt HFE-Image gemaess .config (wenn aktiviert)
+#   make config diskimagescp      # Erstellt SCP-Image gemaess .config (wenn aktiviert)
+#   make config pc_1715 os        # Baut @os.com fuer pc_1715 (ueberschreibt .config)
+#   make pc_1715 os               # Baut @os.com fuer pc_1715
+#   make menuconfig               # Startet das Konfigurationsmenue
 #
 # Hinweise:
 #   - Die Quelltexte liegen in src/<systemvariante> (z.B. src/pc_1715)
@@ -61,9 +61,9 @@
 #   - Das Systemfile @OS.COM wird im build/-Verzeichnis erzeugt
 #   - Das Diskettenimage wird als build/cpadisk.img abgelegt
 #   - HFE- und SCP-Images werden als build/cpadisk.hfe bzw. build/cpadisk.scp abgelegt (wenn aktiviert)
-#   - Die Konfiguration erfolgt über das Menü (menuconfig) und wird in .config gespeichert
-#   - Nach Änderung der Konfiguration sollte das System neu gebaut werden
-#   - Für reproduzierbare Builds immer 'make config <target>' verwenden!
+#   - Die Konfiguration erfolgt ueber das Menue (menuconfig) und wird in .config gespeichert
+#   - Nach Aenderung der Konfiguration sollte das System neu gebaut werden
+#   - Fuer reproduzierbare Builds immer 'make config <target>' verwenden!
 # ------------------------------------------------------------------------------
 
 # Zentraler Default für Systemvariante (wird überall als Fallback verwendet)
