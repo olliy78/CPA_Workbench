@@ -1,0 +1,323 @@
+# Kconfig für die Konfiguration des CP/A Betriebssystemkernels für BC A5120
+
+mainmenu "CP/A System Konfiguration - Konfiguration des System Kernels @OS.COM [? für Hilfe]"
+config HINT_INFO
+    bool "=== Hinweise zur Konfiguration [? für Hilfe] ==="
+    help
+        CP/A Einstellungen können vor Allem in der bios.mac aber auch in anderen Dateien vorgenommen werden.
+        Hier können nur die wichtigsten Dinge eingestellt werden. Nach dem Speichern und Beenden werden die Änderungen in die bios.mac übernommen.
+        Nachdem die gewünschte Änderungen vorgenommen wurden, das Menü mit [Q] oder [Esc] beenden und unbedingt Speichern.
+    default n
+menu "Hardwarevariante"
+choice
+    prompt "Geraeteversion"
+    default SYSTEM_DEV_OEM
+    config SYSTEM_DEV_OEM
+        bool "OEM-Geraet (oem=0)"
+        help
+            source=bios.mac dev=oem
+    config SYSTEM_DEV_CPD
+        bool "Hardware-Variante CP/D (cpd=1)"
+        help
+            source=bios.mac dev=cpd
+    config SYSTEM_DEV_K8915
+        bool "Hardware-Variante K8915 (k8915=2)"
+        help
+            source=bios.mac dev=k8915
+endchoice
+
+choice
+    prompt "Prozessor-Takt (MHz)"
+    default SYSTEM_CPUCLK_25
+    config SYSTEM_CPUCLK_25
+        bool "2,5 MHz (cpuclk=25)"
+        help
+            source=bios.mac cpuclk=25
+    config SYSTEM_CPUCLK_40
+        bool "4,0 MHz (cpuclk=40)"
+        help
+            source=bios.mac cpuclk=40
+endchoice
+
+choice
+    prompt "CPU-Typ"
+    default SYSTEM_CPU_K2526
+    config SYSTEM_CPU_K2521
+        bool "K2521 (1)"
+        help
+            source=bios.mac cpu=k2521
+    config SYSTEM_CPU_K2526
+        bool "K2526 (6)"
+        help
+            source=bios.mac cpu=k2526
+    config SYSTEM_CPU_C1715
+        bool "C1715 (7)"
+        help
+            source=bios.mac cpu=c1715
+endchoice
+
+choice
+    prompt "Floppy-Karte"
+    default SYSTEM_FDC_K5122
+    config SYSTEM_FDC_K5120
+        bool "K5120 (0)"
+        help
+            source=bios.mac fdc=k5120
+    config SYSTEM_FDC_K5122
+        bool "K5122 (1)"
+        help
+            source=bios.mac fdc=k5122
+    config SYSTEM_FDC_K5126
+        bool "K5126 (6)"
+        help
+            source=bios.mac fdc=k5126
+    config SYSTEM_FDC_F1715
+        bool "PC1715 (7)"
+        help
+            source=bios.mac fdc=f1715
+    config SYSTEM_FDC_FDC3
+        bool "FDC3 (11)"
+        help
+            source=bios.mac fdc=fdc3
+endchoice
+
+choice
+    prompt "Bildschirm-Karte"
+    default SYSTEM_CRT_K7024
+    config SYSTEM_CRT_K7024
+        bool "K7024 (0) Bildschirm-Karte mit Kursor durch Bit 7"
+        help
+            source=bios.mac crt=k7024
+    config SYSTEM_CRT_DSY5
+        bool "DSY5 (1) Bildschirm-Karte mit Invers durch Bit 7 (z.B. VDE Buch)"
+        help
+            source=bios.mac crt=dsy5
+    config SYSTEM_CRT_B1715
+        bool "PC 1715 (7)"
+        help
+            source=bios.mac crt=b1715
+endchoice
+
+choice
+    prompt "RAM-Größe (kBytes)"
+    default SYSTEM_RAM_64
+    config SYSTEM_RAM_64
+        bool "64 kBytes"
+        help
+            source=bios.mac ramkb=64
+    config SYSTEM_RAM_32
+        bool "32 kBytes"
+        help
+            source=bios.mac ramkb=32
+endchoice
+
+endmenu
+
+
+# Menü für RAM Disk Optionen
+
+menu "RAM Disk (RAM-Floppy) Optionen"
+config HINT_BUILD
+    bool "=== Hinweise zum Build-Ziel [? für Hilfe] ==="
+    help
+        Hier können Sie konfigurieren, ob beim Systemstart eine RAM-Floppy (RAM Disk 'M:') eingerichtet werden soll.
+        Es stehen verschiedene Hardware-Erweiterungen zur Verfügung, die als RAM-Floppy genutzt werden können.
+        Die Auswahl wirkt sich auf die Generierung der bios.mac aus.
+
+        Technische Hinweise (aus bios.mac):
+        - OSS 48k: Falls eine 48k Speichererweiterung (OSS 062-8471) vorhanden ist, wird beim Kaltstart 
+          eine RAM-Floppy "M:" für diesen Bereich angelegt. Bei "oss=0" erfolgt kein Test auf eine evtl. 
+          vorhandene OSS-Karte.
+        - EM256: Wenn eine 16-Bit-Erweiterungskarte mit 256k-Speicher EM256 installiert ist, kann dieser 
+          Speicher als RAM-Floppy 'M:' genutzt werden. Bei "em256" ungleich Null wird das Vorhandensein 
+          einer Erweiterungskarte getestet. Bei vorhandener EM256 wird beim Kaltstart die RAM-Floppy 
+          eingerichtet.
+        - MKD256: Die RAM-Floppy mkd256 kann als Laufwerk 'M:' angesprochen werden. Bei "mkd256" ungleich 
+          Null wird das Vorhandensein einer entsprechenden Karte getestet. Ist diese vorhanden, wird 
+          sie beim Kaltstart initialisiert.
+        - RAF: Wenn mindestens eine RAF-Karte des ZWG der AdW vorhanden ist (beliebig bestückt, max. 
+          2M Byte pro Karte, max. 4 Karten), so kann bzw. können diese als RAM-Floppy 'M:' benutzt 
+          werden (über "SWAP A: M:" bei Bedarf auch als LW A:). Bei "raf" ungleich Null wird das 
+          Vorhandensein von RAF-Karten getestet. Bei vorhandener(n) Karte(n) wird beim erstmaligen 
+          Kaltstart nach dem Einschalten des Stromes die RAM-Floppy eingerichtet, bei RESET bleibt 
+          ihr Inhalt erhalten.
+        - NANOS-RAF: Wenn mindestens eine NANOS-256k-DRAM-Karte vorhanden ist (beliebig bestückt, max. 
+          256k Byte pro Karte, max. 4 Karten), so kann bzw. können diese als RAM-Floppy 'M:' benutzt 
+          werden (über "SWAP A: M:" bei Bedarf auch als LW A:). Bei "rna" ungleich Null wird das 
+          Vorhandensein von NANOS-RAF-Karten getestet. Bei vorhandener(n) Karte(n) wird beim erstmaligen 
+          Kaltstart nach dem Einschalten des Stromes die RAM-Floppy eingerichtet, bei RESET bleibt 
+          ihr Inhalt erhalten.
+
+        Allgemeiner Hinweis: Die RAM-Floppy ist ein schneller, flüchtiger Massenspeicher und wird beim Kaltstart initialisiert. Daten gehen beim Ausschalten verloren!
+    default n
+
+choice
+    prompt "RAM Disk Typ (RAM-Floppy)"
+    default SYSTEM_RAMDISK_NONE
+    help
+        Wählen Sie die gewünschte RAM-Floppy-Option:
+        - Keine: Es wird keine RAM-Floppy eingerichtet.
+        - OSS 48k: RAM-Floppy mit OSS 062-8471 Speichererweiterung (48k)
+        - EM256: RAM-Floppy mit 16-Bit-Erweiterungskarte EM256 (256k)
+        - MKD256: RAM-Floppy mit MKD256-Karte
+        - RAF: RAM-Floppy mit RAF-Karte (max. 4 Karten, je 2MB)
+        - NANOS-RAF: RAM-Floppy mit NANOS-256k-DRAM-Karte (max. 4 Karten)
+    config SYSTEM_RAMDISK_NONE
+        bool "Keine RAM-Floppy (oss=0, em256=0, mkd256=0, raf=0, rna=0)"
+        help
+            source=bios.mac ramdisk=none
+        help
+            Es wird keine RAM-Floppy eingerichtet.
+    config SYSTEM_RAMDISK_OSS
+        bool "OSS 48k Speichererweiterung (oss=1)"
+        help
+            source=bios.mac ramdisk=oss
+        help
+            Nutzt eine OSS 062-8471 Speichererweiterung (48k) als RAM-Floppy 'M:'.
+    config SYSTEM_RAMDISK_EM256
+        bool "EM256 16-Bit-Erweiterung (em256=1)"
+        help
+            source=bios.mac ramdisk=em256
+        help
+            Nutzt eine 16-Bit-Erweiterungskarte EM256 (256k) als RAM-Floppy 'M:'.
+    config SYSTEM_RAMDISK_MKD256
+        bool "MKD256 RAM-Floppy (mkd256=1)"
+        help
+            source=bios.mac ramdisk=mkd256
+        help
+            Nutzt eine MKD256-Karte als RAM-Floppy 'M:'.
+    config SYSTEM_RAMDISK_RAF
+        bool "RAF-Karte (raf=1)"
+        help
+            source=bios.mac ramdisk=raf
+        help
+            Nutzt mindestens eine RAF-Karte (max. 4, je 2MB) als RAM-Floppy 'M:'.
+    config SYSTEM_RAMDISK_NANOS
+        bool "NANOS-256k-DRAM-Karte (rna=1)"
+        help
+            source=bios.mac ramdisk=nanos
+        help
+            Nutzt mindestens eine NANOS-256k-DRAM-Karte (max. 4) als RAM-Floppy 'M:'.
+endchoice
+
+endmenu
+
+
+menu "Diskettenlaufwerke"
+choice
+    prompt "Laufwerk A Typ"
+    default SYSTEM_DRIVE_A_11580
+    config SYSTEM_DRIVE_A_10540
+        bool "DD, SS, 5', 40 Tracks (K5600.10)"
+        help
+            source=bios.mac diskA=10540
+    config SYSTEM_DRIVE_A_10580
+        bool "DD, SS, 5', 80 Tracks (K5600.20)"
+        help
+            source=bios.mac diskA=10580
+    config SYSTEM_DRIVE_A_11580
+        bool "DD, DS, 5', 80 Tracks (K5601 !!!)"
+        help
+            source=bios.mac diskA=11580
+    config SYSTEM_DRIVE_A_00877
+        bool "SD, SS, 8', 77 Tracks (MF3200)"
+        help
+            source=bios.mac diskA=00877
+    config SYSTEM_DRIVE_A_10877
+        bool "DD, SS, 8', 77 Tracks (K5602.10, MF6400)"
+        help
+            source=bios.mac diskA=10877
+    config SYSTEM_DRIVE_A_0
+        bool "Nicht vorhanden"
+        help
+            source=bios.mac diskA=0
+endchoice
+
+choice
+    prompt "Laufwerk B Typ"
+    default SYSTEM_DRIVE_A_11580
+    config SYSTEM_DRIVE_B_10540
+        bool "DD, SS, 5', 40 Tracks (K5600.10)"
+        help
+            source=bios.mac diskB=10540
+    config SYSTEM_DRIVE_B_10580
+        bool "DD, SS, 5', 80 Tracks (K5600.20)"
+        help
+            source=bios.mac diskB=10580
+    config SYSTEM_DRIVE_B_11580
+        bool "DD, DS, 5', 80 Tracks (K5601 !!!)"
+        help
+            source=bios.mac diskB=11580
+    config SYSTEM_DRIVE_B_00877
+        bool "SD, SS, 8', 77 Tracks (MF3200)"
+        help
+            source=bios.mac diskB=00877
+    config SYSTEM_DRIVE_B_10877
+        bool "DD, SS, 8', 77 Tracks (K5602.10, MF6400)"
+        help
+            source=bios.mac diskB=10877
+    config SYSTEM_DRIVE_B_0
+        bool "Nicht vorhanden"
+        help
+            source=bios.mac diskB=0
+endchoice
+
+choice
+    prompt "Laufwerk C Typ"
+    default SYSTEM_DRIVE_C_0
+    config SYSTEM_DRIVE_A_11580
+        bool "DD, SS, 5', 40 Tracks (K5600.10)"
+        help
+            source=bios.mac diskC=10540
+    config SYSTEM_DRIVE_C_10580
+        bool "DD, SS, 5', 80 Tracks (K5600.20)"
+        help
+            source=bios.mac diskC=10580
+    config SYSTEM_DRIVE_C_11580
+        bool "DD, DS, 5', 80 Tracks (K5601 !!!)"
+        help
+            source=bios.mac diskC=11580
+    config SYSTEM_DRIVE_C_00877
+        bool "SD, SS, 8', 77 Tracks (MF3200)"
+        help
+            source=bios.mac diskC=00877
+    config SYSTEM_DRIVE_C_10877
+        bool "DD, SS, 8', 77 Tracks (K5602.10, MF6400)"
+        help
+            source=bios.mac diskC=10877
+    config SYSTEM_DRIVE_C_0
+        bool "Nicht vorhanden"
+        help
+            source=bios.mac diskC=0
+endchoice
+
+choice
+    prompt "Laufwerk D Typ"
+    default SYSTEM_DRIVE_D_0
+    config SYSTEM_DRIVE_D_10540
+        bool "DD, SS, 5', 40 Tracks (K5600.10)"
+        help
+            source=bios.mac diskD=10540
+    config SYSTEM_DRIVE_D_10580
+        bool "DD, SS, 5', 80 Tracks (K5600.20)"
+        help
+            source=bios.mac diskD=10580
+    config SYSTEM_DRIVE_D_11580
+        bool "DD, DS, 5', 80 Tracks (K5601 !!!)"
+        help
+            source=bios.mac diskD=11580
+    config SYSTEM_DRIVE_D_00877
+        bool "SD, SS, 8', 77 Tracks (MF3200)"
+        help
+            source=bios.mac diskD=00877
+    config SYSTEM_DRIVE_D_10877
+        bool "DD, SS, 8', 77 Tracks (K5602.10, MF6400)"
+        help
+            source=bios.mac diskD=10877
+    config SYSTEM_DRIVE_D_0
+        bool "Nicht vorhanden"
+        help
+            source=bios.mac diskD=0
+endchoice
+
+endmenu

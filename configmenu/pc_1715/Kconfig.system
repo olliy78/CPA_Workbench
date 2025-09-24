@@ -1,0 +1,130 @@
+# Kconfig für die Konfiguration des CP/A Betriebssystemkernels für PC 1715
+
+mainmenu "CP/A System Konfiguration - Konfiguration des System Kernels @OS.COM [? für Hilfe]"
+config HINT_INFO
+    bool "=== Hinweise zur Konfiguration [? für Hilfe] ==="
+    help
+        CP/A Einstellungen können vor Allem in der bios.mac aber auch in anderen Dateien vorgenommen werden.
+        Hier können nur die wichtigsten Dinge eingestellt werden. Nach dem Speichern und Beenden werden die Änderungen in die bios.mac übernommen.
+        Nachdem die gewünschte Änderungen vorgenommen wurden, das Menü mit [Q] oder [Esc] beenden und unbedingt Speichern.
+    default n
+
+
+menu "Diskettenlaufwerke"
+choice
+    prompt "Laufwerk A Typ"
+    default SYSTEM_DRIVE_A_11580
+    config SYSTEM_DRIVE_A_10540
+        bool "DD, SS, 5', 40 Tracks (K5600.10)"
+        help
+            source=bios.mac diskA=10540
+    config SYSTEM_DRIVE_A_10580
+        bool "DD, SS, 5', 80 Tracks (K5600.20)"
+        help
+            source=bios.mac diskA=10580
+    config SYSTEM_DRIVE_A_11580
+        bool "DD, DS, 5', 80 Tracks (K5601 !!!)"
+        help
+            source=bios.mac diskA=11580
+    config SYSTEM_DRIVE_A_00877
+        bool "SD, SS, 8', 77 Tracks (MF3200)"
+        help
+            source=bios.mac diskA=00877
+    config SYSTEM_DRIVE_A_10877
+        bool "DD, SS, 8', 77 Tracks (K5602.10, MF6400)"
+        help
+            source=bios.mac diskA=10877
+    config SYSTEM_DRIVE_A_0
+        bool "Nicht vorhanden"
+        help
+            source=bios.mac diskA=0
+endchoice
+
+choice
+    prompt "Laufwerk B Typ"
+    default SYSTEM_DRIVE_A_11580
+    config SYSTEM_DRIVE_B_10540
+        bool "DD, SS, 5', 40 Tracks (K5600.10)"
+        help
+            source=bios.mac diskB=10540
+    config SYSTEM_DRIVE_B_10580
+        bool "DD, SS, 5', 80 Tracks (K5600.20)"
+        help
+            source=bios.mac diskB=10580
+    config SYSTEM_DRIVE_B_11580
+        bool "DD, DS, 5', 80 Tracks (K5601 !!!)"
+        help
+            source=bios.mac diskB=11580
+    config SYSTEM_DRIVE_B_00877
+        bool "SD, SS, 8', 77 Tracks (MF3200)"
+        help
+            source=bios.mac diskB=00877
+    config SYSTEM_DRIVE_B_10877
+        bool "DD, SS, 8', 77 Tracks (K5602.10, MF6400)"
+        help
+            source=bios.mac diskB=10877
+    config SYSTEM_DRIVE_B_0
+        bool "Nicht vorhanden"
+        help
+            source=bios.mac diskB=0
+endchoice
+
+choice
+    prompt "Laufwerk C Typ"
+    default SYSTEM_DRIVE_C_0
+    config SYSTEM_DRIVE_A_11580
+        bool "DD, SS, 5', 40 Tracks (K5600.10)"
+        help
+            source=bios.mac diskC=10540
+    config SYSTEM_DRIVE_C_10580
+        bool "DD, SS, 5', 80 Tracks (K5600.20)"
+        help
+            source=bios.mac diskC=10580
+    config SYSTEM_DRIVE_C_11580
+        bool "DD, DS, 5', 80 Tracks (K5601 !!!)"
+        help
+            source=bios.mac diskC=11580
+    config SYSTEM_DRIVE_C_00877
+        bool "SD, SS, 8', 77 Tracks (MF3200)"
+        help
+            source=bios.mac diskC=00877
+    config SYSTEM_DRIVE_C_10877
+        bool "DD, SS, 8', 77 Tracks (K5602.10, MF6400)"
+        help
+            source=bios.mac diskC=10877
+    config SYSTEM_DRIVE_C_0
+        bool "Nicht vorhanden"
+        help
+            source=bios.mac diskC=0
+endchoice
+
+choice
+    prompt "Laufwerk D Typ"
+    default SYSTEM_DRIVE_D_0
+    config SYSTEM_DRIVE_D_10540
+        bool "DD, SS, 5', 40 Tracks (K5600.10)"
+        help
+            source=bios.mac diskD=10540
+    config SYSTEM_DRIVE_D_10580
+        bool "DD, SS, 5', 80 Tracks (K5600.20)"
+        help
+            source=bios.mac diskD=10580
+    config SYSTEM_DRIVE_D_11580
+        bool "DD, DS, 5', 80 Tracks (K5601 !!!)"
+        help
+            source=bios.mac diskD=11580
+    config SYSTEM_DRIVE_D_00877
+        bool "SD, SS, 8', 77 Tracks (MF3200)"
+        help
+            source=bios.mac diskD=00877
+    config SYSTEM_DRIVE_D_10877
+        bool "DD, SS, 8', 77 Tracks (K5602.10, MF6400)"
+        help
+            source=bios.mac diskD=10877
+    config SYSTEM_DRIVE_D_0
+        bool "Nicht vorhanden"
+        help
+            source=bios.mac diskD=0
+endchoice
+
+endmenu
