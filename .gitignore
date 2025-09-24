@@ -10,10 +10,14 @@ build/*
 /tools/python3
 /tools/gnu
 /tools/greaseweazle
+/tools/make
+/tools/git
 
 # Ignore Python virtual environment
 .venv/
 
 # Ignore Python bytecode cache
 __pycache__/
-.vscode/settings.json
+
+# Ignore VSCode settings
+.vscode/*

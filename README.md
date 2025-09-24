@@ -29,7 +29,7 @@ Durch die automatisierte Erstellung und das Schreiben von bootfähigen Systemdis
 	- `python3/`       – Python 3 Runtime für Windows
 - `build/`       – Build-Produkte und temporäre Dateien (wird bei jedem Build neu befüllt)
 - `examples/`    – Eigene kleine Programme und Beispiel-Makefiles (z.B. hello.mac, name.mac)
-- `doc/`         – Dokumentation (z.B. cpa_doc.pdf, cpa_doc.txt)
+- `doc/`         – Dokumentation (z.B. cpa_doc.txt)
 - `configmenu/` – Skripte und Konfigurationsdateien für das menübasierte Konfigurationssystem
 
 ## Systemüberblick

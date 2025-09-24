@@ -1,8 +1,16 @@
 #!/usr/bin/env python3
 """
 Konfigurations-Tool für Diskettenlaufwerke in bios.mac
-- Liest bios.mac und erzeugt eine .config mit den aktuellen Einstellungen
+
+Dieses Skript liest bios.mac und erzeugt eine .config mit den aktuellen Einstellungen.
+Nach Auswahl in menuconfig kann bios.mac gemäß der Konfiguration gepatcht werden.
+
+Funktionen:
+- Extrahiert Hardware-, Laufwerks- und RAMDISK-Einstellungen aus bios.mac und schreibt sie in .config
 - Patcht bios.mac nach Auswahl in menuconfig
+
+Verwendung:
+    python patch_bios_mac.py <bios.mac|auto> .config [extract|patch]
 """
 import sys
 import re
@@ -10,9 +18,13 @@ import os
 
 
 
-# Kompakte Mapping-Struktur für alle Hardware-Parameter
+
+# PARAMS: Liste von Hardware-Parametern, die zwischen Kconfig (.config) und bios.mac gemappt werden.
+# Jeder Eintrag besteht aus:
+#   - Kconfig-Prefix (z.B. "CPU")
+#   - bios.mac-Key (z.B. "cpu")
+#   - Mapping-Dictionary: Kconfig-Option -> Wert in bios.mac
 PARAMS = [
-    # (Kconfig-Prefix, bios.mac-Key, Mapping)
     ("CPU",    "cpu",    { 'CPU_K2521': 'k2521', 'CPU_K2526': 'k2526', 'CPU_C1715': 'c1715' }),
     ("FDC",    "fdc",    { 'FDC_K5120': 'k5120', 'FDC_K5122': 'k5122', 'FDC_K5126': 'k5126', 'FDC_F1715': 'f1715', 'FDC_FDC3': 'fdc3' }),
     ("CRT",    "crt",    { 'CRT_K7024': 'k7024', 'CRT_DSY5': 'dsy5', 'CRT_B1715': 'b1715' }),
@@ -20,6 +32,9 @@ PARAMS = [
     ("DEV",    "dev",    { 'DEV_OEM': 'oem', 'DEV_CPD': 'cpd', 'DEV_K8915': 'k8915' }),
     ("CPUCLK", "cpuclk", { 'CPUCLK_25': '25', 'CPUCLK_40': '40' }),
 ]
+
+# DRIVE_MAP: Dictionary mit allen unterstützten Laufwerks-Typen.
+# Key: Wert in bios.mac (z.B. "10540"), Value: Beschreibung des Laufwerks.
 DRIVE_MAP = {
     '10540': 'DD, SS, 5", 40 Tracks (K5600.10)',
     '10580': 'DD, SS, 5", 80 Tracks (K5600.20)',
@@ -28,8 +43,16 @@ DRIVE_MAP = {
     '10877': 'DD, SS, 8", 77 Tracks (K5602.10, MF6400)',
     '0':     'Nicht vorhanden',
 }
+
+# DRIVE_VALS: Liste aller Laufwerks-Keys, wie sie in bios.mac vorkommen können.
 DRIVE_VALS = list(DRIVE_MAP.keys())
+
+# BIOS_DRIVES: Liste der unterstützten Laufwerksbuchstaben (A-D).
 BIOS_DRIVES = ['A', 'B', 'C', 'D']
+
+# RAMDISK_MAP: Mapping für RAMDISK-Konfigurationen.
+# Key: Kconfig-Option (z.B. "RAMDISK_OSS")
+# Value: Dictionary mit den einzelnen RAMDISK-Parametern und deren Wert in bios.mac
 RAMDISK_MAP = {
     'RAMDISK_NONE':  {'oss': '0', 'em256': '0', 'mkd256': '0', 'raf': '0', 'rna': '0'},
     'RAMDISK_OSS':   {'oss': '1', 'em256': '0', 'mkd256': '0', 'raf': '0', 'rna': '0'},
@@ -39,10 +62,17 @@ RAMDISK_MAP = {
     'RAMDISK_NANOS': {'oss': '0', 'em256': '0', 'mkd256': '0', 'raf': '0', 'rna': '1'},
 }
 
+## Erzeugt ein invertiertes Dictionary aus einem Mapping.
+# Wandelt die Zuordnung von key->value in value->key um.
+# Wird im Skript verwendet, um aus den Mapping-Tabellen (z.B. für Hardware-Parameter) die Rückrichtung zu erzeugen:
+# So kann man aus einem Wert in bios.mac den passenden Kconfig-Schlüssel ableiten und umgekehrt.
 def reverse_map(mapping):
     return {v: k for k, v in mapping.items()}
 
 
+## Liest die Datei bios.mac aus und extrahiert die aktuellen Hardware-, Laufwerks- und RAMDISK-Einstellungen.
+# Erstellt bzw. aktualisiert die .config-Datei so, dass alle relevanten Optionen (z.B. CPU, FDC, CRT, RAM, DEV, CPUCLK, Laufwerke, RAMDISK) im Kconfig-Format abgebildet werden.
+# Bestehende Einträge in .config werden überschrieben, fehlende ergänzt.
 def extract_bios_config(bios_path, config_path):
     """Liest bios.mac und schreibt .config mit aktuellen Einstellungen"""
     config = {}
@@ -112,6 +142,9 @@ def extract_bios_config(bios_path, config_path):
         f.writelines(new_lines)
 
 
+## Patcht die Datei bios.mac anhand der aktuellen Auswahl in der .config.
+# Für alle relevanten Hardware-, Laufwerks- und RAMDISK-Parameter werden die Werte aus der .config übernommen und in bios.mac eingetragen.
+# Die Funktion sucht die passenden Zeilen in bios.mac und ersetzt sie entsprechend der Konfiguration.
 def patch_bios_mac(bios_path, config_path):
     """Patches bios.mac gemäß .config"""
     # Lese Auswahl aus .config
@@ -179,6 +212,12 @@ def patch_bios_mac(bios_path, config_path):
         f.writelines(out)
 
 
+## Hauptfunktion des Skripts.
+# Liest die Kommandozeilenargumente aus und steuert den Ablauf:
+# - bios.mac und .config werden als Eingabe erwartet
+# - Modus 'extract': Einstellungen aus bios.mac werden in .config übernommen
+# - Modus 'patch': bios.mac wird gemäß .config gepatcht
+# - Bei 'auto' als bios.mac wird die passende Datei anhand der Systemauswahl in .config automatisch gewählt
 def main():
     if len(sys.argv) < 3:
         print("Usage: patch_bios_mac.py <bios.mac|auto> .config [extract|patch]")

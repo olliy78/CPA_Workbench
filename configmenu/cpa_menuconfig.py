@@ -1,9 +1,39 @@
+#!/usr/bin/env python3
+"""
+Projektname: CPA-Workbench
+Autor: olliy78
+
+Dieses Skript steuert den gesamten Konfigurations- und Build-Workflow für das CPA-Workbench-Projekt.
+Es führt den Nutzer durch die Konfigurationsmenüs (Systemtyp, Hardware, Build-Format), synchronisiert Konfigurationswerte zwischen .config und BIOS und startet den Build-Prozess gemäß der gewählten Optionen.
+
+Aufbau:
+- merge_config: Mischen von Konfigurationswerten mit relevanten Präfixen
+- run_menu: Startet das interaktive Konfigurationsmenü
+- run_patch_bios_mac: Synchronisiert BIOS-Werte mit externer Datei
+- run_build: Führt den Build-Prozess aus
+- generate_kconfig_system: Erstellt Kconfig.system dynamisch
+- main: Ablaufsteuerung des gesamten Workflows
+
+Verwendung:
+Das Skript wird als Hauptskript für die Konfiguration und den Build des CPA-Workbench-Projekts verwendet. Es kann direkt über die Kommandozeile ausgeführt werden:
+    python cpa_menuconfig.py
+Das Skript führt alle notwendigen Schritte zur Konfiguration und zum Build in der richtigen Reihenfolge aus.
+"""
+import subprocess
+import sys
+import os
 import shutil
 import glob
 
-# Merge-Logik: Nach jedem Menü die neuen Werte in die bestehende .config übernehmen
+## Merge-Logik: Nach jedem Menü die neuen Werte in die bestehende .config übernehmen
+# Die Funktion erhält die Liste der relevanten Präfixe beim Aufruf als Argument (z.B. ["CONFIG_SYSTEM_", "CONFIG_DEV_", ...]).
+# Welche Präfixe relevant sind, entscheidet der aufrufende Code – die Funktion selbst ist davon unabhängig und übernimmt nur die Keys,
+# die mit einem der übergebenen Präfixe beginnen.
 def merge_config(old_config, new_config, relevant_prefixes):
-    """Mische nur die Werte mit den relevanten Prefixen aus new_config in old_config."""
+    """
+    Mische nur die Werte mit den relevanten Prefixen aus new_config in old_config.
+    Die relevanten Präfixe werden beim Aufruf als drittes Argument übergeben und bestimmen, welche Konfigurationsoptionen übernommen werden.
+    """
     def parse_config(path):
         vals = {}
         if os.path.exists(path):
@@ -31,12 +61,18 @@ CPA Konfigurations-Workflow-Wrapper
 - Menü 3: Build-Ausgabeformat (Kconfig.build)
 - Nach jedem Schritt: ggf. patch_bios_mac.py und Build starten
 """
-import subprocess
-import sys
-import os
 
+## Startet das externe menuconfig für eine bestimmte Kconfig-Datei und speichert die Auswahl in config_file.
+# Ablauf:
+# - Setzt die Umgebungsvariable KCONFIG_CONFIG auf die gewünschte Konfigurationsdatei.
+# - Ruft das Python-Skript menuconfig.py mit der Kconfig-Datei als Argument auf.
+# - Das Menü läuft interaktiv und schreibt die Auswahl in die angegebene Datei.
+# - Bei Fehler wird eine Meldung ausgegeben und das Programm beendet.
 def run_menu(kconfig_file, config_file):
-    """Starte menuconfig für eine bestimmte Kconfig-Datei."""
+    """
+    Starte menuconfig für eine bestimmte Kconfig-Datei.
+    Setzt die Umgebung und ruft das externe Menü auf, das die Konfiguration interaktiv ermöglicht.
+    """
     try:
         env = os.environ.copy()
         env["KCONFIG_CONFIG"] = config_file
@@ -47,8 +83,17 @@ def run_menu(kconfig_file, config_file):
         print(f"[FEHLER] menuconfig für {kconfig_file} fehlgeschlagen: {e}")
         sys.exit(1)
 
+## Führt das externe Skript patch_bios_mac.py aus, um BIOS-Konfigurationswerte zu synchronisieren.
+# Ablauf:
+# - Ruft patch_bios_mac.py mit bios_mac_path, config_file und mode ("extract" oder "patch") auf.
+# - Im Modus "extract" werden Werte aus bios.mac ausgelesen und in die Konfiguration geschrieben.
+# - Im Modus "patch" werden Werte aus der Konfiguration zurück in bios.mac geschrieben.
+# - Bei Fehler wird eine Meldung ausgegeben und das Programm beendet.
 def run_patch_bios_mac(bios_mac_path, config_file, mode):
-    """Führe patch_bios_mac.py im Modus 'extract' oder 'patch' aus."""
+    """
+    Führe patch_bios_mac.py im Modus 'extract' oder 'patch' aus.
+    Synchronisiert die BIOS-Konfigurationswerte zwischen Datei und Konfiguration.
+    """
     try:
         subprocess.run([
             sys.executable, os.path.join("configmenu", "patch_bios_mac.py"), bios_mac_path, config_file, mode
@@ -57,6 +102,14 @@ def run_patch_bios_mac(bios_mac_path, config_file, mode):
         print(f"[FEHLER] patch_bios_mac.py fehlgeschlagen: {e}")
         sys.exit(1)
 
+## Diese Funktion steuert den Build-Prozess basierend auf der aktuellen Konfiguration (.config).
+# Ablauf:
+# - Liest die .config und ermittelt das gewählte Build-Target (z.B. OS, Diskettenformat).
+# - Falls CONFIG_BUILD_CLEAN=y gesetzt ist, wird zuerst "make clean" ausgeführt.
+# - Es darf nur ein Build-Target ausgewählt sein, sonst Abbruch mit Fehlermeldung.
+# - Falls kein Target gewählt ist, wird der Build übersprungen.
+# - Führt dann "make config <target>" aus, um das Projekt zu bauen.
+# - Bei Fehlern im Build-Prozess wird eine Fehlermeldung ausgegeben und das Programm beendet.
 def run_build(target):
     """Starte den Build-Prozess mit make <target>."""
     try:
@@ -90,6 +143,12 @@ def run_build(target):
         sys.exit(1)
 
 
+## Diese Funktion erzeugt die Datei Kconfig.system dynamisch neu.
+# Ablauf:
+# - Liest die vorhandene Kconfig.system ein und sucht den choice-Block.
+# - Ersetzt den choice-Block durch einen neuen Block, der alle Systemvarianten aus den src-Unterordnern auflistet.
+# - Für jede Variante wird der Name und (falls vorhanden) der Inhalt der about.txt als Hilfetext übernommen.
+# - So wird das Menü zur Systemauswahl automatisch an die vorhandenen Systemvarianten angepasst.
 def generate_kconfig_system(kconfig_path, src_dir):
     """Erzeuge Kconfig.system dynamisch aus sich selbst und src-Unterordnern."""
     # Lese aktuelle Kconfig.system ein
@@ -144,6 +203,16 @@ def generate_kconfig_system(kconfig_path, src_dir):
         f.writelines(choice_lines)
         f.writelines(lines[choice_end+1:])
 
+## Diese Funktion steuert den gesamten Konfigurations-Workflow für das CPA-Projekt.
+# Ablauf:
+# 1. Erstellt die Datei Kconfig.system dynamisch aus den vorhandenen Systemvarianten.
+# 2. Sichert die aktuelle .config als Backup.
+# 3. Startet das erste Menü zur Auswahl des Systemtyps und übernimmt die Auswahl in die Konfiguration.
+# 4. Ermittelt die gewählte Systemvariante und synchronisiert die BIOS-Konfigurationswerte (extract).
+# 5. Startet das zweite Menü für Hardware und Laufwerke, übernimmt die Auswahl und patcht die BIOS-Konfiguration (patch).
+# 6. Startet das dritte Menü für Build- und Diskettenformat, übernimmt die Auswahl.
+# 7. Führt abschließend den Build-Prozess gemäß der Konfiguration aus.
+# Kurz: main führt die Nutzer durch alle Konfigurationsmenüs, übernimmt und synchronisiert die Einstellungen und startet am Ende den Build.
 def main():
     config_file = ".config"
     src_dir = "src"
