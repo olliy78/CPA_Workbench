@@ -7,25 +7,22 @@ config HINT_INFO
         welche verwendet werden soll. In README.md ist beschrieben, wie und wo man neue Varianten anlegen kann.
         Nachdem die gewünschte Variante ausgewählt wurde, das Menü mit [Q] oder [Esc] beenden und unbedingt Speichern.
     default n
-menu "Systemtyp auswählen"
 choice
     prompt "Systemvariante"
-    default SYSTEM_bc_a5120
+    default VARIANT_bc_a5120
     help
         Mit [?] kann zu jeder Systemvariante der Inhalt der about.txt Datei
         aus dem jeweiligen src Ordner angezeigt werden.
-config SYSTEM_bc_a5120
+config VARIANT_bc_a5120
     bool "bc_a5120"
     help
         Angeblich vom 25.09.89 - Läuft auf dem BC Vermutlich auch auf PC1715, CP/D und K8915
-config SYSTEM_pc_1715
+config VARIANT_pc_1715
     bool "pc_1715"
     help
         Angeblich vom 24.05.88 - Titel: BIOS CP/A fuer PC1715
-config SYSTEM_pc_1715_870330
+config VARIANT_pc_1715_870330
     bool "pc_1715_870330"
     help
         Angeblich vom 30.03.87
 endchoice
-
-endmenu

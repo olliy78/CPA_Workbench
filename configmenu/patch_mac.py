@@ -52,32 +52,27 @@ def main():
                 config_name = line.split()[1]
                 # Suche nach help block
                 help_source = None
-                help_key = None
-                help_value = None
+                key_values = {}
                 j = i + 1
                 while j < len(lines):
                     l2 = lines[j].strip()
                     if l2.startswith("help"):
-                        # Suche nach source=... key=value
+                        # Suche nach source=... key=value ...
                         k = j + 1
                         while k < len(lines):
                             l3 = lines[k].strip()
                             if l3.startswith("source="):
-                                # z.B. source=bios.mac cpu=k2526
                                 parts = l3.split()
                                 src = None
-                                key = None
-                                value = None
+                                kvs = {}
                                 for part in parts:
                                     if part.startswith("source="):
                                         src = part.split("=",1)[1]
                                     elif "=" in part:
                                         kv = part.split("=",1)
-                                        key = kv[0]
-                                        value = kv[1]
+                                        kvs[kv[0]] = kv[1]
                                 help_source = src
-                                help_key = key
-                                help_value = value
+                                key_values = kvs
                                 break
                             if l3 == "" or l3.startswith("bool") or l3.startswith("config "):
                                 break
@@ -86,12 +81,11 @@ def main():
                     if l2.startswith("config "):
                         break
                     j += 1
-                if help_source and help_key and help_value:
+                if help_source and key_values:
                     results.append({
                         "config_name": config_name,
                         "source": help_source,
-                        "key": help_key,
-                        "value": help_value
+                        "key_values": key_values
                     })
             i += 1
         return results
@@ -121,27 +115,29 @@ def main():
                     if m:
                         config_vals[m.group(2)] = line.rstrip('\n')
 
-        # Für jeden Parameter Mapping: Wert aus *.mac extrahieren
+        # Für jeden Parameter Mapping: Werte aus *.mac extrahieren
         new_config = {}
         for entry in param_mappings:
-            key = entry["key"]
-            value = None
-            # Suche Zeile: <key> equ <val>
-            for line in mac_lines:
-                m = re.match(rf'^{key}\s+equ\s+(\w+)', line.strip())
-                if m:
-                    value = m.group(1)
+            key_values = entry["key_values"]
+            match = True
+            for key, expected_value in key_values.items():
+                found_value = None
+                for line in mac_lines:
+                    m = re.match(rf'^{key}\s+equ\s+(\w+)', line.strip())
+                    if m:
+                        found_value = m.group(1)
+                        break
+                if found_value != expected_value:
+                    match = False
                     break
-            # Setze config key entsprechend
             config_name = entry["config_name"]
             config_key = f"CONFIG_{config_name}"
-            if value == entry["value"]:
+            if match:
                 new_config[config_key] = f"{config_key}=y"
             else:
                 new_config[config_key] = f"# {config_key} is not set"
 
         # Schreibe neue .config (nur relevante Keys)
-        # Erhalte alle anderen Zeilen
         out_lines = []
         written = set()
         if os.path.exists(config_path):
@@ -153,7 +149,6 @@ def main():
                         written.add(m.group(2))
                     else:
                         out_lines.append(line)
-        # Ergänze fehlende Keys
         for k, v in new_config.items():
             if k not in written:
                 out_lines.append(v + "\n")
@@ -165,12 +160,16 @@ def main():
     elif mode == "patch":
         # Lese .config
         config_set = set()
+        config_not_set = set()
         if os.path.exists(config_path):
             with open(config_path, encoding="utf-8") as f:
                 for line in f:
-                    m = re.match(r'^CONFIG_(\w+)=(y)', line.strip())
-                    if m:
-                        config_set.add(m.group(1))
+                    m_y = re.match(r'^CONFIG_(\w+)=(y)', line.strip())
+                    m_n = re.match(r'^# CONFIG_(\w+) is not set', line.strip())
+                    if m_y:
+                        config_set.add(m_y.group(1))
+                    elif m_n:
+                        config_not_set.add(m_n.group(1))
 
         # Lese *.mac Datei
         if not os.path.exists(mac_path):
@@ -179,30 +178,43 @@ def main():
         with open(mac_path, encoding="utf-8") as f:
             mac_lines = f.readlines()
 
-        # Patch alle relevanten Parameter
-        patched_lines = []
-        for line in mac_lines:
-            line_stripped = line.strip()
-            replaced = False
-            for entry in param_mappings:
-                config_name = entry["config_name"]
-                key = entry["key"]
-                value = entry["value"]
-                config_key = f"CONFIG_{config_name}"
-                # Wenn dieser Parameter in .config gesetzt ist, patchen
-                if config_name in config_set:
-                    # Zeile wie: <key> equ <irgendwas>
-                    m = re.match(rf'^({key}\s+equ\s+)(\w+)(.*)$', line_stripped)
-                    if m:
-                        patched_lines.append(f"{m.group(1)}{value}{m.group(3)}\n")
-                        replaced = True
-                        break
-            if not replaced:
-                patched_lines.append(line)
+        # Patch: Zuerst alle "is not set" configs, dann alle "=y" configs
+        # Wir patchen Zeilen in mac_lines entsprechend
+        # 1. "is not set" configs: Setze alle zugehörigen key-values auf die Werte aus Kconfig.system
+        # 2. "=y" configs: Setze alle zugehörigen key-values auf die Werte aus Kconfig.system
+
+        # Hilfsfunktion: Patch key-value in Zeile
+        def patch_key_in_line(line, key, value):
+            m = re.match(rf'^({key}\s+equ\s+)(\w+)(.*)$', line.strip())
+            if m:
+                return f"{m.group(1)}{value}{m.group(3)}\n"
+            return None
+
+        # 1. "is not set" configs
+        for entry in param_mappings:
+            config_name = entry["config_name"]
+            if config_name in config_not_set:
+                key_values = entry["key_values"]
+                for idx, line in enumerate(mac_lines):
+                    for key, value in key_values.items():
+                        patched = patch_key_in_line(line, key, value)
+                        if patched:
+                            mac_lines[idx] = patched
+
+        # 2. "=y" configs
+        for entry in param_mappings:
+            config_name = entry["config_name"]
+            if config_name in config_set:
+                key_values = entry["key_values"]
+                for idx, line in enumerate(mac_lines):
+                    for key, value in key_values.items():
+                        patched = patch_key_in_line(line, key, value)
+                        if patched:
+                            mac_lines[idx] = patched
 
         # Schreibe gepatchte *.mac Datei
         with open(mac_path, "w", encoding="utf-8") as f:
-            f.writelines(patched_lines)
+            f.writelines(mac_lines)
         print(f"[INFO] *.mac Datei gepatcht (patch)")
     else:
         print("Unknown mode")

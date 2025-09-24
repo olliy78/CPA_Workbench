@@ -42,7 +42,7 @@ endchoice
 
 choice
     prompt "Laufwerk B Typ"
-    default SYSTEM_DRIVE_A_11580
+    default SYSTEM_DRIVE_B_11580
     config SYSTEM_DRIVE_B_10540
         bool "DD, SS, 5', 40 Tracks (K5600.10)"
         help
@@ -72,7 +72,7 @@ endchoice
 choice
     prompt "Laufwerk C Typ"
     default SYSTEM_DRIVE_C_0
-    config SYSTEM_DRIVE_A_11580
+    config SYSTEM_DRIVE_C_10540
         bool "DD, SS, 5', 40 Tracks (K5600.10)"
         help
             source=bios.mac diskC=10540
@@ -126,5 +126,4 @@ choice
         help
             source=bios.mac diskD=0
 endchoice
-
 endmenu

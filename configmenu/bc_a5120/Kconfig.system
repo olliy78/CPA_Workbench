@@ -165,38 +165,32 @@ choice
     config SYSTEM_RAMDISK_NONE
         bool "Keine RAM-Floppy (oss=0, em256=0, mkd256=0, raf=0, rna=0)"
         help
-            source=bios.mac ramdisk=none
-        help
+            source=bios.mac oss=0 em256=0 mkd256=0 raf=0 rna=0
             Es wird keine RAM-Floppy eingerichtet.
     config SYSTEM_RAMDISK_OSS
         bool "OSS 48k Speichererweiterung (oss=1)"
         help
-            source=bios.mac ramdisk=oss
-        help
+            source=bios.mac oss=1 em256=0 mkd256=0 raf=0 rna=0
             Nutzt eine OSS 062-8471 Speichererweiterung (48k) als RAM-Floppy 'M:'.
     config SYSTEM_RAMDISK_EM256
         bool "EM256 16-Bit-Erweiterung (em256=1)"
         help
-            source=bios.mac ramdisk=em256
-        help
+            source=bios.mac oss=0 em256=1 mkd256=0 raf=0 rna=0
             Nutzt eine 16-Bit-Erweiterungskarte EM256 (256k) als RAM-Floppy 'M:'.
     config SYSTEM_RAMDISK_MKD256
         bool "MKD256 RAM-Floppy (mkd256=1)"
         help
-            source=bios.mac ramdisk=mkd256
-        help
+            source=bios.mac oss=0 em256=0 mkd256=1 raf=0 rna=0
             Nutzt eine MKD256-Karte als RAM-Floppy 'M:'.
     config SYSTEM_RAMDISK_RAF
         bool "RAF-Karte (raf=1)"
         help
-            source=bios.mac ramdisk=raf
-        help
+            source=bios.mac oss=0 em256=0 mkd256=0 raf=1 rna=0
             Nutzt mindestens eine RAF-Karte (max. 4, je 2MB) als RAM-Floppy 'M:'.
     config SYSTEM_RAMDISK_NANOS
         bool "NANOS-256k-DRAM-Karte (rna=1)"
         help
-            source=bios.mac ramdisk=nanos
-        help
+            source=bios.mac oss=0 em256=0 mkd256=0 raf=0 rna=1
             Nutzt mindestens eine NANOS-256k-DRAM-Karte (max. 4) als RAM-Floppy 'M:'.
 endchoice
 
@@ -235,7 +229,7 @@ endchoice
 
 choice
     prompt "Laufwerk B Typ"
-    default SYSTEM_DRIVE_A_11580
+    default SYSTEM_DRIVE_B_11580
     config SYSTEM_DRIVE_B_10540
         bool "DD, SS, 5', 40 Tracks (K5600.10)"
         help
@@ -265,7 +259,7 @@ endchoice
 choice
     prompt "Laufwerk C Typ"
     default SYSTEM_DRIVE_C_0
-    config SYSTEM_DRIVE_A_11580
+    config SYSTEM_DRIVE_C_10540
         bool "DD, SS, 5', 40 Tracks (K5600.10)"
         help
             source=bios.mac diskC=10540
@@ -319,5 +313,4 @@ choice
         help
             source=bios.mac diskD=0
 endchoice
-
 endmenu

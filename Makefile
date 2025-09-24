@@ -89,7 +89,7 @@ ifeq ($(firstword $(MAKECMDGOALS)),config)
 	ifeq ($(wildcard .config),)
 		SYSTEMVAR := $(DEFAULT_SYSTEMVAR)
 	else
-		SYSTEMVAR := $(shell awk -F'CONFIG_SYSTEM_' '/^CONFIG_SYSTEM_/ && $$2 ~ /=y/ {sub(/=y/,"",$$2); print tolower($$2)}' .config | head -1)
+		SYSTEMVAR := $(shell awk -F'CONFIG_VARIANT_' '/^CONFIG_VARIANT_/ && $$2 ~ /=y/ {sub(/=y/,"",$$2); print tolower($$2)}' .config | head -1)
 		ifeq ($(SYSTEMVAR),)
 			SYSTEMVAR := $(DEFAULT_SYSTEMVAR)
 		endif
@@ -104,7 +104,7 @@ else
 		ifeq ($(wildcard .config),)
 			SYSTEMVAR := $(DEFAULT_SYSTEMVAR)
 		else
-			SYSTEMVAR := $(shell awk -F'CONFIG_SYSTEM_' '/^CONFIG_SYSTEM_/ && $$2 ~ /=y/ {sub(/=y/,"",$$2); print tolower($$2)}' .config | head -1)
+			SYSTEMVAR := $(shell awk -F'CONFIG_VARIANT_' '/^CONFIG_VARIANT_/ && $$2 ~ /=y/ {sub(/=y/,"",$$2); print tolower($$2)}' .config | head -1)
 			ifeq ($(SYSTEMVAR),)
 				SYSTEMVAR := $(DEFAULT_SYSTEMVAR)
 			endif
@@ -250,13 +250,13 @@ FORMAT := $(DEFAULT_FORMAT)
 IMAGE_SIZE := $(DEFAULT_IMAGE_SIZE)
 DISKDEF := $(DEFAULT_DISKDEF)
 ifeq ($(wildcard .config),.config)
-	ifneq ($(shell grep -q '^CONFIG_DISKTYPE_800K=y' .config && echo yes),)
+	ifneq ($(shell grep -q '^CONFIG_BUILD_DISKTYPE_800K=y' .config && echo yes),)
 		FORMAT := cpa800
 		IMAGE_SIZE := 800
 		DISKDEF := cpa800
 		USEBOOTSECTOR := 0
 	endif
-	ifneq ($(shell grep -q '^CONFIG_DISKTYPE_780K=y' .config && echo yes),)
+	ifneq ($(shell grep -q '^CONFIG_BUILD_DISKTYPE_780K=y' .config && echo yes),)
 		FORMAT := cpa780
 		IMAGE_SIZE := 780
 		DISKDEF := cpa780_withoutBoot
@@ -374,4 +374,5 @@ $(WRITEIMAGE_LOG): clean_writeimage_log $(FINAL_IMAGE)
 
 # Aufraeumen
 clean:
-	rm  $(BUILD_DIR)/*
+	@rm  $(BUILD_DIR)/* >/dev/null 2>&1 || true
+	@echo "[INFO] Aufraeumen abgeschlossen."
