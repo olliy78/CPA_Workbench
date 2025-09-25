@@ -204,16 +204,14 @@ def main():
     # Erzeuge dynamische Kconfig.variante direkt aus sich selbst
     generate_kconfig_variant(kconfig_path, src_dir)
 
-    # Backup der Startkonfiguration
-    if os.path.exists(config_file):
-        shutil.copyfile(config_file, config_file + ".bak")
 
-
-    # Menü 1: Systemtyp-Auswahl
-    run_menu(kconfig_path, config_file)
-    # Nach Menü 1: Sichere VARIANT- und BUILD-Einträge, leere .config und schreibe nur diese zurück
+    # Menü 1: vor Systemtyp-Auswahl: Sichere VARIANT- und BUILD-Einträge, leere .config und schreibe nur diese zurück
     variant_section = read_config_section(config_file, "CONFIG_VARIANT_")
     build_section = read_config_section(config_file, "CONFIG_BUILD_")
+    write_config_sections(config_file, variant_section, build_section)
+    run_menu(kconfig_path, config_file)
+    # Nach Menü 1: Sichere VARIANT-Einträge, leere .config und schreibe VARIANT und BUILD zurück
+    variant_section = read_config_section(config_file, "CONFIG_VARIANT_")
     write_config_sections(config_file, variant_section, build_section)
     # Jetzt Systemvariante direkt aus variant_section bestimmen (Hilfsfunktion)
     system_variant = get_selected_variant(variant_section)

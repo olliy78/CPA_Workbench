@@ -487,8 +487,8 @@ biosln	aset	biosln+70h
 ; 0		nicht ex. (immer am Ende!)
 
 diskA	equ	11580
-diskB	equ	11580
-diskC	equ	0
+diskB	equ	10580
+diskC	equ	00877
 diskD	equ	0
 
 ; Es wird eine automatische Formaterkennung fuer gaengige CP/M-
