@@ -314,3 +314,91 @@ choice
             source=bios.mac diskD=0
 endchoice
 endmenu
+
+menu "Systemstart Einstellungen"
+
+config SYSTEM_AUTOEXEC_STR
+    string "Automatische Komando ausführung (autoexec)"
+    help
+        source=bios.mac kltbef=string
+        Es besteht die Moeglichkeit, beim Kaltstart des Systems automatisch
+        ein Kommando auszufuehren z.B. 'DIR *.COM'. Dies kann auch ueber SUBMIT eine Kommando-
+        folge sein.
+
+choice
+    prompt "Ausführen bei: "
+    default SYSTEM_AUTOEXEC_COLD
+    config SYSTEM_AUTOEXEC_COLD
+        bool "nur bei Kaltstart / Einschalten"
+        help
+            source=bios.mac cldcmx=0
+            Befehl wird nur beim Einschalten also Kaltstart des Systems ausgeführt
+    config SYSTEM_AUTOEXEC_RESET
+        bool "Kaltstart und Reset"
+        help
+            source=bios.mac cldcmx=1
+            Befehl beim Einschalten also Kaltstart des Systems und nach einem Reset ausgeführt
+endchoice
+endmenu
+
+menu "Systemfunktionen"
+config SYSTEM_STATUSZEILE_ON
+        bool "Statuszeile"
+        help
+            source=bios.mac cpastz=1
+            Statuszeile anzeigen (nur für PC1715)
+choice
+    prompt "Format der Statuszeile"
+    config SYSTEM_STATUSZEILE_05
+            bool "Statuszeile invers, normale Helligkeit"
+            help
+                source=bios.mac stzfrm=05h
+                invers, normale Helligkeit
+    config SYSTEM_STATUSZEILE_07
+            bool "Statuszeile invers, andere  Helligkeit"
+            help
+                source=bios.mac stzfrm=07h
+                invers, andere  Helligkeit
+    config SYSTEM_STATUSZEILE_04
+            bool "Statuszeile nicht invers, normale Helligkeit"
+            help
+                source=bios.mac stzfrm=04h
+                nicht invers, normale Helligkeit
+    config SYSTEM_STATUSZEILE_06
+            bool "Statuszeile nicht invers, andere  Helligkeit"
+            help
+                source=bios.mac stzfrm=06h
+                nicht invers, andere  Helligkeit
+endchoice
+config SYSTEM_FORMATERKENNUNG
+        bool "autom. Formaterkennung"
+        default y
+        help
+            source=bios.mac format=1
+            Es wird eine automatische Formaterkennung fuer gaengige CP/M-
+            Diskettenformate einschliesslich der SCP-Hausformate von CP/A
+            unterstuetzt. Dies kann unterdrueckt werden, wenn nur mit
+            festen Formaten gearbeitet wird (und eine extra CP/A-Variante
+            fuer den Datenaustausch mit Formaterkennung existiert). In
+            diesem Fall haben die Disketten das Standard-CP/A-Format ent-
+            sprechend dem vorgegebenen LW-Typ.
+config SYSTEM_FORMATBOOT
+        bool "Format mit Systemspur als Standardformat"
+        default y
+        help
+            source=bios.mac fsys=1
+            Nur relevant wenn automatische Formaterkennung deaktiviert
+            wenn aktiv, wird immer das Standardformt des Lauwerks mit Systemspur verwendet
+config SYSTEM_MONITOR
+        bool "Verwendung Bios-Monitor"
+        default n
+        help
+            source=bios.mac monitor=1
+            Der  BIOS-Monitor  stellt - seine Generierung vorausgesetzt  -  
+            einen  Satz von residenten Funktionen bereit,  die somit  ohne  
+            Veraenderung  der Speicherplatzbelegung  staendig,  d.h.  auch  
+            waehrend der Arbeit eines Nutzerprogramms zur Verfuegung  ste- 
+            hen. Die Benutzung des Bios-Motitors ist in cpa_doc.txt beschrieben
+
+
+endmenu
