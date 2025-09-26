@@ -2,21 +2,31 @@
 """
 Automatisiertes Test-Skript für patch_mac.py
 
+Dieses Skript automatisiert die Überprüfung der Patch- und Extract-Funktionalität von patch_mac.py
+für eine gegebene Systemvariante. Es testet für jeden konfigurierbaren Parameter, ob ein gesetzter Wert
+korrekt in die .mac-Datei gepatcht und anschließend wieder ausgelesen werden kann.
+
+
 Verwendung:
-    python test_patch_mac.py <systemvariante>
+    python test_patch_mac.py <systemvariante> [loglevel=debug|loglevel=info] [step=xx|step=singlestep|step=all]
+
+Optionale Argumente:
+    loglevel=debug   Aktiviere ausführliche Debug-Ausgaben (wird an patch_mac.py durchgereicht)
+    loglevel=info    Standard, weniger Ausgaben
+    step=...         Einzelne Testschritte oder Step-Modi
 
 Ablauf:
-- Liest die Kconfig.system der Systemvariante
-- Ruft patch_mac.py extract auf
-- Liest die entstandene .config
-- Für jeden Parameter: Setzt systematisch den Wert auf den ersten zulässigen Wert
-- Gibt Testschritt aus
-- Ruft patch_mac.py patch auf
-- Löscht .config
-- Ruft patch_mac.py extract erneut auf
-- Prüft, ob die Änderung übernommen wurde
-- Gibt Ergebnis (OK/Fehler) aus
-- Am Ende Zusammenfassung
+    1. Liest die Kconfig.system der Systemvariante und extrahiert alle konfigurierbaren Parameter.
+    2. Ruft patch_mac.py im Modus 'extract' auf, um die aktuelle .config zu erzeugen.
+    3. Für jeden Parameter:
+        a) Setzt nur diesen Parameter auf '=y', alle anderen auf 'is not set'.
+        b) Ruft patch_mac.py im Modus 'patch' auf, um die .mac-Datei zu ändern.
+        c) Löscht die .config.
+        d) Ruft patch_mac.py erneut im Modus 'extract' auf, um die Werte zurückzulesen.
+        e) Prüft, ob der gesetzte Wert korrekt übernommen wurde.
+        f) Gibt das Ergebnis (OK/Fehler) aus.
+    4. Gibt eine Zusammenfassung aller Testergebnisse aus.
+    5. Stellt am Ende die ursprüngliche Konfiguration wieder her.
 """
 import os
 import sys
@@ -26,7 +36,14 @@ import shutil
 from termcolor import colored
 
 def parse_kconfig_system(path):
-    """Extrahiere alle konfigurierbaren Parameter und deren Werte aus Kconfig.system."""
+    """
+    Extrahiere alle konfigurierbaren Parameter und deren Werte aus Kconfig.system.
+    Liefert eine Liste von Dicts mit den Feldern:
+        - config_name: Name des Parameters (ohne CONFIG_)
+        - source: Ziel-Datei (z.B. bios.mac)
+        - key: Name des Assembler-Labels
+        - value: Wert, der für diesen Parameter gesetzt werden soll
+    """
     params = []
     if not os.path.exists(path):
         print(f"[WARN] Kconfig.system nicht gefunden: {path}")
@@ -83,6 +100,10 @@ def parse_kconfig_system(path):
     return params
 
 def read_config(path):
+    """
+    Liest die .config-Datei und gibt ein Dict mit allen CONFIG_*-Einträgen zurück.
+    Key: CONFIG_<name>, Value: komplette Zeile (inkl. Kommentar, =y, is not set)
+    """
     vals = {}
     if not os.path.exists(path):
         return vals
@@ -94,32 +115,58 @@ def read_config(path):
     return vals
 
 def write_config(path, vals):
+    """
+    Schreibt das gegebene Dict (Key: CONFIG_<name>, Value: Zeile) in die .config-Datei.
+    Jede Zeile entspricht einem Konfigurationsparameter.
+    """
     with open(path, "w", encoding="utf-8") as f:
         for v in vals.values():
             f.write(v + "\n")
 
 def run_patch_mac(mode, config_path, system_variant):
-    subprocess.run([
+    """
+    Ruft patch_mac.py im angegebenen Modus (extract/patch) für die gegebene Systemvariante auf.
+    Übergibt die .config-Datei und den loglevel als Argument.
+    """
+    args = [
         sys.executable, os.path.join("configmenu", "patch_mac.py"), mode, config_path, system_variant
-    ], check=True)
+    ]
+    if loglevel:
+        args.append(f"loglevel={loglevel}")
+    subprocess.run(args, check=True)
 
 def main():
+    """
+    Hauptfunktion: Steuert den gesamten Testablauf.
+    - Liest die Systemvariante und extrahiert alle Parameter.
+    - Führt für jeden Parameter einen Patch- und Extract-Test durch.
+    - Prüft, ob die Änderung korrekt übernommen wurde.
+    - Gibt eine Zusammenfassung aus und stellt die ursprüngliche Konfiguration wieder her.
+    """
     if len(sys.argv) < 2:
-        print("Usage: test_patch_mac.py <systemvariante> [step=xx|step=singlestep|step=all]")
+        print("Usage: test_patch_mac.py <systemvariante> [loglevel=debug|loglevel=info] [step=xx|step=singlestep|step=all]")
         sys.exit(1)
     system_variant = sys.argv[1]
+    global loglevel
+    loglevel = "info"
     step_mode = None
     step_idx = None
-    if len(sys.argv) > 2 and sys.argv[2].startswith("step="):
-        step_mode = sys.argv[2][5:]
-        if step_mode.isdigit():
-            step_idx = int(step_mode) - 1
+    # Argument-Parsing: loglevel und step-Optionen erkennen
+    for arg in sys.argv[2:]:
+        if arg.startswith("loglevel="):
+            loglevel = arg.split("=",1)[1].lower()
+        elif arg.startswith("step="):
+            step_mode = arg[5:]
+            if step_mode.isdigit():
+                step_idx = int(step_mode) - 1
     kconfig_path = os.path.join("configmenu", system_variant, "Kconfig.system")
     config_path = ".config"
+    # Extrahiere alle konfigurierbaren Parameter
     params = parse_kconfig_system(kconfig_path)
     if not params:
         print("Keine Parameter gefunden!")
         sys.exit(1)
+    # Extrahiere die aktuelle .config als Ausgangsbasis
     run_patch_mac("extract", config_path, system_variant)
     orig_config = read_config(config_path)
     test_results = []
@@ -127,7 +174,7 @@ def main():
     def pause():
         input("Weiter mit beliebiger Taste ...")
 
-    # Bestimme zu testende Schritte
+    # Bestimme, welche Testschritte ausgeführt werden sollen
     if step_mode == "all":
         step_range = range(total_steps)
     elif step_mode == "singlestep":
@@ -137,9 +184,11 @@ def main():
     else:
         step_range = range(total_steps)
 
+    # Haupt-Testschleife: Für jeden Parameter einzeln testen
     for idx in step_range:
         param = params[idx]
         config_key = f"CONFIG_{param['config_name']}"
+        # Setze nur diesen Parameter auf '=y', alle anderen auf 'is not set'
         new_config = orig_config.copy()
         for k in new_config:
             if k == config_key:
@@ -147,24 +196,28 @@ def main():
             elif k.startswith("CONFIG_"):
                 new_config[k] = f"# {k} is not set"
         write_config(config_path, new_config)
-        print(f"Testschritt {idx+1}: Setze {config_key} -> {param['key']}={param['value']}")
+        print(f"Testschritt {idx+1}: Setze {config_key} -> {param['key']}={param['value']} (loglevel={loglevel})")
+        # Patche die .mac-Datei
         run_patch_mac("patch", config_path, system_variant)
+        # Lösche die .config, um einen frischen Extract zu erzwingen
         os.remove(config_path)
+        # Extrahiere die Werte erneut aus der .mac-Datei
         run_patch_mac("extract", config_path, system_variant)
         result_config = read_config(config_path)
+        # Prüfe, ob der gesetzte Wert korrekt übernommen wurde
         ok = result_config.get(config_key, "").endswith("=y")
         if ok:
             print(colored(f"Testschritt {idx+1} OK", "green"))
         else:
             print(colored(f"Testschritt {idx+1} NICHT OK", "red"))
         test_results.append(ok)
-        # Pausenlogik
+        # Pausenlogik: Bei singlestep oder Fehler anhalten
         if step_mode == "singlestep":
             pause()
         elif step_mode is None and not ok:
             pause()
 
-    # Zusammenfassung
+    # Zusammenfassung aller Testergebnisse
     total = len(test_results)
     ok_count = sum(test_results)
     fail_count = total - ok_count
@@ -173,6 +226,7 @@ def main():
     print(colored(f"OK: {ok_count}", "green"))
     print(colored(f"Fehler: {fail_count}", "red"))
 
+    # Ursprüngliche Konfiguration wiederherstellen
     print("\nStelle ursprüngliche Konfiguration wieder her ...")
     write_config(config_path, orig_config)
     run_patch_mac("patch", config_path, system_variant)
