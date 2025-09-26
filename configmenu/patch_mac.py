@@ -80,7 +80,9 @@ def parse_kconfig_system(path):
 
 def extract_mac_config(mac_path, config_path, param_mappings, loglevel="info"):
     """
-    Extrahiert Werte aus *.mac und schreibt sie in .config. Bei loglevel="debug" werden alle Prüfungen und Ergebnisse ausgegeben.
+    Extrahiert Werte aus *.mac und schreibt sie in .config.
+    Für jede Option wird geprüft, ob die Aktiv-Bedingung laut Mapping erfüllt ist (d.h. ob die .mac-Datei so aussieht, wie sie für die aktivierte Option aussehen soll).
+    Bei loglevel="debug" werden alle Prüfungen und Ergebnisse ausgegeben.
     """
     if not os.path.exists(mac_path):
         print(f"[ERROR] *.mac Datei nicht gefunden: {mac_path}")
@@ -101,33 +103,36 @@ def extract_mac_config(mac_path, config_path, param_mappings, loglevel="info"):
         key_values = entry["key_values"]
         config_name = entry["config_name"]
         config_key = f"CONFIG_{config_name}"
-        match = True
-        debug_info = []
-        for key, expected_value in key_values.items():
-            found_value = None
-            for line in mac_lines:
-                m = re.match(rf'^{key}\s+equ\s+(\w+)', line.strip())
-                if m:
-                    found_value = m.group(1)
-                    break
-            if loglevel == "debug":
-                debug_info.append(f"  - Parameter: {key}, erwartet: {expected_value}, gefunden: {found_value}")
-            if found_value != expected_value:
-                match = False
-        if match:
-            new_config[config_key] = f"{config_key}=y"
-            if loglevel == "debug":
-                print(f"[DEBUG] {config_key}: ALLE Werte stimmen überein → =y")
-                for info in debug_info:
-                    print(info)
-                print("  Ergebnis: OK\n")
+        # String-Optionen erkennen (key=string)
+        if any(v == "string" for v in key_values.values()):
+            for key, v in key_values.items():
+                if v == "string":
+                    istwert = None
+                    for line in mac_lines:
+                        # Erlaube beliebige Kommentare am Zeilenende
+                        m = re.match(rf'^{key}:\s+db\s+([\'\"])(.*?)([\'\"]),0.*$', line.strip())
+                        if m:
+                            istwert = m.group(2)
+                            break
+                    if istwert is not None:
+                        new_config[config_key] = f'{config_key}="{istwert}"'
+                    else:
+                        new_config[config_key] = f'# {config_key} is not set'
         else:
-            new_config[config_key] = f"# {config_key} is not set"
-            if loglevel == "debug":
-                print(f"[DEBUG] {config_key}: Mindestens ein Wert stimmt nicht → is not set")
-                for info in debug_info:
-                    print(info)
-                print("  Ergebnis: NICHT OK\n")
+            aktiv_bedingung = True
+            for key, sollwert in key_values.items():
+                istwert = None
+                for line in mac_lines:
+                    m = re.match(rf'^{key}\s+equ\s+(\w+)', line.strip())
+                    if m:
+                        istwert = m.group(1)
+                        break
+                if istwert != sollwert:
+                    aktiv_bedingung = False
+            if aktiv_bedingung:
+                new_config[config_key] = f"{config_key}=y"
+            else:
+                new_config[config_key] = f"# {config_key} is not set"
 
     out_lines = []
     written = set()
@@ -169,42 +174,83 @@ def patch_mac_file(mac_path, config_path, param_mappings, loglevel="info"):
     with open(mac_path, encoding="utf-8") as f:
         mac_lines = f.readlines()
 
-    def patch_key_in_line(line, key, value):
-        m = re.match(rf'^({key}\s+equ\s+)(\w+)(.*)$', line.strip())
-        if m:
-            return f"{m.group(1)}{value}{m.group(3)}\n"
-        return None
+    original_lines = list(mac_lines)  # Save original for debug diff
 
-    # Helper for debug output
-    def print_debug_patch(idx, before, after):
-        print(f"[DEBUG] Zeile {idx+1} vor Patch: {before.rstrip()}")
-        print(f"[DEBUG] Zeile {idx+1} nach Patch: {after.rstrip()}")
+    def patch_key_in_line(line, key, value, is_string=False):
+        if is_string:
+            # Ersetze jede Zeile mit key: db ... (egal welcher String)
+            m = re.match(rf'^({key}:\s+db\s+)([\'\"])(.*?)([\'\"]),0(.*)$', line.strip())
+            if not m:
+                # Erlaube beliebige Whitespaces, beliebigen String, beliebige Kommentare
+                m = re.match(rf'^({key}:\s+db\s+)[^,]*,0(.*)$', line.strip())
+            if m:
+                return f"{m.group(1)}'{value}',0{m.group(2)}\n"
+            return None
+        else:
+            m = re.match(rf'^({key}\s+equ\s+)([^;\s]+)(.*)$', line.strip())
+            if m:
+                return f"{m.group(1)}{value}{m.group(3)}\n"
+            return None
 
-    # 1. "is not set" configs
+    # 1. Alle "is not set" Optionen patchen (invertiert, falls nötig)
     for entry in param_mappings:
         config_name = entry["config_name"]
+        key_values = entry["key_values"]
+        is_string = any(v == "string" for v in key_values.values())
         if config_name in config_not_set:
-            key_values = entry["key_values"]
             for idx, line in enumerate(mac_lines):
                 for key, value in key_values.items():
-                    patched = patch_key_in_line(line, key, value)
+                    if is_string:
+                        # Setze auf leeren String
+                        patched = patch_key_in_line(line, key, "", is_string=True)
+                    else:
+                        # Versuche, Wert zu invertieren (z.B. 1->0, 0->1, "ON"->"OFF")
+                        # Standard: Wenn Wert eine Zahl ist, invertiere 0<->1, sonst setze 0
+                        try:
+                            if value.isdigit():
+                                inv = str(1 - int(value)) if value in ("0", "1") else "0"
+                            else:
+                                # Für Werte wie "ON"/"OFF" oder andere: setze "0"
+                                inv = "0"
+                        except Exception:
+                            inv = "0"
+                        patched = patch_key_in_line(line, key, inv)
                     if patched and mac_lines[idx] != patched:
-                        if loglevel == "debug":
-                            print_debug_patch(idx, mac_lines[idx], patched)
                         mac_lines[idx] = patched
 
-    # 2. "=y" configs
+    # 2. Alle "=y" und String-Optionen patchen (direkt)
     for entry in param_mappings:
         config_name = entry["config_name"]
-        if config_name in config_set:
-            key_values = entry["key_values"]
+        key_values = entry["key_values"]
+        is_string = any(v == "string" for v in key_values.values())
+        config_val = None
+        string_in_config = False
+        if is_string:
+            # Suche nach CONFIG_XYZ="..."
+            with open(config_path, encoding="utf-8") as f:
+                for line in f:
+                    m = re.match(rf'^CONFIG_{config_name}="(.*)"', line.strip())
+                    if m:
+                        config_val = m.group(1)
+                        string_in_config = True
+                        break
+        if (not is_string and config_name in config_set) or (is_string and string_in_config):
             for idx, line in enumerate(mac_lines):
                 for key, value in key_values.items():
-                    patched = patch_key_in_line(line, key, value)
+                    if is_string:
+                        # Patche mit Wert aus .config
+                        patched = patch_key_in_line(line, key, config_val if config_val is not None else "", is_string=True)
+                    else:
+                        patched = patch_key_in_line(line, key, value)
                     if patched and mac_lines[idx] != patched:
-                        if loglevel == "debug":
-                            print_debug_patch(idx, mac_lines[idx], patched)
                         mac_lines[idx] = patched
+
+    # Debug-Ausgabe: Nur Zeilen, die sich zwischen original und final geändert haben
+    if loglevel == "debug":
+        for idx, (before, after) in enumerate(zip(original_lines, mac_lines)):
+            if before != after:
+                print(f"[DEBUG] Zeile {idx+1} vor Patch: {before.rstrip()}")
+                print(f"[DEBUG] Zeile {idx+1} nach Patch: {after.rstrip()}")
 
     with open(mac_path, "w", encoding="utf-8") as f:
         f.writelines(mac_lines)

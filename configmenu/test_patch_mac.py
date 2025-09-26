@@ -172,7 +172,7 @@ def main():
     test_results = []
     total_steps = len(params)
     def pause():
-        input("Weiter mit beliebiger Taste ...")
+        input("Weiter mit Enter Taste ...")
 
     # Bestimme, welche Testschritte ausgeführt werden sollen
     if step_mode == "all":
@@ -184,19 +184,41 @@ def main():
     else:
         step_range = range(total_steps)
 
+
+    # Initial: Setze alle Parameter auf 'is not set' und patche .mac
+    all_is_not_set = orig_config.copy()
+    for k in all_is_not_set:
+        if k.startswith("CONFIG_"):
+            all_is_not_set[k] = f"# {k} is not set"
+    write_config(config_path, all_is_not_set)
+    pause()
+    run_patch_mac("patch", config_path, system_variant)
+    pause()
+
     # Haupt-Testschleife: Für jeden Parameter einzeln testen
     for idx in step_range:
         param = params[idx]
         config_key = f"CONFIG_{param['config_name']}"
-        # Setze nur diesen Parameter auf '=y', alle anderen auf 'is not set'
-        new_config = orig_config.copy()
-        for k in new_config:
-            if k == config_key:
-                new_config[k] = f"{config_key}=y"
-            elif k.startswith("CONFIG_"):
-                new_config[k] = f"# {k} is not set"
+        # Setze nur diesen Parameter auf '=y' (oder String), alle anderen auf 'is not set'
+        new_config = all_is_not_set.copy()
+        is_string = (param.get('value', None) == 'string')
+        if is_string:
+            new_config[config_key] = f'{config_key}="Test Kommand"'
+        else:
+            new_config[config_key] = f"{config_key}=y"
         write_config(config_path, new_config)
-        print(f"Testschritt {idx+1}: Setze {config_key} -> {param['key']}={param['value']} (loglevel={loglevel})")
+        # Debug: Zeige Wert in .config und .mac vor Patch
+        if loglevel == "debug":
+            print(f"[DEBUG] .config vor Patch: {config_key} = {new_config[config_key]}")
+            # Zeige relevante Zeile aus .mac
+            mac_path = os.path.join("src", system_variant, "bios.mac")
+            if os.path.exists(mac_path):
+                with open(mac_path, encoding="utf-8") as f:
+                    for line in f:
+                        if param['key'] in line:
+                            print(f"[DEBUG] .mac vor Patch: {line.rstrip()}")
+                            break
+        print(f"Testschritt {idx+1}: Setze {config_key} (loglevel={loglevel})")
         # Patche die .mac-Datei
         run_patch_mac("patch", config_path, system_variant)
         # Lösche die .config, um einen frischen Extract zu erzwingen
@@ -205,7 +227,10 @@ def main():
         run_patch_mac("extract", config_path, system_variant)
         result_config = read_config(config_path)
         # Prüfe, ob der gesetzte Wert korrekt übernommen wurde
-        ok = result_config.get(config_key, "").endswith("=y")
+        if is_string:
+            ok = result_config.get(config_key, "").startswith(f'{config_key}="Test Kommand"')
+        else:
+            ok = result_config.get(config_key, "").endswith("=y")
         if ok:
             print(colored(f"Testschritt {idx+1} OK", "green"))
         else:
