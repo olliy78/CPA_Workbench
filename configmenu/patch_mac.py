@@ -109,7 +109,9 @@ def extract_mac_config(mac_path, config_path, param_mappings, loglevel="info"):
                 if v == "string":
                     istwert = None
                     for line in mac_lines:
-                        # Erlaube beliebige Kommentare am Zeilenende
+                        # Kommentarzeilen ignorieren
+                        if line.lstrip().startswith(';'):
+                            continue
                         m = re.match(rf'^{key}:\s+db\s+([\'\"])(.*?)([\'\"]),0.*$', line.strip())
                         if m:
                             istwert = m.group(2)
@@ -123,6 +125,9 @@ def extract_mac_config(mac_path, config_path, param_mappings, loglevel="info"):
             for key, sollwert in key_values.items():
                 istwert = None
                 for line in mac_lines:
+                    # Kommentarzeilen ignorieren
+                    if line.lstrip().startswith(';'):
+                        continue
                     m = re.match(rf'^{key}\s+equ\s+(\w+)', line.strip())
                     if m:
                         istwert = m.group(1)
@@ -177,6 +182,9 @@ def patch_mac_file(mac_path, config_path, param_mappings, loglevel="info"):
     original_lines = list(mac_lines)  # Save original for debug diff
 
     def patch_key_in_line(line, key, value, is_string=False):
+        # Kommentarzeilen ignorieren
+        if line.lstrip().startswith(';'):
+            return None
         if is_string:
             # Ersetze jede Zeile mit key: db ... (egal welcher String)
             m = re.match(rf'^({key}:\s+db\s+)([\'\"])(.*?)([\'\"]),0(.*)$', line.strip())

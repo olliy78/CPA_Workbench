@@ -4,10 +4,14 @@ mainmenu "CP/A System Konfiguration - Konfiguration des System Kernels @OS.COM [
 config HINT_INFO
     bool "=== Hinweise zur Konfiguration [? für Hilfe] ==="
     help
-        CP/A Einstellungen können vor Allem in der bios.mac aber auch in anderen Dateien vorgenommen werden.
-        Hier können nur die wichtigsten Dinge eingestellt werden. Nach dem Speichern und Beenden werden die Änderungen in die bios.mac übernommen.
-        Nachdem die gewünschte Änderungen vorgenommen wurden, das Menü mit [Q] oder [Esc] beenden und unbedingt Speichern.
+        CP/A Einstellungen können vor Allem in der bios.mac aber auch in
+        anderen Dateien vorgenommen werden. Hier können nur die wichtigsten
+        Dinge eingestellt werden. Nach dem Speichern und Beenden werden die
+        Änderungen in die bios.mac übernommen. Nachdem die gewünschte
+        Änderungen vorgenommen wurden, das Menü mit [Q] oder [Esc] beenden
+        und unbedingt Speichern.
     default n
+
 menu "Hardwarevariante"
 choice
     prompt "Geraeteversion"
@@ -110,6 +114,24 @@ choice
         help
             source=bios.mac ramkb=32
 endchoice
+
+config SYSTEM_MEMORY_PROTECTION
+    bool "Speicherschutz aktivieren"
+    help
+        source=bios.mac mprot=1
+        Aktiviert den BIOS-Speicherschutz. Bei aktivem Schutz werden
+        Routinen eingebunden, die versehentliche oder unerwünschte
+        Speicherzugriffe verhindern können. Siehe cpa_doc.txt für Details.
+    default n
+
+config SYSTEM_STOP_FUNCTION
+    bool "STOP-Funktion aktivieren"
+    help
+        source=bios.mac stpvar=1
+        Aktiviert die STOP-Funktion im BIOS. Damit können spezielle
+        Tastenkombinationen genutzt werden, um Programme oder Drucker
+        gezielt zu stoppen. Siehe cpa_doc.txt für Details.
+    default n
 
 endmenu
 
@@ -313,6 +335,16 @@ choice
         help
             source=bios.mac diskD=0
 endchoice
+
+config SYSTEM_HARDDISK_SUPPORT
+    bool "HardDisk-Unterstützung aktivieren"
+    help
+        source=bios.mac hdsk=1
+        Aktiviert die Unterstützung für XT-kompatible Festplatten im BIOS.
+        Ein Spezialadapter ermöglicht die Nutzung einer HardDisk am 8-bit-Bus.
+        Weitere Informationen siehe cpa_doc.txt und BIOS-Dokumentation.
+    default n
+
 endmenu
 
 menu "Systemstart Einstellungen"
@@ -386,7 +418,7 @@ config SYSTEM_FORMATBOOT
         bool "Format mit Systemspur als Standardformat"
         default y
         help
-            source=bios.mac fsys=1
+            source=bios.mac @fsys=1
             Nur relevant wenn automatische Formaterkennung deaktiviert
             wenn aktiv, wird immer das Standardformt des Lauwerks mit Systemspur verwendet
 config SYSTEM_MONITOR
@@ -399,6 +431,171 @@ config SYSTEM_MONITOR
             Veraenderung  der Speicherplatzbelegung  staendig,  d.h.  auch  
             waehrend der Arbeit eines Nutzerprogramms zur Verfuegung  ste- 
             hen. Die Benutzung des Bios-Motitors ist in cpa_doc.txt beschrieben
+
+config SYSTEM_UMLAUT_ENCODING
+    bool "Umlautumcodierung aktivieren"
+    help
+        source=bios.mac umlaut=1
+        Aktiviert die Umcodierung für deutsche Umlaute im Zeichensatz.
+        Umlaute werden auf dem Bildschirm korrekt dargestellt, sofern
+        ein passender Zeichengenerator vorhanden ist. Siehe cpa_doc.txt
+        und BIOS-Dokumentation für Details.
+    default n
+
+endmenu
+menu "Serielle Schnittstellen und Drucker"
+
+config SERIAL_IOBTTY
+    string "iobtty (Drucker 1: Schnittstellen-Konfiguration)"
+    help
+        source=bios.mac iobtty=string
+        Konfiguriert die serielle Schnittstelle für Drucker 1.
+        Format: PSCBT
+        P: Parität (0=keine, 1=ungerade, 2=gerade)
+        S: Stopbits (1=1, 2=2, 3=1.5)
+        C: Datenbits (5..8)
+        B: Baudrate (1=9600,2=4800,3=2400,4=1200,5=600,6=300,7=150,8=100,9=75)
+        T: Treiber/Protokoll (0=DC1/DC3, 1=DTR+DSR, 2=Strombauch, 3=DTR+CTS, 5=PIO, ...)
+        Beispiel: 01811 (ohne Parität, 1 Stopbit, 8 Bit, 9600 Bd, DTR)
+        Beispiel: 11710 (ungerade Parität, 1 Stopbit, 7 Bit, 9600 Bd, DC1/3)
+        Siehe bios.mac Zeilen 458-489 für Details und weitere Beispiele.
+
+config SERIAL_TTYDAT
+    string "ttydat (Daten-Adresse Drucker 1)"
+    help
+        source=bios.mac ttydat=string
+        Datenadresse für Drucker 1. Mögliche Karten und Adressen:
+        K8025: 5e (IFSS), 5c, 52
+        K6028/K8025: 50 (V.24)
+        K6022: 54, 50
+        Siehe bios.mac Zeilen 432-449 für weitere Karten und Bemerkungen.
+
+config SERIAL_TTYSTA
+    string "ttysta (Status-Adresse Drucker 1)"
+    help
+        source=bios.mac ttysta=string
+        Statusadresse für Drucker 1. Mögliche Karten und Adressen:
+        K8025: 5f, 5d, 53
+        K6028/K8025: 51, 53
+        K6022: 56, 51
+        Siehe bios.mac Zeilen 432-449 für weitere Karten und Bemerkungen.
+
+config SERIAL_TTYCTS
+    string "ttycts (CTS-Adresse Drucker 1)"
+    help
+        source=bios.mac ttycts=string
+        CTS-Adresse für Drucker 1. Mögliche Karten und Adressen:
+        K8025: 58, 0c
+        K6028/K8025: 0c
+        K6022: 58
+        Siehe bios.mac Zeilen 432-449 für weitere Karten und Bemerkungen.
+
+config SERIAL_TTYCTR
+    string "ttyctr (CTR-Adresse Drucker 1)"
+    help
+        source=bios.mac ttyctr=string
+        CTR-Adresse für Drucker 1. Mögliche Karten und Adressen:
+        K8025: 58, 0c
+        K6028/K8025: 0c
+        K6022: 58
+        Siehe bios.mac Zeilen 432-449 für weitere Karten und Bemerkungen.
+
+# Zweiter Drucker
+config SERIAL_IOBLPT
+    string "ioblpt (Drucker 2: Schnittstellen-Konfiguration)"
+    help
+        source=bios.mac ioblpt=string
+        Konfiguriert die serielle Schnittstelle für Drucker 2.
+        Format und Bedeutung wie bei iobtty (siehe oben).
+
+config SERIAL_LPTDAT
+    string "lptdat (Daten-Adresse Drucker 2)"
+    help
+        source=bios.mac lptdat=string
+        Datenadresse für Drucker 2. Mögliche Karten und Adressen siehe ttydat.
+
+config SERIAL_LPTSTA
+    string "lptsta (Status-Adresse Drucker 2)"
+    help
+        source=bios.mac lptsta=string
+        Statusadresse für Drucker 2. Mögliche Karten und Adressen siehe ttysta.
+
+config SERIAL_LPTCTS
+    string "lptcts (CTS-Adresse Drucker 2)"
+    help
+        source=bios.mac lptcts=string
+        CTS-Adresse für Drucker 2. Mögliche Karten und Adressen siehe ttycts.
+
+config SERIAL_LPTCTR
+    string "lptctr (CTR-Adresse Drucker 2)"
+    help
+        source=bios.mac lptctr=string
+        CTR-Adresse für Drucker 2. Mögliche Karten und Adressen siehe ttyctr.
+
+# Koppelschnittstelle
+config SERIAL_IOBUC1
+    string "iobuc1 (Koppelschnittstelle: Schnittstellen-Konfiguration)"
+    help
+        source=bios.mac iobuc1=string
+        Konfiguriert die serielle Schnittstelle für die Koppelschnittstelle (UC1).
+        Format: PSCBT
+        P: Parität (0=keine, 1=ungerade, 2=gerade)
+        S: Stopbits (1=1, 2=2, 3=1.5)
+        C: Datenbits (5..8)
+        B: Baudrate (1=9600,2=4800,3=2400,4=1200,5=600,6=300,7=150,8=100,9=75)
+        T: Treiber/Protokoll (0=DC1/DC3, 1=DTR+DSR, 2=Strombauch, 3=DTR+CTS, 5=PIO, ...)
+        Beispiel: 01811 (ohne Parität, 1 Stopbit, 8 Bit, 9600 Bd, DTR)
+        Beispiel: 11710 (ungerade Parität, 1 Stopbit, 7 Bit, 9600 Bd, DC1/3)
+        Siehe bios.mac Zeilen 458-489 für Details und weitere Beispiele.
+
+config SERIAL_UC1DAT
+    string "uc1dat (Daten-Adresse UC1)"
+    help
+        source=bios.mac uc1dat=string
+        Datenadresse für UC1. Beispiele für Karten und Adressen:
+        K8025: 5e (IFSS), 5c, 52
+        K6028/K8025: 50 (V.24)
+        K6022: 54, 50
+        Weitere Adressen siehe bios.mac Zeilen 432-449.
+
+config SERIAL_UC1STA
+    string "uc1sta (Status-Adresse UC1)"
+    help
+        source=bios.mac uc1sta=string
+        Statusadresse für UC1. Beispiele für Karten und Adressen:
+        K8025: 5f, 5d, 53
+        K6028/K8025: 51, 53
+        K6022: 56, 51
+        Weitere Adressen siehe bios.mac Zeilen 432-449.
+
+config SERIAL_UC1CTS
+    string "uc1cts (CTS-Adresse UC1)"
+    help
+        source=bios.mac uc1cts=string
+        CTS-Adresse für UC1. Beispiele für Karten und Adressen:
+        K8025: 58, 0c
+        K6028/K8025: 0c
+        K6022: 58
+        Weitere Adressen siehe bios.mac Zeilen 432-449.
+
+config SERIAL_UC1CTR
+    string "uc1ctr (CTR-Adresse UC1)"
+    help
+        source=bios.mac uc1ctr=string
+        CTR-Adresse für UC1. Beispiele für Karten und Adressen:
+        K8025: 58, 0c
+        K6028/K8025: 0c
+        K6022: 58
+        Weitere Adressen siehe bios.mac Zeilen 432-449.
+
+config SERIAL_UC1BFL
+    string "uc1bfl (UC1-Pufferlänge)"
+    help
+        source=bios.mac uc1bfl=string
+        Länge des UC1-Puffers. Muss z.B. 2k Bildschirmrollen abfangen können.
+        Empfohlen: >=20 bei 9600 Baud.
+        Beispiel: 20
+        Siehe bios.mac Kommentar zu uc1bfl.
 
 
 endmenu

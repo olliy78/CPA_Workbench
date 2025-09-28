@@ -191,9 +191,7 @@ def main():
         if k.startswith("CONFIG_"):
             all_is_not_set[k] = f"# {k} is not set"
     write_config(config_path, all_is_not_set)
-    pause()
     run_patch_mac("patch", config_path, system_variant)
-    pause()
 
     # Haupt-Testschleife: Für jeden Parameter einzeln testen
     for idx in step_range:
@@ -210,22 +208,25 @@ def main():
         # Debug: Zeige Wert in .config und .mac vor Patch
         if loglevel == "debug":
             print(f"[DEBUG] .config vor Patch: {config_key} = {new_config[config_key]}")
-            # Zeige relevante Zeile aus .mac
+            # Zeige relevante Zeile aus .mac (nur nicht-kommentierte Zeilen)
             mac_path = os.path.join("src", system_variant, "bios.mac")
             if os.path.exists(mac_path):
                 with open(mac_path, encoding="utf-8") as f:
                     for line in f:
-                        if param['key'] in line:
+                        if param['key'] in line and not line.lstrip().startswith(';'):
                             print(f"[DEBUG] .mac vor Patch: {line.rstrip()}")
                             break
         print(f"Testschritt {idx+1}: Setze {config_key} (loglevel={loglevel})")
         # Patche die .mac-Datei
         run_patch_mac("patch", config_path, system_variant)
+        pause()
         # Lösche die .config, um einen frischen Extract zu erzwingen
         os.remove(config_path)
+        pause()
         # Extrahiere die Werte erneut aus der .mac-Datei
         run_patch_mac("extract", config_path, system_variant)
         result_config = read_config(config_path)
+        pause()
         # Prüfe, ob der gesetzte Wert korrekt übernommen wurde
         if is_string:
             ok = result_config.get(config_key, "").startswith(f'{config_key}="Test Kommand"')
@@ -240,6 +241,8 @@ def main():
         if step_mode == "singlestep":
             pause()
         elif step_mode is None and not ok:
+            pause()
+        elif step_idx is not None and not ok:
             pause()
 
     # Zusammenfassung aller Testergebnisse
