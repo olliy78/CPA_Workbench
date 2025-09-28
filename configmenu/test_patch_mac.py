@@ -197,18 +197,79 @@ def main():
     for idx in step_range:
         param = params[idx]
         config_key = f"CONFIG_{param['config_name']}"
-        # Setze nur diesen Parameter auf '=y' (oder String), alle anderen auf 'is not set'
         new_config = all_is_not_set.copy()
         is_string = (param.get('value', None) == 'string')
+        is_hexstring = (param.get('value', None) == 'hexstring')
+        # Hexstring: Testfall 1: Wert 123CAFFEh
+        if is_hexstring:
+            # Testwert 1: 123CAFFEh
+            new_config[config_key] = f'{config_key}=123CAFFEh'
+            write_config(config_path, new_config)
+            if loglevel == "debug":
+                print(f"[DEBUG] .config vor Patch: {config_key} = {new_config[config_key]}")
+                mac_path = os.path.join("src", system_variant, "bios.mac")
+                if os.path.exists(mac_path):
+                    with open(mac_path, encoding="utf-8") as f:
+                        for line in f:
+                            if param['key'] in line and not line.lstrip().startswith(';'):
+                                print(f"[DEBUG] .mac vor Patch: {line.rstrip()}")
+                                break
+            print(f"Testschritt {idx+1}a: Setze {config_key}=123CAFFEh (hexstring)")
+            run_patch_mac("patch", config_path, system_variant)
+            os.remove(config_path)
+            run_patch_mac("extract", config_path, system_variant)
+            result_config = read_config(config_path)
+            ok = result_config.get(config_key, "") == f'{config_key}=123CAFFEh'
+            if ok:
+                print(colored(f"Testschritt {idx+1}a OK", "green"))
+            else:
+                print(colored(f"Testschritt {idx+1}a NICHT OK", "red"))
+            test_results.append(ok)
+            if step_mode == "singlestep":
+                pause()
+            elif step_mode is None and not ok:
+                pause()
+            elif step_idx is not None and not ok:
+                pause()
+            # Testwert 2: 0
+            new_config = all_is_not_set.copy()
+            new_config[config_key] = f'# {config_key} is not set'
+            write_config(config_path, new_config)
+            if loglevel == "debug":
+                print(f"[DEBUG] .config vor Patch: {config_key} = {new_config[config_key]}")
+                mac_path = os.path.join("src", system_variant, "bios.mac")
+                if os.path.exists(mac_path):
+                    with open(mac_path, encoding="utf-8") as f:
+                        for line in f:
+                            if param['key'] in line and not line.lstrip().startswith(';'):
+                                print(f"[DEBUG] .mac vor Patch: {line.rstrip()}")
+                                break
+            print(f"Testschritt {idx+1}b: Setze {config_key} is not set (hexstring)")
+            run_patch_mac("patch", config_path, system_variant)
+            os.remove(config_path)
+            run_patch_mac("extract", config_path, system_variant)
+            result_config = read_config(config_path)
+            ok = result_config.get(config_key, "") == f'# {config_key} is not set'
+            if ok:
+                print(colored(f"Testschritt {idx+1}b OK", "green"))
+            else:
+                print(colored(f"Testschritt {idx+1}b NICHT OK", "red"))
+            test_results.append(ok)
+            if step_mode == "singlestep":
+                pause()
+            elif step_mode is None and not ok:
+                pause()
+            elif step_idx is not None and not ok:
+                pause()
+            continue
+        # String-Parameter wie bisher
         if is_string:
             new_config[config_key] = f'{config_key}="Test Kommand"'
         else:
             new_config[config_key] = f"{config_key}=y"
         write_config(config_path, new_config)
-        # Debug: Zeige Wert in .config und .mac vor Patch
         if loglevel == "debug":
             print(f"[DEBUG] .config vor Patch: {config_key} = {new_config[config_key]}")
-            # Zeige relevante Zeile aus .mac (nur nicht-kommentierte Zeilen)
             mac_path = os.path.join("src", system_variant, "bios.mac")
             if os.path.exists(mac_path):
                 with open(mac_path, encoding="utf-8") as f:
@@ -217,17 +278,10 @@ def main():
                             print(f"[DEBUG] .mac vor Patch: {line.rstrip()}")
                             break
         print(f"Testschritt {idx+1}: Setze {config_key} (loglevel={loglevel})")
-        # Patche die .mac-Datei
         run_patch_mac("patch", config_path, system_variant)
-        pause()
-        # Lösche die .config, um einen frischen Extract zu erzwingen
         os.remove(config_path)
-        pause()
-        # Extrahiere die Werte erneut aus der .mac-Datei
         run_patch_mac("extract", config_path, system_variant)
         result_config = read_config(config_path)
-        pause()
-        # Prüfe, ob der gesetzte Wert korrekt übernommen wurde
         if is_string:
             ok = result_config.get(config_key, "").startswith(f'{config_key}="Test Kommand"')
         else:
@@ -237,7 +291,6 @@ def main():
         else:
             print(colored(f"Testschritt {idx+1} NICHT OK", "red"))
         test_results.append(ok)
-        # Pausenlogik: Bei singlestep oder Fehler anhalten
         if step_mode == "singlestep":
             pause()
         elif step_mode is None and not ok:

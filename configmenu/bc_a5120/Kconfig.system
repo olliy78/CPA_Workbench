@@ -448,7 +448,7 @@ menu "Serielle Schnittstellen und Drucker"
 config SERIAL_IOBTTY
     string "iobtty (Drucker 1: Schnittstellen-Konfiguration)"
     help
-        source=bios.mac iobtty=string
+        source=bios.mac iobtty=hexstring
         Konfiguriert die serielle Schnittstelle für Drucker 1.
         Format: PSCBT
         P: Parität (0=keine, 1=ungerade, 2=gerade)
@@ -463,7 +463,7 @@ config SERIAL_IOBTTY
 config SERIAL_TTYDAT
     string "ttydat (Daten-Adresse Drucker 1)"
     help
-        source=bios.mac ttydat=string
+        source=bios.mac ttydat=hexstring
         Datenadresse für Drucker 1. Mögliche Karten und Adressen:
         K8025: 5e (IFSS), 5c, 52
         K6028/K8025: 50 (V.24)
@@ -473,7 +473,7 @@ config SERIAL_TTYDAT
 config SERIAL_TTYSTA
     string "ttysta (Status-Adresse Drucker 1)"
     help
-        source=bios.mac ttysta=string
+        source=bios.mac ttysta=hexstring
         Statusadresse für Drucker 1. Mögliche Karten und Adressen:
         K8025: 5f, 5d, 53
         K6028/K8025: 51, 53
@@ -483,7 +483,7 @@ config SERIAL_TTYSTA
 config SERIAL_TTYCTS
     string "ttycts (CTS-Adresse Drucker 1)"
     help
-        source=bios.mac ttycts=string
+        source=bios.mac ttycts=hexstring
         CTS-Adresse für Drucker 1. Mögliche Karten und Adressen:
         K8025: 58, 0c
         K6028/K8025: 0c
@@ -493,7 +493,7 @@ config SERIAL_TTYCTS
 config SERIAL_TTYCTR
     string "ttyctr (CTR-Adresse Drucker 1)"
     help
-        source=bios.mac ttyctr=string
+        source=bios.mac ttyctr=hexstring
         CTR-Adresse für Drucker 1. Mögliche Karten und Adressen:
         K8025: 58, 0c
         K6028/K8025: 0c
@@ -504,39 +504,39 @@ config SERIAL_TTYCTR
 config SERIAL_IOBLPT
     string "ioblpt (Drucker 2: Schnittstellen-Konfiguration)"
     help
-        source=bios.mac ioblpt=string
+        source=bios.mac ioblpt=hexstring
         Konfiguriert die serielle Schnittstelle für Drucker 2.
         Format und Bedeutung wie bei iobtty (siehe oben).
 
 config SERIAL_LPTDAT
     string "lptdat (Daten-Adresse Drucker 2)"
     help
-        source=bios.mac lptdat=string
+        source=bios.mac lptdat=hexstring
         Datenadresse für Drucker 2. Mögliche Karten und Adressen siehe ttydat.
 
 config SERIAL_LPTSTA
     string "lptsta (Status-Adresse Drucker 2)"
     help
-        source=bios.mac lptsta=string
+        source=bios.mac lptsta=hexstring
         Statusadresse für Drucker 2. Mögliche Karten und Adressen siehe ttysta.
 
 config SERIAL_LPTCTS
     string "lptcts (CTS-Adresse Drucker 2)"
     help
-        source=bios.mac lptcts=string
+        source=bios.mac lptcts=hexstring
         CTS-Adresse für Drucker 2. Mögliche Karten und Adressen siehe ttycts.
 
 config SERIAL_LPTCTR
     string "lptctr (CTR-Adresse Drucker 2)"
     help
-        source=bios.mac lptctr=string
+        source=bios.mac lptctr=hexstring
         CTR-Adresse für Drucker 2. Mögliche Karten und Adressen siehe ttyctr.
 
 # Koppelschnittstelle
 config SERIAL_IOBUC1
     string "iobuc1 (Koppelschnittstelle: Schnittstellen-Konfiguration)"
     help
-        source=bios.mac iobuc1=string
+        source=bios.mac iobuc1=hexstring
         Konfiguriert die serielle Schnittstelle für die Koppelschnittstelle (UC1).
         Format: PSCBT
         P: Parität (0=keine, 1=ungerade, 2=gerade)
@@ -551,7 +551,7 @@ config SERIAL_IOBUC1
 config SERIAL_UC1DAT
     string "uc1dat (Daten-Adresse UC1)"
     help
-        source=bios.mac uc1dat=string
+        source=bios.mac uc1dat=hexstring
         Datenadresse für UC1. Beispiele für Karten und Adressen:
         K8025: 5e (IFSS), 5c, 52
         K6028/K8025: 50 (V.24)
@@ -561,7 +561,7 @@ config SERIAL_UC1DAT
 config SERIAL_UC1STA
     string "uc1sta (Status-Adresse UC1)"
     help
-        source=bios.mac uc1sta=string
+        source=bios.mac uc1sta=hexstring
         Statusadresse für UC1. Beispiele für Karten und Adressen:
         K8025: 5f, 5d, 53
         K6028/K8025: 51, 53
@@ -571,7 +571,7 @@ config SERIAL_UC1STA
 config SERIAL_UC1CTS
     string "uc1cts (CTS-Adresse UC1)"
     help
-        source=bios.mac uc1cts=string
+        source=bios.mac uc1cts=hexstring
         CTS-Adresse für UC1. Beispiele für Karten und Adressen:
         K8025: 58, 0c
         K6028/K8025: 0c
@@ -581,7 +581,7 @@ config SERIAL_UC1CTS
 config SERIAL_UC1CTR
     string "uc1ctr (CTR-Adresse UC1)"
     help
-        source=bios.mac uc1ctr=string
+        source=bios.mac uc1ctr=hexstring
         CTR-Adresse für UC1. Beispiele für Karten und Adressen:
         K8025: 58, 0c
         K6028/K8025: 0c
@@ -591,7 +591,7 @@ config SERIAL_UC1CTR
 config SERIAL_UC1BFL
     string "uc1bfl (UC1-Pufferlänge)"
     help
-        source=bios.mac uc1bfl=string
+        source=bios.mac uc1bfl=hexstring
         Länge des UC1-Puffers. Muss z.B. 2k Bildschirmrollen abfangen können.
         Empfohlen: >=20 bei 9600 Baud.
         Beispiel: 20
