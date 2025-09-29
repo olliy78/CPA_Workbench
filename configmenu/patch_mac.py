@@ -25,7 +25,11 @@ import re
 def parse_kconfig_system(path):
     """
     Extrahiert alle konfigurierbaren Parameter aus Kconfig.system und deren Mapping.
-    Liefert Liste von Dicts: {config_name, source, key, value}
+    Liefert eine Liste von Dicts: {config_name, source, key_values}
+    Args:
+        path (str): Pfad zur Kconfig.system
+    Returns:
+        list: Liste der Parametermappings
     """
     results = []
     if not os.path.exists(path):
@@ -81,8 +85,12 @@ def parse_kconfig_system(path):
 def extract_mac_config(mac_path, config_path, param_mappings, loglevel="info"):
     """
     Extrahiert Werte aus *.mac und schreibt sie in .config.
-    Für jede Option wird geprüft, ob die Aktiv-Bedingung laut Mapping erfüllt ist (d.h. ob die .mac-Datei so aussieht, wie sie für die aktivierte Option aussehen soll).
-    Bei loglevel="debug" werden alle Prüfungen und Ergebnisse ausgegeben.
+    Für jede Option wird geprüft, ob die Aktiv-Bedingung laut Mapping erfüllt ist.
+    Args:
+        mac_path (str): Pfad zur .mac Datei
+        config_path (str): Pfad zur .config Datei
+        param_mappings (list): Liste der Parametermappings
+        loglevel (str): "info" oder "debug"
     """
     if not os.path.exists(mac_path):
         print(f"[ERROR] *.mac Datei nicht gefunden: {mac_path}")
@@ -120,7 +128,7 @@ def extract_mac_config(mac_path, config_path, param_mappings, loglevel="info"):
                         if istwert == "0":
                             new_config[config_key] = f'# {config_key} is not set'
                         else:
-                            new_config[config_key] = f'{config_key}={istwert}'
+                            new_config[config_key] = f'{config_key}="{istwert}"'
                     else:
                         new_config[config_key] = f'# {config_key} is not set'
         # String-Optionen (klassisch)
@@ -178,6 +186,11 @@ def extract_mac_config(mac_path, config_path, param_mappings, loglevel="info"):
 def patch_mac_file(mac_path, config_path, param_mappings, loglevel="info"):
     """
     Patche *.mac Datei gemäß .config.
+    Args:
+        mac_path (str): Pfad zur .mac Datei
+        config_path (str): Pfad zur .config Datei
+        param_mappings (list): Liste der Parametermappings
+        loglevel (str): "info" oder "debug"
     """
     config_set = set()
     config_not_set = set()
@@ -200,13 +213,27 @@ def patch_mac_file(mac_path, config_path, param_mappings, loglevel="info"):
     original_lines = list(mac_lines)  # Save original for debug diff
 
     def patch_key_in_line(line, key, value, is_string=False, is_hexstring=False):
+        """
+        Patcht eine Zeile mit dem gegebenen Schlüssel und Wert.
+        Args:
+            line (str): Originalzeile
+            key (str): Schlüssel
+            value (str): Neuer Wert
+            is_string (bool): String-Option
+            is_hexstring (bool): Hexstring-Option
+        Returns:
+            str|None: Gepatchte Zeile oder None, falls nicht zutreffend
+        """
+        # Kommentare am Zeilenanfang überspringen
         if line.lstrip().startswith(';'):
             return None
         if is_hexstring:
-            # Ersetze jede Zeile mit key equ ... (egal welcher Wert)
-            m = re.match(rf'^({key}\s+equ\s+)([^;\s]+)(.*)$', line.strip())
+            # Wert aus .config kann Quotes enthalten, diese müssen entfernt werden
+            clean_value = value.strip('"').strip("'")
+            m = re.match(rf'^({key}\s+equ\s+)(["\']?)([^"\';\s]+)(["\']?)(.*)$', line.strip())
             if m:
-                return f"{m.group(1)}{value}{m.group(3)}\n"
+                # Schreibe Wert ohne Quotes in die .mac
+                return f"{m.group(1)}{clean_value}{m.group(5)}\n"
             return None
         if is_string:
             # String mit Kommentar nach ,0 erhalten
@@ -219,6 +246,7 @@ def patch_mac_file(mac_path, config_path, param_mappings, loglevel="info"):
             if m2:
                 return f"{m2.group(1)}'{value}',0{m2.group(2)}\n"
             return None
+        # Standardfall: equ-Zeile patchen
         m = re.match(rf'^({key}\s+equ\s+)([^;\s]+)(.*)$', line.strip())
         if m:
             return f"{m.group(1)}{value}{m.group(3)}\n"

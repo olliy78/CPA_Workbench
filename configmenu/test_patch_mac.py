@@ -109,7 +109,8 @@ def read_config(path):
         return vals
     with open(path, encoding="utf-8") as f:
         for line in f:
-            m = re.match(r'^(# )?(CONFIG_\w+) ?(=y|=n|is not set)?', line)
+            # Erkenne alle Zuweisungen, inkl. ="...", =..., =y, =n, is not set
+            m = re.match(r'^(# )?(CONFIG_\w+)\s*(=.*| is not set)?', line)
             if m:
                 vals[m.group(2)] = line.strip()
     return vals
@@ -120,8 +121,8 @@ def write_config(path, vals):
     Jede Zeile entspricht einem Konfigurationsparameter.
     """
     with open(path, "w", encoding="utf-8") as f:
-        for v in vals.values():
-            f.write(v + "\n")
+        for k in sorted(vals.keys()):
+            f.write(vals[k] + "\n")
 
 def run_patch_mac(mode, config_path, system_variant):
     """
@@ -203,7 +204,7 @@ def main():
         # Hexstring: Testfall 1: Wert 123CAFFEh
         if is_hexstring:
             # Testwert 1: 123CAFFEh
-            new_config[config_key] = f'{config_key}=123CAFFEh'
+            new_config[config_key] = f'{config_key}="123CAFFEh"'
             write_config(config_path, new_config)
             if loglevel == "debug":
                 print(f"[DEBUG] .config vor Patch: {config_key} = {new_config[config_key]}")
@@ -214,12 +215,12 @@ def main():
                             if param['key'] in line and not line.lstrip().startswith(';'):
                                 print(f"[DEBUG] .mac vor Patch: {line.rstrip()}")
                                 break
-            print(f"Testschritt {idx+1}a: Setze {config_key}=123CAFFEh (hexstring)")
+            print(f"Testschritt {idx+1}a: Setze {config_key}='123CAFFEh' (hexstring)")
             run_patch_mac("patch", config_path, system_variant)
             os.remove(config_path)
             run_patch_mac("extract", config_path, system_variant)
             result_config = read_config(config_path)
-            ok = result_config.get(config_key, "") == f'{config_key}=123CAFFEh'
+            ok = result_config.get(config_key, "") == f'{config_key}="123CAFFEh"'
             if ok:
                 print(colored(f"Testschritt {idx+1}a OK", "green"))
             else:

@@ -358,7 +358,7 @@ config SYSTEM_AUTOEXEC_STR
         folge sein.
 
 choice
-    prompt "Ausführen bei: "
+    prompt "Ausführen bei:"
     default SYSTEM_AUTOEXEC_COLD
     config SYSTEM_AUTOEXEC_COLD
         bool "nur bei Kaltstart / Einschalten"
@@ -445,7 +445,7 @@ config SYSTEM_UMLAUT_ENCODING
 endmenu
 menu "Serielle Schnittstellen und Drucker"
 
-config SERIAL_IOBTTY
+config SYSTEM_SERIAL_IOBTTY
     string "iobtty (Drucker 1: Schnittstellen-Konfiguration)"
     help
         source=bios.mac iobtty=hexstring
@@ -460,7 +460,7 @@ config SERIAL_IOBTTY
         Beispiel: 11710 (ungerade Parität, 1 Stopbit, 7 Bit, 9600 Bd, DC1/3)
         Siehe bios.mac Zeilen 458-489 für Details und weitere Beispiele.
 
-config SERIAL_TTYDAT
+config SYSTEM_SERIAL_TTYDAT
     string "ttydat (Daten-Adresse Drucker 1)"
     help
         source=bios.mac ttydat=hexstring
@@ -470,7 +470,7 @@ config SERIAL_TTYDAT
         K6022: 54, 50
         Siehe bios.mac Zeilen 432-449 für weitere Karten und Bemerkungen.
 
-config SERIAL_TTYSTA
+config SYSTEM_SERIAL_TTYSTA
     string "ttysta (Status-Adresse Drucker 1)"
     help
         source=bios.mac ttysta=hexstring
@@ -480,7 +480,7 @@ config SERIAL_TTYSTA
         K6022: 56, 51
         Siehe bios.mac Zeilen 432-449 für weitere Karten und Bemerkungen.
 
-config SERIAL_TTYCTS
+config SYSTEM_SERIAL_TTYCTS
     string "ttycts (CTS-Adresse Drucker 1)"
     help
         source=bios.mac ttycts=hexstring
@@ -490,7 +490,7 @@ config SERIAL_TTYCTS
         K6022: 58
         Siehe bios.mac Zeilen 432-449 für weitere Karten und Bemerkungen.
 
-config SERIAL_TTYCTR
+config SYSTEM_SERIAL_TTYCTR
     string "ttyctr (CTR-Adresse Drucker 1)"
     help
         source=bios.mac ttyctr=hexstring
@@ -501,39 +501,39 @@ config SERIAL_TTYCTR
         Siehe bios.mac Zeilen 432-449 für weitere Karten und Bemerkungen.
 
 # Zweiter Drucker
-config SERIAL_IOBLPT
+config SYSTEM_SERIAL_IOBLPT
     string "ioblpt (Drucker 2: Schnittstellen-Konfiguration)"
     help
         source=bios.mac ioblpt=hexstring
         Konfiguriert die serielle Schnittstelle für Drucker 2.
         Format und Bedeutung wie bei iobtty (siehe oben).
 
-config SERIAL_LPTDAT
+config SYSTEM_SERIAL_LPTDAT
     string "lptdat (Daten-Adresse Drucker 2)"
     help
         source=bios.mac lptdat=hexstring
         Datenadresse für Drucker 2. Mögliche Karten und Adressen siehe ttydat.
 
-config SERIAL_LPTSTA
+config SYSTEM_SERIAL_LPTSTA
     string "lptsta (Status-Adresse Drucker 2)"
     help
         source=bios.mac lptsta=hexstring
         Statusadresse für Drucker 2. Mögliche Karten und Adressen siehe ttysta.
 
-config SERIAL_LPTCTS
+config SYSTEM_SERIAL_LPTCTS
     string "lptcts (CTS-Adresse Drucker 2)"
     help
         source=bios.mac lptcts=hexstring
         CTS-Adresse für Drucker 2. Mögliche Karten und Adressen siehe ttycts.
 
-config SERIAL_LPTCTR
+config SYSTEM_SERIAL_LPTCTR
     string "lptctr (CTR-Adresse Drucker 2)"
     help
         source=bios.mac lptctr=hexstring
         CTR-Adresse für Drucker 2. Mögliche Karten und Adressen siehe ttyctr.
 
 # Koppelschnittstelle
-config SERIAL_IOBUC1
+config SYSTEM_SERIAL_IOBUC1
     string "iobuc1 (Koppelschnittstelle: Schnittstellen-Konfiguration)"
     help
         source=bios.mac iobuc1=hexstring
@@ -548,7 +548,7 @@ config SERIAL_IOBUC1
         Beispiel: 11710 (ungerade Parität, 1 Stopbit, 7 Bit, 9600 Bd, DC1/3)
         Siehe bios.mac Zeilen 458-489 für Details und weitere Beispiele.
 
-config SERIAL_UC1DAT
+config SYSTEM_SERIAL_UC1DAT
     string "uc1dat (Daten-Adresse UC1)"
     help
         source=bios.mac uc1dat=hexstring
@@ -558,7 +558,7 @@ config SERIAL_UC1DAT
         K6022: 54, 50
         Weitere Adressen siehe bios.mac Zeilen 432-449.
 
-config SERIAL_UC1STA
+config SYSTEM_SERIAL_UC1STA
     string "uc1sta (Status-Adresse UC1)"
     help
         source=bios.mac uc1sta=hexstring
@@ -568,7 +568,7 @@ config SERIAL_UC1STA
         K6022: 56, 51
         Weitere Adressen siehe bios.mac Zeilen 432-449.
 
-config SERIAL_UC1CTS
+config SYSTEM_SERIAL_UC1CTS
     string "uc1cts (CTS-Adresse UC1)"
     help
         source=bios.mac uc1cts=hexstring
@@ -578,7 +578,7 @@ config SERIAL_UC1CTS
         K6022: 58
         Weitere Adressen siehe bios.mac Zeilen 432-449.
 
-config SERIAL_UC1CTR
+config SYSTEM_SERIAL_UC1CTR
     string "uc1ctr (CTR-Adresse UC1)"
     help
         source=bios.mac uc1ctr=hexstring
@@ -588,7 +588,7 @@ config SERIAL_UC1CTR
         K6022: 58
         Weitere Adressen siehe bios.mac Zeilen 432-449.
 
-config SERIAL_UC1BFL
+config SYSTEM_SERIAL_UC1BFL
     string "uc1bfl (UC1-Pufferlänge)"
     help
         source=bios.mac uc1bfl=hexstring
