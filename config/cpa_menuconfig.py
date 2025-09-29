@@ -101,7 +101,7 @@ def run_menu(kconfig_file, config_file):
         env = os.environ.copy()
         env["KCONFIG_CONFIG"] = config_file
         subprocess.run([
-            sys.executable, os.path.join("configmenu", "menuconfig.py"), kconfig_file
+            sys.executable, os.path.join("config", "menuconfig.py"), kconfig_file
         ], check=True, env=env)
     except subprocess.CalledProcessError as e:
         print(f"[FEHLER] menuconfig für {kconfig_file} fehlgeschlagen: {e}")
@@ -120,7 +120,7 @@ def run_patch_mac(config_file, system_variant, mode):
     """
     try:
         subprocess.run([
-            sys.executable, os.path.join("configmenu", "patch_mac.py"), mode, config_file, system_variant
+            sys.executable, os.path.join("config", "patch_mac.py"), mode, config_file, system_variant
         ], check=True)
     except subprocess.CalledProcessError as e:
         print(f"[FEHLER] patch_mac.py fehlgeschlagen: {e}")
@@ -199,7 +199,7 @@ def generate_kconfig_variant(kconfig_path, src_dir):
 def main():
     config_file = ".config"
     src_dir = "src"
-    kconfig_path = os.path.join("configmenu", "Kconfig.variante")
+    kconfig_path = os.path.join("config", "Kconfig.variante")
 
     # Erzeuge dynamische Kconfig.variante direkt aus sich selbst
     generate_kconfig_variant(kconfig_path, src_dir)
@@ -223,7 +223,7 @@ def main():
     run_patch_mac(config_file, system_variant, "extract")
 
     # Menü 2: Systemmenü (Kconfig.system, systemspezifisch)
-    run_menu(os.path.join("configmenu", system_variant, "Kconfig.system"), config_file)
+    run_menu(os.path.join("config", system_variant, "Kconfig.system"), config_file)
     # Nach Menü 2: Sichere SYSTEM-Parameter, schreibe .config neu mit VARIANT, SYSTEM, BUILD (VARIANT zuerst!)
     system_section = read_config_section(config_file, "CONFIG_SYSTEM_")
     write_config_sections(config_file, variant_section, system_section, build_section)
@@ -238,7 +238,7 @@ def main():
 
 
     # Menü 3: Build-Ausgabeformat
-    run_menu(os.path.join("configmenu", "Kconfig.build"), config_file)
+    run_menu(os.path.join("config", "Kconfig.build"), config_file)
     # Nach Menü 3: Sichere BUILD-Parameter, schreibe .config neu mit VARIANT, SYSTEM, BUILD
     build_section = read_config_section(config_file, "CONFIG_BUILD_")
     write_config_sections(config_file, variant_section, system_section, build_section)

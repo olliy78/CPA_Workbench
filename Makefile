@@ -168,7 +168,7 @@ endif
 .PHONY: menuconfig
 menuconfig:
 	@echo "Starte CPA-Mehrstufen-Konfigurationsmenue..."
-	python3 configmenu/cpa_menuconfig.py
+	python3 config/cpa_menuconfig.py
 
 
 # Haupttargets
@@ -219,29 +219,11 @@ help:
 # OS bauen (Betriebssystem @OS.COM)
 os: .config $(OS_TARGET)
 
-# Build-Regel: Erzeuge @OS.COM im build/-Verzeichnis
-# Abhaengigkeiten: Quelltexte und vorgefertigte ERL
+# Build-Regel: zum aufrufen eines systemvariantenspezifischen separaten Makefiles
 $(OS_TARGET): $(SRC_DIR)/bios.mac $(PREBUILT_DIR)/bdos.erl $(PREBUILT_DIR)/ccp.erl $(PREBUILT_DIR)/cpabas.erl
-	@echo "[STEP 1] Kopiere alle .mac-Dateien aus src und $(SRC_DIR) nach $(BUILD_DIR)"
-	cp src/*.mac $(BUILD_DIR)/ 2>/dev/null || true
-	cp $(SRC_DIR)/*.mac $(BUILD_DIR)/ 2>/dev/null || true
-	@echo "[STEP 2] Kopiere ERL-Dateien aus $(PREBUILT_DIR) nach $(BUILD_DIR)"
-	cp $(PREBUILT_DIR)/*.erl $(BUILD_DIR)/
-	@echo "[STEP 3] Kopiere Tools (m80.com, linkmt.com, cpm.exe) nach $(BUILD_DIR)"
-	cp $(TOOLS_DIR)/m80.com $(TOOLS_DIR)/linkmt.com $(TOOLS_DIR)/cpm.exe $(BUILD_DIR)/ 2>/dev/null || true
-	@echo "[STEP 4] Assemblieren mit m80 (Log: bios.log)"
-	cd $(BUILD_DIR) && $(CPM) m80 =bios/L | tee bios.log
-	@echo "[STEP 5] Assemblieren bios.erl=bios"
-	cd $(BUILD_DIR) && $(CPM) m80 bios.erl=bios
-	@echo "[STEP 6] Linken mit berechnetem /p:-Wert"
-	@diff=$$(LC_ALL=C grep -a '/p:' $(BUILD_DIR)/bios.log | sed 's/[^0-9A-Fa-f ]//g' | sed -n 's/.*[ ]\([0-9A-Fa-f]\{4,\}\).*/\1/p' | head -1); \
-	if [ -z "$$diff" ]; then echo "Fehler: Kein /p:-Wert in bios.log gefunden!"; exit 1; fi; \
-	echo "Verwende berechneten Linkwert: $$diff"; \
-	cd $(BUILD_DIR) && $(CPM) linkmt @OS=cpabas,ccp,bdos,bios/p:$$diff
-	@echo "[STEP 7] Aufraeumen temporaerer Dateien"
-	rm -f $(BUILD_DIR)/*.syp $(BUILD_DIR)/*.rel $(BUILD_DIR)/*.mac $(BUILD_DIR)/*.erl $(BUILD_DIR)/bios.log $(BUILD_DIR)/$(CPMEXE) $(BUILD_DIR)/m80.com $(BUILD_DIR)/linkmt.com
-	@echo "[FERTIG] @OS.COM wurde erfolgreich erzeugt."
+	$(MAKE) -C config/$(SYSTEMVAR) BUILD_DIR="$(BUILD_DIR)" SRC_DIR="$(SRC_DIR)" PREBUILT_DIR="$(PREBUILT_DIR)" TOOLS_DIR="$(TOOLS_DIR)" CPM="$(CPM)" CPMEXE="$(CPMEXE)"
 
+# Build-Regel fuer das Betriebssystem Diskettenimage
 diskimage: os $(FINAL_IMAGE)
 	@echo "[INFO] Target 'diskimage' abgeschlossen."
 

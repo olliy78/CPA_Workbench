@@ -130,7 +130,7 @@ def run_patch_mac(mode, config_path, system_variant):
     Übergibt die .config-Datei und den loglevel als Argument.
     """
     args = [
-        sys.executable, os.path.join("configmenu", "patch_mac.py"), mode, config_path, system_variant
+        sys.executable, os.path.join("config", "patch_mac.py"), mode, config_path, system_variant
     ]
     if loglevel:
         args.append(f"loglevel={loglevel}")
@@ -160,7 +160,7 @@ def main():
             step_mode = arg[5:]
             if step_mode.isdigit():
                 step_idx = int(step_mode) - 1
-    kconfig_path = os.path.join("configmenu", system_variant, "Kconfig.system")
+    kconfig_path = os.path.join("config", system_variant, "Kconfig.system")
     config_path = ".config"
     # Extrahiere alle konfigurierbaren Parameter
     params = parse_kconfig_system(kconfig_path)

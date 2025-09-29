@@ -30,7 +30,7 @@ Durch die automatisierte Erstellung und das Schreiben von bootfähigen Systemdis
 - `build/`       – Build-Produkte und temporäre Dateien (wird bei jedem Build neu befüllt)
 - `examples/`    – Eigene kleine Programme und Beispiel-Makefiles (z.B. hello.mac, name.mac)
 - `doc/`         – Dokumentation (z.B. cpa_doc.txt)
-- `configmenu/` – Skripte und Konfigurationsdateien für das menübasierte Konfigurationssystem
+- `config/` – Skripte und Konfigurationsdateien für das menübasierte Konfigurationssystem
 
 ## Systemüberblick
 

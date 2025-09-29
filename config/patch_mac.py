@@ -346,7 +346,7 @@ def main():
     if loglevel == "info" and os.environ.get("LOGLEVEL"):
         loglevel = os.environ["LOGLEVEL"].lower()
 
-    kconfig_path = os.path.join("configmenu", system_variant, "Kconfig.system")
+    kconfig_path = os.path.join("config", system_variant, "Kconfig.system")
     mac_path = os.path.join("src", system_variant, "bios.mac")
 
     param_mappings = parse_kconfig_system(kconfig_path)
