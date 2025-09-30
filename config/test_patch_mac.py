@@ -208,7 +208,7 @@ def main():
             write_config(config_path, new_config)
             if loglevel == "debug":
                 print(f"[DEBUG] .config vor Patch: {config_key} = {new_config[config_key]}")
-                mac_path = os.path.join("src", system_variant, "bios.mac")
+                mac_path = os.path.join("src", system_variant, param['source'] if param.get('source') else "bios.mac")
                 if os.path.exists(mac_path):
                     with open(mac_path, encoding="utf-8") as f:
                         for line in f:
@@ -238,7 +238,7 @@ def main():
             write_config(config_path, new_config)
             if loglevel == "debug":
                 print(f"[DEBUG] .config vor Patch: {config_key} = {new_config[config_key]}")
-                mac_path = os.path.join("src", system_variant, "bios.mac")
+                mac_path = os.path.join("src", system_variant, param['source'] if param.get('source') else "bios.mac")
                 if os.path.exists(mac_path):
                     with open(mac_path, encoding="utf-8") as f:
                         for line in f:
@@ -271,7 +271,7 @@ def main():
         write_config(config_path, new_config)
         if loglevel == "debug":
             print(f"[DEBUG] .config vor Patch: {config_key} = {new_config[config_key]}")
-            mac_path = os.path.join("src", system_variant, "bios.mac")
+            mac_path = os.path.join("src", system_variant, param['source'] if param.get('source') else "bios.mac")
             if os.path.exists(mac_path):
                 with open(mac_path, encoding="utf-8") as f:
                     for line in f:

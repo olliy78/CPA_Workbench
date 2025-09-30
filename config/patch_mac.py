@@ -54,13 +54,13 @@ def parse_kconfig_system(path):
                     while k < len(lines):
                         l3 = lines[k].strip()
                         if l3.startswith("source="):
-                            parts = l3.split()
-                            src = None
+                            # Split after 'source=' into filename and key/value pairs
+                            source_line = l3[len("source="):].strip()
+                            source_parts = source_line.split()
+                            src = source_parts[0] if source_parts else None
                             kvs = {}
-                            for part in parts:
-                                if part.startswith("source="):
-                                    src = part.split("=",1)[1]
-                                elif "=" in part:
+                            for part in source_parts[1:]:
+                                if "=" in part:
                                     kv = part.split("=",1)
                                     kvs[kv[0]] = kv[1]
                             help_source = src
@@ -98,6 +98,8 @@ def extract_mac_config(mac_path, config_path, param_mappings, loglevel="info"):
     with open(mac_path, encoding="utf-8") as f:
         mac_lines = f.readlines()
 
+        if loglevel == "debug":
+            print(f"[DEBUG] Extrahiere aus Datei: {mac_path}")
     config_vals = {}
     if os.path.exists(config_path):
         with open(config_path, encoding="utf-8") as f:
@@ -108,6 +110,8 @@ def extract_mac_config(mac_path, config_path, param_mappings, loglevel="info"):
 
     new_config = {}
     for entry in param_mappings:
+        if loglevel == "debug":
+            print(f"[DEBUG] Extrahiere Element: {entry['config_name']} aus {mac_path}")
         key_values = entry["key_values"]
         config_name = entry["config_name"]
         config_key = f"CONFIG_{config_name}"
@@ -124,14 +128,13 @@ def extract_mac_config(mac_path, config_path, param_mappings, loglevel="info"):
                             istwert = m.group(1)
                             break
                     if istwert is not None:
-                        # Wert 0 in .mac -> # CONFIG_xxx is not set
                         if istwert == "0":
                             new_config[config_key] = f'# {config_key} is not set'
                         else:
                             new_config[config_key] = f'{config_key}="{istwert}"'
                     else:
                         new_config[config_key] = f'# {config_key} is not set'
-        # String-Optionen (klassisch)
+        # String-Optionen (klassisch, mit und ohne ,0)
         elif any(v == "string" for v in key_values.values()):
             for key, v in key_values.items():
                 if v == "string":
@@ -139,9 +142,15 @@ def extract_mac_config(mac_path, config_path, param_mappings, loglevel="info"):
                     for line in mac_lines:
                         if line.lstrip().startswith(';'):
                             continue
-                        m = re.match(rf'^{key}:\s+db\s+([\'\"])(.*?)([\'\"]),0.*$', line.strip())
+                        # Match with ,0 and optional comment
+                        m = re.match(rf'^{key}:\s+db\s+([\'"])(.*?)([\'"]),0(.*)$', line.strip())
                         if m:
                             istwert = m.group(2)
+                            break
+                        # Match without ,0, but with optional comment
+                        m2 = re.match(rf'^{key}:\s+db\s+([\'"])(.*?)([\'"])(.*)$', line.strip())
+                        if m2:
+                            istwert = m2.group(2)
                             break
                     if istwert is not None:
                         new_config[config_key] = f'{config_key}="{istwert}"'
@@ -227,29 +236,25 @@ def patch_mac_file(mac_path, config_path, param_mappings, loglevel="info"):
         # Kommentare am Zeilenanfang überspringen
         if line.lstrip().startswith(';'):
             return None
-        if is_hexstring:
-            # Wert aus .config kann Quotes enthalten, diese müssen entfernt werden
-            clean_value = value.strip('"').strip("'")
-            m = re.match(rf'^({key}\s+equ\s+)(["\']?)([^"\';\s]+)(["\']?)(.*)$', line.strip())
-            if m:
-                # Schreibe Wert ohne Quotes in die .mac
-                return f"{m.group(1)}{clean_value}{m.group(5)}\n"
-            return None
         if is_string:
-            # String mit Kommentar nach ,0 erhalten
-            m = re.match(rf'^({key}:\s+db\s+)([\'\"])(.*?)([\'\"]),0(.*)$', line.strip())
+            # Mit ,0 und Kommentar
+            m = re.match(rf'^({key}:\s+db\s+)([\'"])(.*?)([\'"]),0(.*)$', line.strip())
             if m:
-                # m.group(5) enthält alles nach ,0 (inkl. Kommentar)
+                # Ersetze nur den String, Rest bleibt erhalten
                 return f"{m.group(1)}'{value}',0{m.group(5)}\n"
-            # Fallback: Zeile ohne Quotes, aber mit ,0 und Kommentar
-            m2 = re.match(rf'^({key}:\s+db\s+)[^,]*,0(.*)$', line.strip())
+            # Ohne ,0, aber mit Kommentar
+            m2 = re.match(rf'^({key}:\s+db\s+)([\'"])(.*?)([\'"])(.*)$', line.strip())
             if m2:
-                return f"{m2.group(1)}'{value}',0{m2.group(2)}\n"
+                return f"{m2.group(1)}'{value}'{m2.group(5)}\n"
             return None
         # Standardfall: equ-Zeile patchen
         m = re.match(rf'^({key}\s+equ\s+)([^;\s]+)(.*)$', line.strip())
         if m:
-            return f"{m.group(1)}{value}{m.group(3)}\n"
+            val = value
+            # Remove quotes for hexstring/textstring values
+            if (is_hexstring or (val and re.match(r'^".*"$', val))):
+                val = val.strip('"')
+            return f"{m.group(1)}{val}{m.group(3)}\n"
         return None
 
     # 1. Alle "is not set" Optionen patchen (invertiert, falls nötig)
@@ -347,17 +352,27 @@ def main():
         loglevel = os.environ["LOGLEVEL"].lower()
 
     kconfig_path = os.path.join("config", system_variant, "Kconfig.system")
-    mac_path = os.path.join("src", system_variant, "bios.mac")
-
     param_mappings = parse_kconfig_system(kconfig_path)
 
-    if mode == "extract":
-        extract_mac_config(mac_path, config_path, param_mappings, loglevel=loglevel)
-    elif mode == "patch":
-        patch_mac_file(mac_path, config_path, param_mappings, loglevel=loglevel)
-    else:
-        print("Unknown mode")
-        sys.exit(1)
+    # Gruppiere param_mappings nach source-Datei
+    source_map = {}
+    for entry in param_mappings:
+        src = entry["source"] if entry["source"] else "bios.mac"
+        if src not in source_map:
+            source_map[src] = []
+        source_map[src].append(entry)
+
+    # Für jede source-Datei extrahiere/patch die zugehörigen Parameter
+    for src, mappings in source_map.items():
+        # src kann relativer Pfad sein (z.B. biopcrtc.mac)
+        mac_path = os.path.join("src", system_variant, src)
+        if mode == "extract":
+            extract_mac_config(mac_path, config_path, mappings, loglevel=loglevel)
+        elif mode == "patch":
+            patch_mac_file(mac_path, config_path, mappings, loglevel=loglevel)
+        else:
+            print("Unknown mode")
+            sys.exit(1)
 
 if __name__ == "__main__":
     main()

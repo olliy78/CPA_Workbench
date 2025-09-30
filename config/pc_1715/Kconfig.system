@@ -4,10 +4,85 @@ mainmenu "CP/A System Konfiguration - Konfiguration des System Kernels @OS.COM [
 config HINT_INFO
     bool "=== Hinweise zur Konfiguration [? für Hilfe] ==="
     help
-        CP/A Einstellungen können vor Allem in der bios.mac aber auch in anderen Dateien vorgenommen werden.
-        Hier können nur die wichtigsten Dinge eingestellt werden. Nach dem Speichern und Beenden werden die Änderungen in die bios.mac übernommen.
-        Nachdem die gewünschte Änderungen vorgenommen wurden, das Menü mit [Q] oder [Esc] beenden und unbedingt Speichern.
+        CP/A Einstellungen können vor Allem in der bios.mac aber auch in
+        anderen Dateien vorgenommen werden. Hier können nur die wichtigsten
+        Dinge eingestellt werden. Nach dem Speichern und Beenden werden die
+        Änderungen in die bios.mac übernommen. Nachdem die gewünschte
+        Änderungen vorgenommen wurden, das Menü mit [Q] oder [Esc] beenden
+        und unbedingt Speichern.
     default n
+
+
+
+# Menü für RAM Disk Optionen
+
+menu "RAM Disk (RAM-Floppy) Optionen"
+config HINT_BUILD
+    bool "=== Hinweise zum Build-Ziel [? für Hilfe] ==="
+    help
+        Hier können Sie konfigurieren, ob beim Systemstart eine RAM-Floppy (RAM Disk 'M:') eingerichtet werden soll.
+        Es stehen verschiedene Hardware-Erweiterungen zur Verfügung, die als RAM-Floppy genutzt werden können.
+        Die Auswahl wirkt sich auf die Generierung der bios.mac aus.
+
+        Technische Hinweise (aus bios.mac):
+        - OSS 48k: Falls eine 48k Speichererweiterung (OSS 062-8471) vorhanden ist, wird beim Kaltstart 
+          eine RAM-Floppy "M:" für diesen Bereich angelegt. Bei "oss=0" erfolgt kein Test auf eine evtl. 
+          vorhandene OSS-Karte.
+        - EM256: Wenn eine 16-Bit-Erweiterungskarte mit 256k-Speicher EM256 installiert ist, kann dieser 
+          Speicher als RAM-Floppy 'M:' genutzt werden. Bei "em256" ungleich Null wird das Vorhandensein 
+          einer Erweiterungskarte getestet. Bei vorhandener EM256 wird beim Kaltstart die RAM-Floppy 
+          eingerichtet.
+        - MKD256: Die RAM-Floppy mkd256 kann als Laufwerk 'M:' angesprochen werden. Bei "mkd256" ungleich 
+          Null wird das Vorhandensein einer entsprechenden Karte getestet. Ist diese vorhanden, wird 
+          sie beim Kaltstart initialisiert.
+        - RAF: Wenn mindestens eine RAF-Karte des ZWG der AdW vorhanden ist (beliebig bestückt, max. 
+          2M Byte pro Karte, max. 4 Karten), so kann bzw. können diese als RAM-Floppy 'M:' benutzt 
+          werden (über "SWAP A: M:" bei Bedarf auch als LW A:). Bei "raf" ungleich Null wird das 
+          Vorhandensein von RAF-Karten getestet. Bei vorhandener(n) Karte(n) wird beim erstmaligen 
+          Kaltstart nach dem Einschalten des Stromes die RAM-Floppy eingerichtet, bei RESET bleibt 
+          ihr Inhalt erhalten.
+        - NANOS-RAF: Wenn mindestens eine NANOS-256k-DRAM-Karte vorhanden ist (beliebig bestückt, max. 
+          256k Byte pro Karte, max. 4 Karten), so kann bzw. können diese als RAM-Floppy 'M:' benutzt 
+          werden (über "SWAP A: M:" bei Bedarf auch als LW A:). Bei "rna" ungleich Null wird das 
+          Vorhandensein von NANOS-RAF-Karten getestet. Bei vorhandener(n) Karte(n) wird beim erstmaligen 
+          Kaltstart nach dem Einschalten des Stromes die RAM-Floppy eingerichtet, bei RESET bleibt 
+          ihr Inhalt erhalten.
+
+        Allgemeiner Hinweis: Die RAM-Floppy ist ein schneller, flüchtiger Massenspeicher und wird beim Kaltstart initialisiert. Daten gehen beim Ausschalten verloren!
+    default n
+
+choice
+    prompt "RAM Disk Typ (RAM-Floppy)"
+    default SYSTEM_RAMDISK_NONE
+    help
+        Wählen Sie die gewünschte RAM-Floppy-Option:
+        - Keine: Es wird keine RAM-Floppy eingerichtet.
+        - OSS 48k: RAM-Floppy mit OSS 062-8471 Speichererweiterung (48k)
+        - EM256: RAM-Floppy mit 16-Bit-Erweiterungskarte EM256 (256k)
+        - RAF: RAM-Floppy mit RAF-Karte (max. 4 Karten, je 2MB)
+    config SYSTEM_RAMDISK_NONE
+        bool "Keine RAM-Floppy (oss=0, em256=0, raf=0)"
+        help
+            source=bios.mac oss=0 em256=0 raf=0
+            Es wird keine RAM-Floppy eingerichtet.
+    config SYSTEM_RAMDISK_OSS
+        bool "OSS 48k Speichererweiterung (oss=1)"
+        help
+            source=bios.mac oss=1 em256=0 raf=0
+            Nutzt eine OSS 062-8471 Speichererweiterung (48k) als RAM-Floppy 'M:'.
+    config SYSTEM_RAMDISK_EM256
+        bool "EM256 16-Bit-Erweiterung (em256=1)"
+        help
+            source=bios.mac oss=0 em256=1 raf=0
+            Nutzt eine 16-Bit-Erweiterungskarte EM256 (256k) als RAM-Floppy 'M:'.
+    config SYSTEM_RAMDISK_RAF
+        bool "RAF-Karte (raf=1)"
+        help
+            source=bios.mac oss=0 em256=0 raf=1
+            Nutzt mindestens eine RAF-Karte (max. 4, je 2MB) als RAM-Floppy 'M:'.
+endchoice
+
+endmenu
 
 
 menu "Diskettenlaufwerke"
@@ -126,4 +201,261 @@ choice
         help
             source=bios.mac diskD=0
 endchoice
+endmenu
+
+menu "Systemstart Einstellungen"
+
+config SYSTEM_AUTOEXEC_STR
+    string "Automatische Komando ausführung (autoexec)"
+    help
+        source=bios.mac kltbef=string
+        Es besteht die Moeglichkeit, beim Kaltstart des Systems automatisch
+        ein Kommando auszufuehren z.B. 'DIR *.COM'. Dies kann auch ueber SUBMIT eine Kommando-
+        folge sein.
+
+choice
+    prompt "Ausführen bei:"
+    default SYSTEM_AUTOEXEC_COLD
+    config SYSTEM_AUTOEXEC_COLD
+        bool "nur bei Kaltstart / Einschalten"
+        help
+            source=bios.mac cldcmx=0
+            Befehl wird nur beim Einschalten also Kaltstart des Systems ausgeführt
+    config SYSTEM_AUTOEXEC_RESET
+        bool "Kaltstart und Reset"
+        help
+            source=bios.mac cldcmx=1
+            Befehl beim Einschalten also Kaltstart des Systems und nach einem Reset ausgeführt
+endchoice
+endmenu
+
+menu "Systemfunktionen"
+config SYSTEM_BCD_UHR
+        bool "Uhr"
+        help
+            source=bios.mac uhrvar=1
+            Verwendung BCD Uhr auf System CTC Kanahl 3
+config SYSTEM_STATUSZEILE_ON
+        bool "Statuszeile"
+        help
+            source=bios.mac cpastz=1
+            Statuszeile anzeigen (nur für PC1715)
+config SYSTEM_STATUSZEILE_STR
+    string "BIOS-Meldung in Statuszeile (Text)"
+    help
+        source=biopcrtc.mac stzb=string
+        in der Statuszeile etwa mittig kann ein kurzer Text angezeigt werden. Orsprünglich war das "**CP/A**  AdW/IIR"
+
+choice
+    prompt "Format der Statuszeile"
+    config SYSTEM_STATUSZEILE_90
+            bool "Statuszeile invers, normale Helligkeit"
+            help
+                source=bios.mac stzfrm=90h
+                invers, normale Helligkeit
+    config SYSTEM_STATUSZEILE_91
+            bool "Statuszeile invers, andere  Helligkeit"
+            help
+                source=bios.mac stzfrm=91h
+                invers, andere  Helligkeit
+    config SYSTEM_STATUSZEILE_80
+            bool "Statuszeile nicht invers, normale Helligkeit"
+            help
+                source=bios.mac stzfrm=80h
+                nicht invers, normale Helligkeit
+    config SYSTEM_STATUSZEILE_81
+            bool "Statuszeile nicht invers, andere  Helligkeit"
+            help
+                source=bios.mac stzfrm=81h
+                nicht invers, andere  Helligkeit
+endchoice
+config SYSTEM_FORMATERKENNUNG
+        bool "autom. Formaterkennung"
+        default y
+        help
+            source=bios.mac format=1
+            Es wird eine automatische Formaterkennung fuer gaengige CP/M-
+            Diskettenformate einschliesslich der SCP-Hausformate von CP/A
+            unterstuetzt. Dies kann unterdrueckt werden, wenn nur mit
+            festen Formaten gearbeitet wird (und eine extra CP/A-Variante
+            fuer den Datenaustausch mit Formaterkennung existiert). In
+            diesem Fall haben die Disketten das Standard-CP/A-Format ent-
+            sprechend dem vorgegebenen LW-Typ.
+config SYSTEM_MONITOR
+        bool "Verwendung Bios-Monitor"
+        default n
+        help
+            source=bios.mac monitor=1
+            Der  BIOS-Monitor  stellt - seine Generierung vorausgesetzt  -  
+            einen  Satz von residenten Funktionen bereit,  die somit  ohne  
+            Veraenderung  der Speicherplatzbelegung  staendig,  d.h.  auch  
+            waehrend der Arbeit eines Nutzerprogramms zur Verfuegung  ste- 
+            hen. Die Benutzung des Bios-Motitors ist in cpa_doc.txt beschrieben
+
+config SYSTEM_UMLAUT_ENCODING
+    bool "Umlautumcodierung aktivieren"
+    help
+        source=bios.mac umlaut=1
+        Aktiviert die Umcodierung für deutsche Umlaute im Zeichensatz.
+        Umlaute werden auf dem Bildschirm korrekt dargestellt, sofern
+        ein passender Zeichengenerator vorhanden ist. Siehe cpa_doc.txt
+        und BIOS-Dokumentation für Details.
+    default n
+
+endmenu
+menu "Serielle Schnittstellen und Drucker"
+
+config SYSTEM_SERIAL_IOBTTY
+    string "iobtty (Drucker 1: Schnittstellen-Konfiguration)"
+    help
+        source=bios.mac iobtty=hexstring
+        Konfiguriert die serielle Schnittstelle für Drucker 1.
+        Format: PSCBT
+        P: Parität (0=keine, 1=ungerade, 2=gerade)
+        S: Stopbits (1=1, 2=2, 3=1.5)
+        C: Datenbits (5..8)
+        B: Baudrate (1=9600,2=4800,3=2400,4=1200,5=600,6=300,7=150,8=100,9=75)
+        T: Treiber/Protokoll (0=DC1/DC3, 1=DTR+DSR, 2=Strombauch, 3=DTR+CTS, 5=PIO, ...)
+        Beispiel: 01811 (ohne Parität, 1 Stopbit, 8 Bit, 9600 Bd, DTR)
+        Beispiel: 11710 (ungerade Parität, 1 Stopbit, 7 Bit, 9600 Bd, DC1/3)
+        Siehe bios.mac Zeilen 349.387-489 für Details und weitere Beispiele.
+
+config SYSTEM_SERIAL_TTYDAT
+    string "ttydat (Daten-Adresse Drucker 1)"
+    help
+        source=bios.mac ttydat=hexstring
+        Datenadresse für Drucker 1. Mögliche Anschlüsse und Adressen:
+        Printer (nur senden) 0ch, V24 0dh, Kanal A (IFSS) 14h, Kanal B (IFSS) 15h
+        Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+
+config SYSTEM_SERIAL_TTYSTA
+    string "ttysta (Status-Adresse Drucker 1)"
+    help
+        source=bios.mac ttysta=hexstring
+        Statusadresse für Drucker 1. Mögliche Anschlüsse und Adressen:
+        Printer (nur senden) 0eh, V24 0fh, Kanal A (IFSS) 16h, Kanal B (IFSS) 16h
+        Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+
+config SYSTEM_SERIAL_TTYCTS
+    string "ttycts (CTS-Adresse Drucker 1)"
+    help
+        source=bios.mac ttycts=hexstring
+        CTS-Adresse für Drucker 1. Mögliche Anschlüsse und Adressen:
+        Printer (nur senden) 08h, V24 09h, Kanal A (IFSS) 10h, Kanal B (IFSS) 12h
+        Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+
+config SYSTEM_SERIAL_TTYCTR
+    string "ttyctr (CTR-Adresse Drucker 1)"
+    help
+        source=bios.mac ttyctr=hexstring
+        CTR-Adresse für Drucker 1. Mögliche Anschlüsse und Adressen:
+        Printer (nur senden) 08h, V24 09h, Kanal A (IFSS) 11h, Kanal B (IFSS) 12h
+        Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+
+# Zweiter Drucker
+config SYSTEM_SERIAL_IOBLPT
+    string "ioblpt (Drucker 2: Schnittstellen-Konfiguration)"
+    help
+        source=bios.mac ioblpt=hexstring
+        Konfiguriert die serielle Schnittstelle für Drucker 2
+        Format: PSCBT
+        P: Parität (0=keine, 1=ungerade, 2=gerade)
+        S: Stopbits (1=1, 2=2, 3=1.5)
+        C: Datenbits (5..8)
+        B: Baudrate (1=9600,2=4800,3=2400,4=1200,5=600,6=300,7=150,8=100,9=75)
+        T: Treiber/Protokoll (0=DC1/DC3, 1=DTR+DSR, 2=Strombauch, 3=DTR+CTS, 5=PIO, ...)
+        Beispiel: 01811 (ohne Parität, 1 Stopbit, 8 Bit, 9600 Bd, DTR)
+        Beispiel: 11710 (ungerade Parität, 1 Stopbit, 7 Bit, 9600 Bd, DC1/3)
+        Siehe bios.mac Zeilen 349.387-489 für Details und weitere Beispiele.
+
+config SYSTEM_SERIAL_LPTDAT
+    string "lptdat (Daten-Adresse Drucker 2)"
+    help
+        source=bios.mac lptdat=hexstring
+        Datenadresse für Drucker 1. Mögliche Anschlüsse und Adressen:
+        Printer (nur senden) 0ch, V24 0dh, Kanal A (IFSS) 14h, Kanal B (IFSS) 15h
+        Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+
+config SYSTEM_SERIAL_LPTSTA
+    string "lptsta (Status-Adresse Drucker 2)"
+    help
+        source=bios.mac lptsta=hexstring
+        Statusadresse für Drucker 2. Mögliche Anschlüsse und Adressen:
+        Printer (nur senden) 0eh, V24 0fh, Kanal A (IFSS) 16h, Kanal B (IFSS) 16h
+        Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+
+config SYSTEM_SERIAL_LPTCTS
+    string "lptcts (CTS-Adresse Drucker 2)"
+    help
+        source=bios.mac lptcts=hexstring
+        CTS-Adresse für Drucker 2. Mögliche Anschlüsse und Adressen:
+        Printer (nur senden) 08h, V24 09h, Kanal A (IFSS) 10h, Kanal B (IFSS) 12h
+        Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+
+config SYSTEM_SERIAL_LPTCTR
+    string "lptctr (CTR-Adresse Drucker 2)"
+    help
+        source=bios.mac lptctr=hexstring
+        CTR-Adresse für Drucker 1. Mögliche Anschlüsse und Adressen:
+        Printer (nur senden) 08h, V24 09h, Kanal A (IFSS) 11h, Kanal B (IFSS) 12h
+        Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+
+# Koppelschnittstelle
+config SYSTEM_SERIAL_IOBUC1
+    string "iobuc1 (Koppelschnittstelle: Schnittstellen-Konfiguration)"
+    help
+        source=bios.mac iobuc1=hexstring
+        Konfiguriert die serielle Schnittstelle für die Koppelschnittstelle (UC1).
+        Format: PSCBT
+        P: Parität (0=keine, 1=ungerade, 2=gerade)
+        S: Stopbits (1=1, 2=2, 3=1.5)
+        C: Datenbits (5..8)
+        B: Baudrate (1=9600,2=4800,3=2400,4=1200,5=600,6=300,7=150,8=100,9=75)
+        T: Treiber/Protokoll (0=DC1/DC3, 1=DTR+DSR, 2=Strombauch, 3=DTR+CTS, 5=PIO, ...)
+        Beispiel: 01811 (ohne Parität, 1 Stopbit, 8 Bit, 9600 Bd, DTR)
+        Beispiel: 11710 (ungerade Parität, 1 Stopbit, 7 Bit, 9600 Bd, DC1/3)
+        Siehe bios.mac Zeilen 349.387-489 für Details und weitere Beispiele.
+
+config SYSTEM_SERIAL_UC1DAT
+    string "uc1dat (Daten-Adresse UC1)"
+    help
+        source=bios.mac uc1dat=hexstring
+        Datenadresse für UC1. Mögliche Anschlüsse und Adressen:
+        Printer (nur senden) 0ch, V24 0dh, Kanal A (IFSS) 14h, Kanal B (IFSS) 15h
+        Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+
+config SYSTEM_SERIAL_UC1STA
+    string "uc1sta (Status-Adresse UC1)"
+    help
+        source=bios.mac uc1sta=hexstring
+        Statusadresse für UC1. Mögliche Anschlüsse und Adressen:
+        Printer (nur senden) 0eh, V24 0fh, Kanal A (IFSS) 16h, Kanal B (IFSS) 16h
+        Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+
+config SYSTEM_SERIAL_UC1CTS
+    string "uc1cts (CTS-Adresse UC1)"
+    help
+        source=bios.mac uc1cts=hexstring
+        CTS-Adresse für UC1. Mögliche Anschlüsse und Adressen:
+        Printer (nur senden) 08h, V24 09h, Kanal A (IFSS) 10h, Kanal B (IFSS) 12h
+        Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+
+config SYSTEM_SERIAL_UC1CTR
+    string "uc1ctr (CTR-Adresse UC1)"
+    help
+        source=bios.mac uc1ctr=hexstring
+        CTR-Adresse für UC1. Mögliche Anschlüsse und Adressen:
+        Printer (nur senden) 08h, V24 09h, Kanal A (IFSS) 11h, Kanal B (IFSS) 12h
+        Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+
+config SYSTEM_SERIAL_UC1BFL
+    string "uc1bfl (UC1-Pufferlänge)"
+    help
+        source=bios.mac uc1bfl=hexstring
+        Länge des UC1-Puffers. Muss z.B. 2k Bildschirmrollen abfangen können.
+        Empfohlen: >=20 bei 9600 Baud.
+        Beispiel: 20
+        Siehe bios.mac Kommentar zu uc1bfl.
+
+
 endmenu

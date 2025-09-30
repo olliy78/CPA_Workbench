@@ -296,7 +296,7 @@ mprot	equ	0	;hardwaremaessig bei PC1715 nicht moeglich
 ;------------------------------------------------------------
 ;	Status-Zeile
 ;	------------
-cpastz	equ	0	;=1: mit 25./17. Statuszeile
+cpastz	equ	1	;=1: mit 25./17. Statuszeile
 			;=0: ohne Statuszeile (wie BC A51xx)
 ; Wird beim PC1715 mit kleinem Bildschirm die Loetbruecke X12
 ; nicht wie fuer 24*80 BAB2 geaendert, so ist cpastz=0 zu setzen.
@@ -331,7 +331,7 @@ sysctc	equ	08h	;System-CTC, Kanal 0
 ;schem Bildschirmtest auf Port 0ah, Bit 6 unveraendert laeuft!!
 
 
-uhrvar	equ	0	;=1: mit BCD-Uhr (Platz siehe "bcduhr")
+uhrvar	equ	1	;=1: mit BCD-Uhr (Platz siehe "bcduhr")
 ;			 =0: ohne
 	IF	uhrvar
 biosln	aset	biosln+50h
@@ -399,12 +399,12 @@ ttyctr	equ	08h
 ;zweiter Drucker
 ;===============
 
-ioblpt equ     0        ;kein zweiter Drucker
-;ioblpt	equ	11710	;ung. P.;1 Stbit;7 Bit;9600;DC1/3
-;lptdat	equ	14h	;am IFSS A
-;lptsta	equ	16h
-;lptcts	equ	10h
-;lptctr	equ	11h
+;ioblpt equ     0        ;kein zweiter Drucker
+ioblpt	equ	11710	;ung. P.;1 Stbit;7 Bit;9600;DC1/3
+lptdat	equ	14h	;am IFSS A
+lptsta	equ	16h
+lptcts	equ	10h
+lptctr	equ	11h
 
 
 ;Kopplung
