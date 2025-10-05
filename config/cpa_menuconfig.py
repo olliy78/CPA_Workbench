@@ -260,7 +260,7 @@ def main():
     if build_target:
         cmd = ["make", "config", build_target]
         print(f"[DEBUG] Starte make config {build_target}")
-        subprocess.run(cmd, check=True)
+        subprocess.run(cmd, check=False)
     else:
         print("[INFO] Kein Build-Target in .config gefunden. Build wird übersprungen.")
 

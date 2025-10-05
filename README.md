@@ -14,7 +14,7 @@ Das CPA-Betriebssystem wurde ursprünglich in den 1980er Jahren für verschieden
 Dieses Konfigurations- und Buildsystem hilft dabei, verschiedene CP/A-Varianten komfortabel zu konfigurieren und zu generieren. Es unterstützt Entwickler und Anwender bei der Anpassung, Weiterentwicklung und dem Test von Erweiterungen und ermöglicht reproduzierbare Builds für unterschiedliche Zielsysteme.
 
 ![CPA Workbench Disketten-Image](doc/asembler_linker.png)
-*Abbildung 3: Ausgabe Asembler und Linker mit Übergabe der Adresse
+*Abbildung 3: Ausgabe Assembler und Linker mit Übergabe der Adresse
 
 Durch die automatisierte Erstellung und das Schreiben von bootfähigen Systemdisketten oder Images für Diskettenemulatoren wird der Aufwand für das Testen und die Inbetriebnahme neuer Varianten erheblich reduziert.
 
@@ -32,16 +32,12 @@ Durch die automatisierte Erstellung und das Schreiben von bootfähigen Systemdis
 - `doc/`         – Dokumentation (z.B. cpa_doc.txt)
 - `config/` – Skripte und Konfigurationsdateien für das menübasierte Konfigurationssystem
 
-## Systemüberblick
 
-Das System besteht aus drei Hauptteilen:
+## Build-System Übersicht
 
-- **BIOS** (Quelltext, konfigurierbar)
-- **BDOS** (vorgefertigt, Link-Eingabe)
-- **CCP** (vorgefertigt, Link-Eingabe)
+Das CPA Workbench Build-System bietet verschiedene Wege zur Konfiguration und zum Bau des Systems:
 
-## Build-Anleitung
-## Menübasiertes Konfigurationssystem
+### 1. Menübasiertes Konfigurationssystem (empfohlener Weg)
 
 Das Buildsystem bietet ein menübasiertes Konfigurationssystem, das über den Befehl
 
@@ -50,13 +46,46 @@ make menuconfig
 ```
 gestartet wird. Nach dem Aufruf öffnet sich ein mehrstufiges Menü:
 
-1. **Systemvariante auswählen:** Im ersten Schritt wird festgelegt, welche Systemvariante verwendet werden soll (z.B. verschiedene Rechner oder Hardware-Konfigurationen). Es ist möglich, mehrere Systemvarianten im Buildsystem zu hinterlegen und auszuwählen.
-2. **Hardware- und Laufwerksoptionen:** Im nächsten Schritt können Hardwaredetails und Diskettenlaufwerke konfiguriert werden.
-3. **Build-Optionen:** Abschließend werden Format und weitere Build-Parameter festgelegt.
+1. **Systemvariante auswählen:** Im ersten Schritt wird festgelegt, welche Systemvariante verwendet werden soll (z.B. BC A5120, PC1715 oder andere verfügbare Hardware-Konfigurationen)
+2. **Hardware- und Laufwerksoptionen:** Im nächsten Schritt können Hardwaredetails und Diskettenlaufwerke konfiguriert werden. Hier werden vordefinierte Einstellungen in die entsprechenden .mac-Dateien gepatcht (z.B. Laufwerkskonfiguration, serielle Schnittstellen)
+3. **Build-Optionen:** Abschließend werden Ausgabeformat und weitere Build-Parameter festgelegt
+4. **Hilfetexte:** Zu allen Optionen sind Hilfetexte verfügbar (mit [?] im Menü oder [F] für dauerhafte Anzeige)
 
-Jeder Schritt wird interaktiv im Menü durchgeführt. Die getroffene Auswahl wird in der Datei `.config` gespeichert und beim nächsten Build automatisch übernommen. Nach Abschluss der Konfiguration kann das System wie gewohnt gebaut werden (z.B. mit `make config os`).
+Die getroffene Auswahl wird in der Datei `.config` gespeichert und beim nächsten Build automatisch verwendet. Nach Abschluss der Konfiguration wird das System automatisch neu gebaut.
 
-Das menübasierte System erleichtert die Anpassung und sorgt für reproduzierbare Builds.
+### 2. Config-basierte Builds (empfohlener Build-Weg)
+
+Nach der Konfiguration sollten alle Builds mit dem `config`-Wrapper ausgeführt werden:
+
+```sh
+make config os            # Baut das Betriebssystem (@OS.COM) gemäß .config
+make config diskimage     # Erstellt Diskettenimage (IMG-Format)
+make config diskimagehfe  # Erstellt HFE-Diskettenimage
+make config diskimagescp  # Erstellt SCP-Diskettenimage
+make config writeimage    # Schreibt Image auf physikalisches Laufwerk
+```
+
+Der `config`-Wrapper stellt sicher, dass die Builds reproduzierbar sind und die aktuellen Konfigurationseinstellungen verwendet werden.
+
+### 3. Direkte Builds (für Entwickler und Experimente)
+
+Für erweiterte Nutzung oder Experimente können auch direkte Builds ohne `.config` durchgeführt werden:
+
+```sh
+make os                   # Baut mit fest eingetragenem DEFAULT_SYSTEMVAR
+make pc_1715 os          # Baut für spezifische Systemvariante
+make clean               # Entfernt Build-Artefakte
+```
+
+**Wichtiger Hinweis:** Die Standardsystemvariante ist über `DEFAULT_SYSTEMVAR := pc_1715` im Makefile festgelegt. Dies wird als Fallback verwendet, wenn keine `.config` existiert oder bei direkten Builds.
+
+### Systemvarianten und Ordnerstruktur
+
+Das Build-System erkennt Systemvarianten automatisch anhand der Ordnerstruktur:
+- **Quelltexte:** `src/<systemvariante>/` (z.B. `src/pc_1715/`)
+- **Konfiguration:** `config/<systemvariante>/` mit variantenspezifischem Makefile
+- **Prebuilt-Files:** `prebuilt/<systemvariante>/` (BDOS, CCP, Bootsektor etc.)
+- **Additions:** `additions/<systemvariante>/` (optionale systemspezifische Tools)
 
 
 ### Voraussetzungen
@@ -65,24 +94,27 @@ Das menübasierte System erleichtert die Anpassung und sorgt für reproduzierbar
 - Wine (unter Linux, um CP/M-Tools auszuführen)
 - Die Tools m80.com, linkmt.com und cpm.exe müssen im Verzeichnis `tools/` liegen
 
+
 ### Build-Prozess unter Linux und Windows
 
 #### Linux
 Im Hauptverzeichnis kann der Build-Prozess direkt über die Kommandozeile gestartet werden:
 ```sh
-make
+make menuconfig
 ```
-Das erzeugte System befindet sich dann als `build/@OS.com`.
 
 #### Windows
 Unter Windows wird der Build-Prozess über das Skript `start-cpa-build.cmd` gestartet. Dieses Skript kann per Doppelklick ausgeführt werden und übernimmt folgende Schritte:
 
-1. Prüft, ob Git Bash installiert ist (z.B. unter `C:\Program Files\Git\bin\bash.exe`).
-2. Startet Git Bash und ruft darin das Setup-Skript `setup-environment.sh` auf.
-3. Die Umgebung verhält sich anschließend wie unter Linux: Es steht eine Bash-Shell zur Verfügung, in der alle Build-Kommandos wie gewohnt ausgeführt werden können (z.B. `make`).
+1. Prüft, ob Git Bash installiert ist (z.B. innerhalb des tools-Ordners). Sollte die Bash woanders liegen, muss das Skript angepasst werden
+2. Startet Git Bash und ruft darin das Setup-Skript `setup-environment.sh` auf
+3. Die Umgebung verhält sich anschließend wie unter Linux: Es steht eine Bash-Shell zur Verfügung, in der alle Build-Kommandos wie gewohnt ausgeführt werden können
 
-**Hinweis:** Git Bash muss auf dem Rechner installiert sein. Das Setup-Skript richtet die benötigte Umgebung ein (UTF-8, PATH, Tools etc.).
+```sh
+make menuconfig
+```
 
+**Hinweis:** Git Bash muss auf dem Rechner installiert sein. Das Setup-Skript richtet die benötigte Umgebung ein (UTF-8, PATH, Tools etc.) und prüft, ob alle notwendigen Tools (make, python3, greaseweazle) verfügbar sind.
 
 ### Aufräumen
 
@@ -91,83 +123,171 @@ make clean
 ```
 Entfernt alle Build-Produkte und temporäre Dateien.
 
-**Tipp:** Es ist sinnvoll, vor jedem neuen Bauen eines Systems ein `make clean` auszuführen. So werden alte und temporäre Dateien entfernt und mögliche Fehler durch veraltete Build-Artefakte vermieden.
-
-## Konfigurationsmöglichkeiten (BIOS)
-
-Das BIOS ist hochgradig konfigurierbar. Die wichtigsten Optionen werden direkt im Quelltext (`src/bios.mac`) über sogenannte "equates" (Konstanten-Definitionen mit dem Assembler-Befehl `equ`) gesetzt. Die häufigsten Konfigurationsmöglichkeiten und typische Werte sind:
-
-- **RAM-Größe:** `ramkb` (z.B. 64)
-- **RAM-Floppy/Erweiterungen:** `oss`, `em256`, `mkd256`, `raf`, `rna` (0/1)
-- **Bildschirm (crt):**
- - `K7024` (0): Standard-Bildschirmkarte
- - `DSY5` (1): Invers-Karte 
- - `B1715` (7): PC1715-Bildschirm
-- **Tastatur:**
- - `typ80`: 3454 (K7634.54), 36 (K7636-Familie)
- - `kbdotp`: 0 (K7606), 1 (K7604), 2 (DEG-Spezial), 3 (K7633)
-- **Laufwerke (diskA, diskB, ...):**
- - 10540: DD, SS, 5", 40 Tracks
- - 10580: DD, SS, 5", 80 Tracks
- - 11580: DD, DS, 5", 80 Tracks
- - 00877: SD, SS, 8", 77 Tracks
- - 10877: DD, SS, 8", 77 Tracks
- - 0: Laufwerk nicht vorhanden
-- **Diskettenpuffer:** `dbufsz` (Exponent von 2, z.B. 10 für 1024 Bytes)
-- **Weitere Schalter:**
- - `monitor`, `stpvar`, `mprot`, `cpastz`, `errvar`, `uhrvar`, `iobvar`, `costu` (jeweils 0/1)
-
-Die Kommentare im Quelltext geben zu jedem Parameter weitere Hinweise und erlaubte Werte.
-
-- **RAM-Größe:** 
-	`ramkb` – RAM in KB (z.B. 64)
-- **RAM-Floppy:**  
-	`oss`, `em256`, `mkd256`, `raf`, `rna` – Unterstützung verschiedener RAM-Floppy- und Erweiterungskarten
-- **Bildschirm:**  
-	`crt` – Typ der Bildschirmkarte (z.B. K7024)
-	Automatische Erkennung von 24x80 oder 16x64 Zeichen
-- **Tastatur:**  
-	`typ80`, `kbdotp` – Auswahl und automatische Erkennung verschiedener Tastaturtypen
-- **Diskettenlaufwerke:**  
-	`diskA`, `diskB`, `diskC`, `diskD` – Typ und Format der unterstützten Laufwerke (5¼", 8", DD/SS/DS)
-	`format` – Automatische Formaterkennung aktivieren/deaktivieren
-- **Drucker:**  
-	`iobtty`, `ioblpt`, `iobuc1` – Konfiguration der Drucker- und Kopplungsschnittstellen
-- **Puffergrößen:**  
-	`dbufsz` – Größe des Diskettenpuffers (Exponent von 2, z.B. 10 für 1024 Bytes)
-- **Sonderfunktionen:**  
-	- `monitor` – BIOS-Monitor ein/aus
-	- `stpvar` – STOP-Funktion (z.B. für Abbruch)
-	- `mprot` – Speicherschutz
-	- `cpastz` – Statuszeile
-	- `errvar` – BIOS-Fehlermeldungen
-	- `uhrvar` – BCD-Uhr
-	- `iobvar` – IOBYTE-Unterstützung (flexible Gerätezuordnung)
-	- `costu` – Nutzerdefinierte Stringtasten
-	- u.v.m.
-
-**Hinweis:**  
-Die BIOS-Größe und damit die TPA (Transient Program Area) für Anwenderprogramme hängt direkt von den gewählten Optionen ab. Je mehr Features aktiviert werden, desto kleiner wird die TPA.
-
-### Betriebssystemvarianten
-
-- **Kaltstart:**  
-	System wird von @OS.COM auf Diskette geladen, Hardware wird automatisch erkannt (RAM, Bildschirm, Tastatur, Laufwerke).
-- **Warmstart:**  
-	CCP wird aus dem BIOS kopiert (schneller, keine Systemspuren auf Disketten nötig).
-- **Minimal-/Maximal-Konfiguration:**  
-	Für Spezialzwecke kann ein sehr kleines BIOS (maximale TPA) oder ein voll ausgestattetes System generiert werden.
+**Tipp:** Es ist sinnvoll, vor jedem neuen Build ein `make clean` auszuführen, besonders nach Konfigurationsänderungen. So werden alte Build-Artefakte entfernt und mögliche Fehler durch veraltete Dateien vermieden.
 
 
-### Anpassung
+## Erweiterte Möglichkeiten für Entwickler
 
-Die Konfiguration erfolgt durch Anpassen der entsprechenden `equ`-Zeilen in `src/bios.mac` vor dem Build. Nach Änderungen einfach erneut `make` ausführen.
+Das Build-System kann weit über das Menü hinaus flexibel und direkt über die Kommandozeile genutzt werden. Dies ist besonders hilfreich für Entwickler, die eigene Experimente, Erweiterungen oder spezielle Anpassungen vornehmen möchten.
 
-## Hinweise
+### Systemvarianten und DEFAULT_SYSTEMVAR
 
-- Die CP/M-Tools können keine Verzeichnisse verarbeiten. Deshalb werden alle benötigten Dateien vor dem Build ins Arbeitsverzeichnis kopiert.
+Das Build-System erkennt vorhandene Systemvarianten automatisch anhand der Ordnerstruktur und bietet diese im Menüsystem zur Auswahl an. Die Auswahl wird dann in der .config gespeichert. Wenn das Menüsystem und die .config nicht verwendet werden sollen, kann die Standard-Systemvariante im Makefile als `DEFAULT_SYSTEMVAR := pc_1715` festgelegt werden und wird in folgenden Fällen verwendet:
+
+- Bei direkten Builds ohne `.config` (z.B. `make os`)
+- Als Fallback, wenn keine `.config` existiert
+- Bei unvollständiger Konfiguration
+
+
+**Praktische Build-Beispiele:**
+
+```sh
+# Kompletter Build mit Konfiguration
+make menuconfig          # Konfiguration setzen
+make clean               # Aufräumen
+make config diskimage    # Image gemäß .config erstellen
+make config writeimage   # Image auf Diskette schreiben (Greaseweazle erforderlich)
+
+# Direkter Build ohne .config und Menü
+make os
+make pc_1715 os         
+make pc_1715 diskimagehfe
+```
+
+### Makefile-Parameter und Build-Anpassungen
+
+Das Makefile unterstützt verschiedene Parameter zur Anpassung des Build-Prozesses:
+
+**Wichtige Build-Variablen:**
+
+- `SYSTEMVAR` – Systemvariante (automatisch erkannt oder aus DEFAULT_SYSTEMVAR)
+- `BUILD_DIR` – Zielverzeichnis für Build-Produkte (Standard: `build/`)
+- `SRC_DIR` – Quelltextverzeichnis (Standard: `src/<systemvariante>/`)
+- `PREBUILT_DIR` – Vorgefertigte Systemteile (Standard: `prebuilt/<systemvariante>/`)
+- `TOOLS_DIR` – Build-Tools-Verzeichnis (Standard: `tools/`)
+- `CPM` – CP/M-Emulator-Pfad (automatisch: Linux via Wine, Windows direkt)
+
+### Eigene Systemvariante anlegen – Schritt für Schritt
+
+Das Anlegen einer eigenen Systemvariante ist ideal für Experimente, Erweiterungen oder spezielle Hardwareanpassungen. Gehe dabei wie folgt vor:
+
+1. **Verzeichnisse anlegen:**
+	- `src/<neue_variante>/` – Quelltexte für BIOS, Makros etc. (z.B. von `src/bc_a5120` kopieren)
+	- `prebuilt/<neue_variante>/` – Vorgefertigte Systemteile (z.B. BDOS.ERL, CCP.ERL, bootsec.bin)
+	- `config/<neue_variante>/Kconfig.system` – Konfigurationsdatei für das Menüsystem
+	- `config/<neue_variante>/Makefile` – Systemvariantenspezifisches Makefile 
+	- `additions/<neue_variante>/` – Zusatztools, die auf die Diskette kopiert werden sollen
+
+2. **Dateien anpassen:**
+Das Kconfig-System bildet die Grundlage für das menübasierte Konfigurationssystem und steuert, welche Optionen beim Build gesetzt werden können. Jede Systemvariante besitzt eine eigene `Kconfig.system`-Datei im jeweiligen `config/<systemvariante>/`-Verzeichnis. Diese Datei beschreibt die verfügbaren Konfigurationsoptionen, deren Typen und die Zuordnung zu Symbolnamen in den Assembler-Quelltexten (z.B. in `bios.mac`).
+
+Das Makefile steuert den Bau der @OS.COM aus den .mac- und .erl-Dateien. Es wird vom Haupt-Makefile im Hauptordner aufgerufen. Je nach Systemvariante kann es sein, dass sich Dateinamen oder Aufrufparameter von Assembler und Linker ändern. In diesem Fall muss das systemspezifische Makefile angepasst werden.
+
+3. **Build durchführen:**
+	- Wähle die neue Variante im Menüsystem aus (`make menuconfig`) oder setze `SYSTEMVAR` beim Build:
+	  ```sh
+	  make os SYSTEMVAR=<neue_variante>
+	  make diskimage SYSTEMVAR=<neue_variante>
+	  ```
+
+**Tipp:**
+Starte mit einer Kopie einer lauffähigen Variante (z.B. `bc_a5120`) und passe die Dateien schrittweise an. So kannst du gezielt experimentieren und Erweiterungen testen, ohne das Originalsystem zu verändern.
+
+### Anpassung Kconfig.system
+
+- Jede Option ist einem bestimmten Datentyp zugeordnet:
+	- `bool` – Ein-/Ausschalter (true/false), z.B. für Hardwarefeatures oder Auswahlfelder verwendeter Laufwerkstyp
+	- `hexstring` – Hexadezimale Werte, z.B. Adressen
+	- `string` – Freitext, z.B. Versionsbezeichnung oder Textfelder 
+- Die Option enthält mindestens einen Symbolnamen, der in der zu modifizierenden `.mac`-Datei verwendet wird.
+- Der Wert, der im Menü gewählt wird, wird beim Build automatisch in die entsprechende `.mac`-Datei gepatcht.
+
+**Beispiele für Optionen:**
+```kconfig
+    config SYSTEM_RAMDISK_RAF
+        bool "RAF-Karte (raf=1)"
+        help
+            source=bios.mac oss=0 em256=0 raf=1
+            Nutzt mindestens eine RAF-Karte (max. 4, je 2MB) als RAM-Floppy 'M:'.
+
+    config SYSTEM_DRIVE_A_11580
+        bool "DD, DS, 5', 80 Tracks (K5601 !!!)"
+        help
+            source=bios.mac diskA=11580
+			Verwendet K5601 als Laufwerk A
+
+	config SYSTEM_AUTOEXEC_STR
+    	string "Automatische Kommando-Ausführung (autoexec)"
+		help
+			source=bios.mac kltbef=string
+			Es besteht die Moeglichkeit, beim Kaltstart des Systems automatisch
+			ein Kommando auszufuehren z.B. 'DIR *.COM'. Dies kann auch ueber SUBMIT eine Kommando-
+			folge sein.
+
+	config SYSTEM_SERIAL_TTYDAT
+		string "ttydat (Daten-Adresse Drucker 1)"
+		help
+			source=bios.mac ttydat=hexstring
+			Datenadresse für Drucker 1. Mögliche Anschlüsse und Adressen:
+			Printer (nur senden) 0ch, V24 0dh, Kanal A (IFSS) 14h, Kanal B (IFSS) 15h
+			Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+```
+In den vorhandenen Konfigurationsdateien für bc_a5120 und pc_1715 sind viele weitere Beispiele zum Übernehmen und Anpassen vorhanden
+
+**Anpassungen bei einer neuen Systemvariante:**
+- Die `Kconfig.system` muss alle relevanten Optionen enthalten, die für die Hardware und das BIOS der neuen Variante benötigt werden.
+- Für jede Option muss der Symbolname mit dem Namen in der `.mac`-Datei übereinstimmen.
+- Der Datentyp muss passend gewählt werden (z.B. `bool` für Features, `hexstring` für Adressen).
+- Die `source`-Angabe muss auf die korrekte `.mac`-Datei zeigen, die beim Build modifiziert werden soll.
+
+
+
+### Variantenspezifisches Makefile
+
+Im `config/<systemvariante>/`-Verzeichnis muss ein systemspezifisches Makefile erstellt werden, das den eigentlichen Build-Prozess für diese Variante steuert. Dieses Makefile wird vom Haupt-Makefile aufgerufen und übernimmt folgende Aufgaben:
+
+**1. Assembler-Aufruf (M80):**
+Das Makefile ruft den Z80-Assembler M80 auf, um die Quelltexte zu assemblieren:
+```makefile
+$(CPM) m80 =$(SRC_DIR)/bios.mac
+```
+Der Assembler erzeugt eine `.REL`-Datei und gibt dabei automatisch die Ladeadresse aus, die für den nachfolgenden Linker-Schritt benötigt wird.
+
+**2. Extraktion der Linker-Adresse:**
+Die vom Assembler ausgegebene Systemadresse wird automatisch aus der M80-Ausgabe extrahiert:
+```makefile
+SYSADR = $(shell $(CPM) m80 =$(SRC_DIR)/bios.mac 2>&1 | grep -i "system" | awk '{print $$NF}')
+```
+Diese Adresse wird dann an den Linker weitergegeben.
+
+**3. Linker-Aufruf (LINKMT):**
+Der Linker LINKMT wird mit der extrahierten Systemadresse und allen erforderlichen .REL- und .ERL-Dateien aufgerufen:
+```makefile
+$(CPM) linkmt $(BUILD_DIR)/bios.rel[s$(SYSADR)],$(BUILD_DIR)/@os.com=$(PREBUILT_DIR)/bdos.erl,$(PREBUILT_DIR)/ccp.erl,$(PREBUILT_DIR)/cpabas.erl
+```
+
+**4. Verwendung korrekter Dateinamen:**
+Im Makefile muss sichergestellt werden, dass die richtigen Dateien verwendet werden:
+- Hauptquelldatei: `$(SRC_DIR)/bios.mac` (systemvariantenspezifische BIOS-Quellen)
+- Ausgabedatei: `$(BUILD_DIR)/@os.com` (das fertige Betriebssystem)
+- Arbeitsverzeichnis: Alle Dateien werden ins `$(BUILD_DIR)` kopiert, da CP/M-Tools keine Pfade verstehen
+
+**5. Einbindung von Prebuilt-.ERL-Dateien:**
+Vorgefertigte Systemkomponenten werden beim Linken eingebunden:
+- `bdos.erl` – Das Basic Disk Operating System
+- `ccp.erl` – Die Console Command Processor
+- `cpabas.erl` – Wird irgendwie auch benötigt
+- Weitere systemspezifische .ERL-Dateien nach Bedarf
+
+Das variantenspezifische Makefile kann von einem bestehenden System (z.B. `config/pc_1715/Makefile`) kopiert und entsprechend den Anforderungen der neuen Systemvariante angepasst werden.
+
+### Hinweise zum Build-System
+
+- Die CP/M-Tools können keine Verzeichnisse verarbeiten. Alle benötigten Dateien werden vor dem Build ins Arbeitsverzeichnis kopiert.
 - Die Makefiles sind ausführlich kommentiert und zeigen die einzelnen Schritte.
 - Die Systemadresse für das Linken wird automatisch aus der M80-Ausgabe extrahiert.
+
+---
 
 
 ## Erstellung von Bootdisketten und Unterschiede der Formate
@@ -236,7 +356,7 @@ Das Skript `extract_files` dient dazu, alle Dateien aus einem CP/M-Diskettenimag
 
 **Verwendung:**
 ```sh
-./extract_files [-t FORMAT] -f <disk_image.img> | -g <DiskName>
+tools/extract_files [-t FORMAT] -f <disk_image.img> | -g <DiskName>
 ```
 - `-t FORMAT`   Dateisystemformat für cpmtools (Standard: cpa800)
 - `-f FILE`     Image-Datei einlesen (z.B. foo.img)
@@ -245,8 +365,10 @@ Das Skript `extract_files` dient dazu, alle Dateien aus einem CP/M-Diskettenimag
 
 Die extrahierten Dateien werden im Ordner `Disketten/<ImageName>/` abgelegt. Nach Abschluss wird die Anzahl der extrahierten Dateien ausgegeben.
 
+Um die extrahierten Dateien danach wieder auf die zu erstellenden Disketten zu bekommen, brauchen sie einfach nur in den Ordner additions kopiert werden. Wenn es sich um systemvariantenspezifische Dateien handelt, in den entsprechenden Unterordner. Dadurch wird erreicht, dass eine FORMAT.COM für einen PC1715 nicht auf die Startdiskette für einen A5120 kopiert wird.
+
 ## Lizenz
-Bitte beachte die Lizenzhinweise in den Quelldateien und Dokumenten.
+Bitte beachte die Lizenzhinweise in den Quelldateien und Dokumenten sowie die der Tools im Ordner tools.
 
 ---
 

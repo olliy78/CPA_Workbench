@@ -1,0 +1,2 @@
+# This file ensures that the build directory is tracked by Git
+# while keeping all other files in this directory ignored

@@ -128,10 +128,7 @@ def extract_mac_config(mac_path, config_path, param_mappings, loglevel="info"):
                             istwert = m.group(1)
                             break
                     if istwert is not None:
-                        if istwert == "0":
-                            new_config[config_key] = f'# {config_key} is not set'
-                        else:
-                            new_config[config_key] = f'{config_key}="{istwert}"'
+                        new_config[config_key] = f'{config_key}="{istwert}"'
                     else:
                         new_config[config_key] = f'# {config_key} is not set'
         # String-Optionen (klassisch, mit und ohne ,0)
@@ -313,6 +310,7 @@ def patch_mac_file(mac_path, config_path, param_mappings, loglevel="info"):
             for idx, line in enumerate(mac_lines):
                 for key, value in key_values.items():
                     if is_hexstring:
+                        # Patche immer Wert aus .config, auch wenn "0"
                         patched = patch_key_in_line(line, key, config_val if config_val is not None else "0", is_hexstring=True)
                     elif is_string:
                         patched = patch_key_in_line(line, key, config_val if config_val is not None else "", is_string=True)

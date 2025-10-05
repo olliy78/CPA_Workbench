@@ -22,7 +22,14 @@
 # ------------------------------------------------------------------------------
 
 BASEDIR = ../..
+BUILD_DIR ?= build
+SRC_DIR ?= src/bc_A5120
+PREBUILT_DIR ?= prebuilt/bc_A5120
+TOOLS_DIR ?= tools
+CPMEXE ?= cpm.exe
+CPM ?= $(CPMEXE)
 OS_TARGET = $(BASEDIR)/$(BUILD_DIR)/@os.com
+
 all: os
 
 os: $(OS_TARGET)

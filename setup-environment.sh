@@ -33,7 +33,7 @@ export ORIGINAL_PATH="$PATH"
 PROJECT_DIR="$(pwd)"
 
 # Unix-Tools ZUERST (für rm, awk, grep, sed), dann selektiv Windows-Tools
-export PATH="/usr/bin:/bin:$PROJECT_DIR/tools/greaseweazle:$PROJECT_DIR/tools/python3/Scripts:$PROJECT_DIR/tools/python3:$PROJECT_DIR/tools/gnu:./:$PATH"
+export PATH="/usr/bin:/bin:$PROJECT_DIR/tools/make/bin:$PROJECT_DIR/tools/greaseweazle:$PROJECT_DIR/tools/python3/Scripts:$PROJECT_DIR/tools/python3:./:$PATH"
 
 # Ausgabe des aktuellen PATH
 echo -e "${YELLOW}[INFO] PATH: $PATH${NC}"
@@ -42,12 +42,15 @@ echo -e "${YELLOW}[INFO] PATH: $PATH${NC}"
 echo ""
 echo -e "${YELLOW}[INFO] Teste make, Python und Greanweazle ... ${NC}"
 
+# Variable um zu verfolgen ob alle Tools verfügbar sind
+TOOLS_AVAILABLE=true
 
 if command -v make &> /dev/null; then
     MAKE_VERSION=$(make --version 2>/dev/null | head -1)
     echo -e "  ${GREEN}[✓] make: $MAKE_VERSION${NC}"
 else
     echo -e "  ${RED}[✗] make: Nicht im PATH verfügbar${NC}"
+    TOOLS_AVAILABLE=false
 fi
 
 # Python testen
@@ -56,6 +59,7 @@ if command -v python3 &> /dev/null; then
     echo -e "  ${GREEN}[✓] python: $PYTHON_VERSION${NC}"
 else
     echo -e "  ${RED}[✗] python: Nicht verfügbar${NC}"
+    TOOLS_AVAILABLE=false
 fi
 
 # greaseweazle testen
@@ -64,6 +68,16 @@ if command -v gw &> /dev/null; then
     echo -e "  ${GREEN}[✓] greaseweazle: $GREASEWEAZLE_VERSION${NC}"
 else
     echo -e "  ${RED}[✗] greaseweazle: Nicht verfügbar${NC}"
+    TOOLS_AVAILABLE=false
+fi
+
+# Warnung ausgeben falls Tools fehlen
+if [ "$TOOLS_AVAILABLE" = false ]; then
+    echo ""
+    echo -e "${RED}WARNUNG: Mindestens eines der notwendigen Tools ist nicht vorhanden.${NC}"
+    echo -e "${RED}Eventuell muss die Datei tools/win_tools.zip noch ausgepackt werden.${NC}"
+    echo -e "${RED}Im Ordner tools muss es die Ordner make, python3, greaseweazle und PortableGit geben.${NC}"
+    echo ""
 fi
 
 # Alias setzen
@@ -88,9 +102,7 @@ exec bash --rcfile <(echo "
 # CP/A Build Environment
 alias ll='ls -alh'
 export PS1='\[\033[1;32m\][CP/A]\[\033[0m\] \[\033[1;34m\]\w\[\033[0m\]$ '
-echo -e '\033[1;32m[CP/A Build Environment aktiv]\033[0m'
-echo -e 'Verwende \"exit\" um die Umgebung zu verlassen.'
-")
+echo -e '\033[1;32m[CP/A Build Environment aktiv]\033[0m'")
 
 # Diese Zeile wird nach exec nicht mehr ausgeführt
 # echo ""

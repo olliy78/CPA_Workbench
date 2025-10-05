@@ -18,8 +18,6 @@ REM Git Bash finden
 set "GIT_BASH="
 if exist "C:\Program Files\Git\bin\bash.exe" set "GIT_BASH=C:\Program Files\Git\bin\bash.exe"
 if exist "C:\Program Files (x86)\Git\bin\bash.exe" set "GIT_BASH=C:\Program Files (x86)\Git\bin\bash.exe"
-if exist "C:\tools\Git\bin\bash.exe" set "GIT_BASH=C:\tools\Git\bin\bash.exe"
-if exist "C:\tools\PortableGit\bin\bash.exe" set "GIT_BASH=C:\tools\PortableGit\bin\bash.exe"
 if exist "%~dp0tools\Git\bin\bash.exe" set "GIT_BASH=%~dp0tools\Git\bin\bash.exe"
 if exist "%~dp0tools\PortableGit\bin\bash.exe" set "GIT_BASH=%~dp0tools\PortableGit\bin\bash.exe"
 if exist "%~dp0..\Git\bin\bash.exe" set "GIT_BASH=%~dp0..\Git\bin\bash.exe"
@@ -28,8 +26,9 @@ if exist "%~dp0..\PortableGit\bin\bash.exe" set "GIT_BASH=%~dp0..\PortableGit\bi
 if "%GIT_BASH%"=="" (
     echo [FEHLER] Git Bash nicht gefunden!
     echo.
-    echo Bitte installiere Git oder gib den Pfad innerhalb dieser Datei an.
-    echo Git Download: https://git-scm.com/
+    echo Eventuell muss die Datei tools/win_tools.zip noch ausgepackt werden.
+    echo Im Ordner tools muss es die Ordner make, python3, greaseweazle und PortableGit geben.
+    echo falls die Tools woanders liegen, bitte den Pfad in dieser Datei anpassen.
     pause
     exit /b 1
 )

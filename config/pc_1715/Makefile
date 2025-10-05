@@ -22,10 +22,18 @@
 # ------------------------------------------------------------------------------
 
 BASEDIR = ../..
+BUILD_DIR ?= build
+SRC_DIR ?= src/pc_1715
+PREBUILT_DIR ?= prebuilt/pc_1715
+TOOLS_DIR ?= tools
+CPMEXE ?= cpm.exe
+CPM ?= $(CPMEXE)
 OS_TARGET = $(BASEDIR)/$(BUILD_DIR)/@os.com
+
 all: os
 
 os: $(OS_TARGET)
+
 
 $(OS_TARGET): $(BASEDIR)/$(SRC_DIR)/bios.mac $(BASEDIR)/$(PREBUILT_DIR)/bdos.erl $(BASEDIR)/$(PREBUILT_DIR)/ccp.erl $(BASEDIR)/$(PREBUILT_DIR)/cpabas.erl
 	@echo "[STEP 1] Kopiere alle .mac-Dateien aus src und $(SRC_DIR) nach $(BUILD_DIR)"
