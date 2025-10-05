@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# Copyright (c) 2025 by olliy78
+# SPDX-License-Identifier: MIT
 # ------------------------------------------------------------------------------
 # Makefile fuer das CP/A BIOS-Projekt und die Systemdisketten-Erstellung
 # ------------------------------------------------------------------------------

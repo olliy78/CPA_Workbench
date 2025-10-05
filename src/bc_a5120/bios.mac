@@ -317,7 +317,7 @@ ramfl	equ	oss+kes+em256+mkd256+raf+rna
 
  IF1
 coldcm	MACRO
-kltbef: db	'SUBM AUTOEXEC',0 ;;'DIR.COM'	;;0 bis 127 Zeichen
+kltbef: db	'DIR *.COM',0 ;;'DIR.COM'	;;0 bis 127 Zeichen
 							;;z.B. auch 'SUBM AUTOEXEC' analog IBM XT
 	ds	kltbef+127-$,0	;;Rest fuer Patch kltbef freih.
 				;;dadurch spaeter ohne Neuuebers. aenderbar
@@ -386,7 +386,7 @@ biosln	aset	biosln+150h	;Laenge Speicherschutzroutinen
 
 ;	Status-Zeile
 ;	------------
-cpastz	equ	1	;Statuszeile hardware-maessig nicht moeglich
+cpastz	equ	0	;Statuszeile hardware-maessig nicht moeglich
 
 	IF	cpastz
 biosln	aset	biosln+0b0h

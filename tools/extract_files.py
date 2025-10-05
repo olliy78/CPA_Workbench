@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (c) 2025 by olliy78
+# SPDX-License-Identifier: MIT
 """
 extract_files.py
 Extrahiert alle Dateien aus einem CP/M-Disketten-Image oder direkt von Diskette (Greaseweazle) in ein neues Verzeichnis unterhalb des Ordners Disketten.

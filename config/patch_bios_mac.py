@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (c) 2025 by olliy78
+# SPDX-License-Identifier: MIT
 """
 Konfigurations-Tool für Diskettenlaufwerke in bios.mac
 

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (c) 2025 by olliy78
+# SPDX-License-Identifier: MIT
 """
 Generisches Konfigurations- und Patch-Tool für beliebige *.mac Dateien
 
