@@ -1,7 +1,7 @@
 # CPA Workbench
 
-[![License: MIT](https://img.shields.io/github/license/olliy78/CPAA5120)](./LICENSE)
-[![Latest Release](https://img.shields.io/github/v/release/olliy78/CPAA5120)](https://github.com/olliy78/CPAA5120/releases)
+[![License: MIT](https://img.shields.io/github/license/olliy78/CPA_Workbench)](./LICENSE)
+[![Latest Release](https://img.shields.io/github/v/release/olliy78/CPA_Workbench)](https://github.com/olliy78/CPA_Workbench/releases)
 
 This project provides a configuration and build tool for the CPA operating system, targeting classic East German computers of the K1520 series and the PC1715. It enables flexible selection of system variants, hardware options, and build parameters for reproducible builds and disk images. Note: The software and documentation are primarily in German, and it is assumed that there are probably no non-German-speaking users for this tool.
 
@@ -431,7 +431,7 @@ Die CPA-Workbench (alle eigenen Skripte, Buildsysteme und Dokumente in diesem Re
 
 ## Bug-Reports und Erweiterungswünsche
 
-Für Fehler, Verbesserungsvorschläge oder neue Funktionen nutze bitte das [GitHub-Ticketsystem (Issues)](https://github.com/olliy78/CPAA5120/issues).
+Für Fehler, Verbesserungsvorschläge oder neue Funktionen nutze bitte das [GitHub-Ticketsystem (Issues)](https://github.com/olliy78/CPA_Workbench/issues).
 
 - **Fehlerberichte:** Melde Bugs und Probleme über die Vorlage „Fehlerbericht“.
 - **Erweiterungswünsche:** Schlage neue Funktionen oder Verbesserungen über die Vorlage „Erweiterungswunsch“ vor.
@@ -442,7 +442,7 @@ Bitte prüfe vor dem Erstellen eines neuen Tickets, ob das Thema bereits gemelde
 **Hinweis:**  
 Für Bug-Reports und Feature-Requests stehen strukturierte deutsche Vorlagen zur Verfügung, die dir beim Ausfüllen helfen.
 
-Direkt zum Ticketsystem: [GitHub Issues](https://github.com/olliy78/CPAA5120/issues)
+Direkt zum Ticketsystem: [GitHub Issues](https://github.com/olliy78/CPA_Workbench/issues)
 
 Für allgemeine Fragen und Diskussionen kann auch das Forum von [robotrontechnik.de](https://www.robotrontechnik.de) genutzt werden.
 
