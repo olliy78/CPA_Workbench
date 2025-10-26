@@ -196,7 +196,7 @@ os: .config $(OS_TARGET)
 	@echo "[INFO] Target 'os' ist aktuell."
 
 # Build-Regel: zum aufrufen eines systemvariantenspezifischen separaten Makefiles
-$(OS_TARGET): $(SRC_DIR)/bios.mac $(PREBUILT_DIR)/bdos.erl $(PREBUILT_DIR)/ccp.erl $(PREBUILT_DIR)/cpabas.erl
+$(OS_TARGET): $(SRC_DIR)/*.mac $(PREBUILT_DIR)/bdos.erl $(PREBUILT_DIR)/ccp.erl $(PREBUILT_DIR)/cpabas.erl
 	$(MAKE) -C config/$(SYSTEMVAR) BUILD_DIR="$(BUILD_DIR)" SRC_DIR="$(SRC_DIR)" PREBUILT_DIR="$(PREBUILT_DIR)" TOOLS_DIR="$(TOOLS_DIR)" CPM="$(CPM)" CPMEXE="$(CPMEXE)"
 
 # Build-Regel fuer das Betriebssystem Diskettenimage
@@ -325,5 +325,6 @@ writeimage: $(FINAL_IMAGE)
 
 # Aufraeumen
 clean:
-	@rm  $(BUILD_DIR)/* >/dev/null 2>&1 || true
+	@rm -rf $(BUILD_DIR)
+	@mkdir -p $(BUILD_DIR)
 	@echo "[INFO] Aufraeumen abgeschlossen."

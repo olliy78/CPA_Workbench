@@ -4,10 +4,10 @@ mainmenu "CP/A System Konfiguration - Konfiguration des System Kernels @OS.COM [
 config HINT_INFO
     bool "=== Hinweise zur Konfiguration [? für Hilfe] ==="
     help
-        CP/A Einstellungen können vor Allem in der bios.mac aber auch in
+        CP/A Einstellungen können vor Allem in der biop.mac aber auch in
         anderen Dateien vorgenommen werden. Hier können nur die wichtigsten
         Dinge eingestellt werden. Nach dem Speichern und Beenden werden die
-        Änderungen in die bios.mac übernommen. Nachdem die gewünschte
+        Änderungen in die biop.mac übernommen. Nachdem die gewünschte
         Änderungen vorgenommen wurden, das Menü mit [Q] oder [Esc] beenden
         und unbedingt Speichern.
     default n
@@ -22,9 +22,9 @@ config HINT_BUILD
     help
         Hier können Sie konfigurieren, ob beim Systemstart eine RAM-Floppy (RAM Disk 'M:') eingerichtet werden soll.
         Es stehen verschiedene Hardware-Erweiterungen zur Verfügung, die als RAM-Floppy genutzt werden können.
-        Die Auswahl wirkt sich auf die Generierung der bios.mac aus.
+        Die Auswahl wirkt sich auf die Generierung der biop.mac aus.
 
-        Technische Hinweise (aus bios.mac):
+        Technische Hinweise (aus biop.mac):
         - OSS 48k: Falls eine 48k Speichererweiterung (OSS 062-8471) vorhanden ist, wird beim Kaltstart 
           eine RAM-Floppy "M:" für diesen Bereich angelegt. Bei "oss=0" erfolgt kein Test auf eine evtl. 
           vorhandene OSS-Karte.
@@ -63,22 +63,22 @@ choice
     config SYSTEM_RAMDISK_NONE
         bool "Keine RAM-Floppy (oss=0, em256=0, raf=0)"
         help
-            source=bios.mac oss=0 em256=0 raf=0
+            source=biop.mac oss=0 em256=0 raf=0
             Es wird keine RAM-Floppy eingerichtet.
     config SYSTEM_RAMDISK_OSS
         bool "OSS 48k Speichererweiterung (oss=1)"
         help
-            source=bios.mac oss=1 em256=0 raf=0
+            source=biop.mac oss=1 em256=0 raf=0
             Nutzt eine OSS 062-8471 Speichererweiterung (48k) als RAM-Floppy 'M:'.
     config SYSTEM_RAMDISK_EM256
         bool "EM256 16-Bit-Erweiterung (em256=1)"
         help
-            source=bios.mac oss=0 em256=1 raf=0
+            source=biop.mac oss=0 em256=1 raf=0
             Nutzt eine 16-Bit-Erweiterungskarte EM256 (256k) als RAM-Floppy 'M:'.
     config SYSTEM_RAMDISK_RAF
         bool "RAF-Karte (raf=1)"
         help
-            source=bios.mac oss=0 em256=0 raf=1
+            source=biop.mac oss=0 em256=0 raf=1
             Nutzt mindestens eine RAF-Karte (max. 4, je 2MB) als RAM-Floppy 'M:'.
 endchoice
 
@@ -92,27 +92,27 @@ choice
     config SYSTEM_DRIVE_A_10540
         bool "DD, SS, 5', 40 Tracks (K5600.10)"
         help
-            source=bios.mac diskA=10540
+            source=biop.mac diskA=10540
     config SYSTEM_DRIVE_A_10580
         bool "DD, SS, 5', 80 Tracks (K5600.20)"
         help
-            source=bios.mac diskA=10580
+            source=biop.mac diskA=10580
     config SYSTEM_DRIVE_A_11580
         bool "DD, DS, 5', 80 Tracks (K5601 !!!)"
         help
-            source=bios.mac diskA=11580
+            source=biop.mac diskA=11580
     config SYSTEM_DRIVE_A_00877
         bool "SD, SS, 8', 77 Tracks (MF3200)"
         help
-            source=bios.mac diskA=00877
+            source=biop.mac diskA=00877
     config SYSTEM_DRIVE_A_10877
         bool "DD, SS, 8', 77 Tracks (K5602.10, MF6400)"
         help
-            source=bios.mac diskA=10877
+            source=biop.mac diskA=10877
     config SYSTEM_DRIVE_A_0
         bool "Nicht vorhanden"
         help
-            source=bios.mac diskA=0
+            source=biop.mac diskA=0
 endchoice
 
 choice
@@ -121,27 +121,27 @@ choice
     config SYSTEM_DRIVE_B_10540
         bool "DD, SS, 5', 40 Tracks (K5600.10)"
         help
-            source=bios.mac diskB=10540
+            source=biop.mac diskB=10540
     config SYSTEM_DRIVE_B_10580
         bool "DD, SS, 5', 80 Tracks (K5600.20)"
         help
-            source=bios.mac diskB=10580
+            source=biop.mac diskB=10580
     config SYSTEM_DRIVE_B_11580
         bool "DD, DS, 5', 80 Tracks (K5601 !!!)"
         help
-            source=bios.mac diskB=11580
+            source=biop.mac diskB=11580
     config SYSTEM_DRIVE_B_00877
         bool "SD, SS, 8', 77 Tracks (MF3200)"
         help
-            source=bios.mac diskB=00877
+            source=biop.mac diskB=00877
     config SYSTEM_DRIVE_B_10877
         bool "DD, SS, 8', 77 Tracks (K5602.10, MF6400)"
         help
-            source=bios.mac diskB=10877
+            source=biop.mac diskB=10877
     config SYSTEM_DRIVE_B_0
         bool "Nicht vorhanden"
         help
-            source=bios.mac diskB=0
+            source=biop.mac diskB=0
 endchoice
 
 choice
@@ -150,27 +150,27 @@ choice
     config SYSTEM_DRIVE_C_10540
         bool "DD, SS, 5', 40 Tracks (K5600.10)"
         help
-            source=bios.mac diskC=10540
+            source=biop.mac diskC=10540
     config SYSTEM_DRIVE_C_10580
         bool "DD, SS, 5', 80 Tracks (K5600.20)"
         help
-            source=bios.mac diskC=10580
+            source=biop.mac diskC=10580
     config SYSTEM_DRIVE_C_11580
         bool "DD, DS, 5', 80 Tracks (K5601 !!!)"
         help
-            source=bios.mac diskC=11580
+            source=biop.mac diskC=11580
     config SYSTEM_DRIVE_C_00877
         bool "SD, SS, 8', 77 Tracks (MF3200)"
         help
-            source=bios.mac diskC=00877
+            source=biop.mac diskC=00877
     config SYSTEM_DRIVE_C_10877
         bool "DD, SS, 8', 77 Tracks (K5602.10, MF6400)"
         help
-            source=bios.mac diskC=10877
+            source=biop.mac diskC=10877
     config SYSTEM_DRIVE_C_0
         bool "Nicht vorhanden"
         help
-            source=bios.mac diskC=0
+            source=biop.mac diskC=0
 endchoice
 
 choice
@@ -179,27 +179,27 @@ choice
     config SYSTEM_DRIVE_D_10540
         bool "DD, SS, 5', 40 Tracks (K5600.10)"
         help
-            source=bios.mac diskD=10540
+            source=biop.mac diskD=10540
     config SYSTEM_DRIVE_D_10580
         bool "DD, SS, 5', 80 Tracks (K5600.20)"
         help
-            source=bios.mac diskD=10580
+            source=biop.mac diskD=10580
     config SYSTEM_DRIVE_D_11580
         bool "DD, DS, 5', 80 Tracks (K5601 !!!)"
         help
-            source=bios.mac diskD=11580
+            source=biop.mac diskD=11580
     config SYSTEM_DRIVE_D_00877
         bool "SD, SS, 8', 77 Tracks (MF3200)"
         help
-            source=bios.mac diskD=00877
+            source=biop.mac diskD=00877
     config SYSTEM_DRIVE_D_10877
         bool "DD, SS, 8', 77 Tracks (K5602.10, MF6400)"
         help
-            source=bios.mac diskD=10877
+            source=biop.mac diskD=10877
     config SYSTEM_DRIVE_D_0
         bool "Nicht vorhanden"
         help
-            source=bios.mac diskD=0
+            source=biop.mac diskD=0
 endchoice
 endmenu
 
@@ -208,7 +208,7 @@ menu "Systemstart Einstellungen"
 config SYSTEM_AUTOEXEC_STR
     string "Automatische Komando ausführung (autoexec)"
     help
-        source=bios.mac kltbef=string
+        source=biop.mac kltbef=string
         Es besteht die Moeglichkeit, beim Kaltstart des Systems automatisch
         ein Kommando auszufuehren z.B. 'DIR *.COM'. Dies kann auch ueber SUBMIT eine Kommando-
         folge sein.
@@ -219,12 +219,12 @@ choice
     config SYSTEM_AUTOEXEC_COLD
         bool "nur bei Kaltstart / Einschalten"
         help
-            source=bios.mac cldcmx=0
+            source=biop.mac cldcmx=0
             Befehl wird nur beim Einschalten also Kaltstart des Systems ausgeführt
     config SYSTEM_AUTOEXEC_RESET
         bool "Kaltstart und Reset"
         help
-            source=bios.mac cldcmx=1
+            source=biop.mac cldcmx=1
             Befehl beim Einschalten also Kaltstart des Systems und nach einem Reset ausgeführt
 endchoice
 endmenu
@@ -233,12 +233,12 @@ menu "Systemfunktionen"
 config SYSTEM_BCD_UHR
         bool "Uhr"
         help
-            source=bios.mac uhrvar=1
+            source=biop.mac uhrvar=1
             Verwendung BCD Uhr auf System CTC Kanahl 3
 config SYSTEM_STATUSZEILE_ON
         bool "Statuszeile"
         help
-            source=bios.mac cpastz=1
+            source=biop.mac cpastz=1
             Statuszeile anzeigen (nur für PC1715)
 config SYSTEM_STATUSZEILE_STR
     string "BIOS-Meldung in Statuszeile (Text)"
@@ -251,29 +251,29 @@ choice
     config SYSTEM_STATUSZEILE_90
             bool "Statuszeile invers, normale Helligkeit"
             help
-                source=bios.mac stzfrm=90h
+                source=biop.mac stzfrm=90h
                 invers, normale Helligkeit
     config SYSTEM_STATUSZEILE_91
             bool "Statuszeile invers, andere  Helligkeit"
             help
-                source=bios.mac stzfrm=91h
+                source=biop.mac stzfrm=91h
                 invers, andere  Helligkeit
     config SYSTEM_STATUSZEILE_80
             bool "Statuszeile nicht invers, normale Helligkeit"
             help
-                source=bios.mac stzfrm=80h
+                source=biop.mac stzfrm=80h
                 nicht invers, normale Helligkeit
     config SYSTEM_STATUSZEILE_81
             bool "Statuszeile nicht invers, andere  Helligkeit"
             help
-                source=bios.mac stzfrm=81h
+                source=biop.mac stzfrm=81h
                 nicht invers, andere  Helligkeit
 endchoice
 config SYSTEM_FORMATERKENNUNG
         bool "autom. Formaterkennung"
         default y
         help
-            source=bios.mac format=1
+            source=biop.mac format=1
             Es wird eine automatische Formaterkennung fuer gaengige CP/M-
             Diskettenformate einschliesslich der SCP-Hausformate von CP/A
             unterstuetzt. Dies kann unterdrueckt werden, wenn nur mit
@@ -285,7 +285,7 @@ config SYSTEM_MONITOR
         bool "Verwendung Bios-Monitor"
         default n
         help
-            source=bios.mac monitor=1
+            source=biop.mac monitor=1
             Der  BIOS-Monitor  stellt - seine Generierung vorausgesetzt  -  
             einen  Satz von residenten Funktionen bereit,  die somit  ohne  
             Veraenderung  der Speicherplatzbelegung  staendig,  d.h.  auch  
@@ -295,7 +295,7 @@ config SYSTEM_MONITOR
 config SYSTEM_UMLAUT_ENCODING
     bool "Umlautumcodierung aktivieren"
     help
-        source=bios.mac umlaut=1
+        source=biop.mac umlaut=1
         Aktiviert die Umcodierung für deutsche Umlaute im Zeichensatz.
         Umlaute werden auf dem Bildschirm korrekt dargestellt, sofern
         ein passender Zeichengenerator vorhanden ist. Siehe cpa_doc.txt
@@ -308,7 +308,7 @@ menu "Serielle Schnittstellen und Drucker"
 config SYSTEM_SERIAL_IOBTTY
     string "iobtty (Drucker 1: Schnittstellen-Konfiguration)"
     help
-        source=bios.mac iobtty=hexstring
+        source=biop.mac iobtty=hexstring
         Konfiguriert die serielle Schnittstelle für Drucker 1.
         Format: PSCBT
         P: Parität (0=keine, 1=ungerade, 2=gerade)
@@ -318,45 +318,45 @@ config SYSTEM_SERIAL_IOBTTY
         T: Treiber/Protokoll (0=DC1/DC3, 1=DTR+DSR, 2=Strombauch, 3=DTR+CTS, 5=PIO, ...)
         Beispiel: 01811 (ohne Parität, 1 Stopbit, 8 Bit, 9600 Bd, DTR)
         Beispiel: 11710 (ungerade Parität, 1 Stopbit, 7 Bit, 9600 Bd, DC1/3)
-        Siehe bios.mac Zeilen 349.387-489 für Details und weitere Beispiele.
+        Siehe biop.mac Zeilen 349.387-489 für Details und weitere Beispiele.
 
 config SYSTEM_SERIAL_TTYDAT
     string "ttydat (Daten-Adresse Drucker 1)"
     help
-        source=bios.mac ttydat=hexstring
+        source=biop.mac ttydat=hexstring
         Datenadresse für Drucker 1. Mögliche Anschlüsse und Adressen:
         Printer (nur senden) 0ch, V24 0dh, Kanal A (IFSS) 14h, Kanal B (IFSS) 15h
-        Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+        Siehe biop.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
 
 config SYSTEM_SERIAL_TTYSTA
     string "ttysta (Status-Adresse Drucker 1)"
     help
-        source=bios.mac ttysta=hexstring
+        source=biop.mac ttysta=hexstring
         Statusadresse für Drucker 1. Mögliche Anschlüsse und Adressen:
         Printer (nur senden) 0eh, V24 0fh, Kanal A (IFSS) 16h, Kanal B (IFSS) 16h
-        Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+        Siehe biop.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
 
 config SYSTEM_SERIAL_TTYCTS
     string "ttycts (CTS-Adresse Drucker 1)"
     help
-        source=bios.mac ttycts=hexstring
+        source=biop.mac ttycts=hexstring
         CTS-Adresse für Drucker 1. Mögliche Anschlüsse und Adressen:
         Printer (nur senden) 08h, V24 09h, Kanal A (IFSS) 10h, Kanal B (IFSS) 12h
-        Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+        Siehe biop.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
 
 config SYSTEM_SERIAL_TTYCTR
     string "ttyctr (CTR-Adresse Drucker 1)"
     help
-        source=bios.mac ttyctr=hexstring
+        source=biop.mac ttyctr=hexstring
         CTR-Adresse für Drucker 1. Mögliche Anschlüsse und Adressen:
         Printer (nur senden) 08h, V24 09h, Kanal A (IFSS) 11h, Kanal B (IFSS) 12h
-        Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+        Siehe biop.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
 
 # Zweiter Drucker
 config SYSTEM_SERIAL_IOBLPT
     string "ioblpt (Drucker 2: Schnittstellen-Konfiguration)"
     help
-        source=bios.mac ioblpt=hexstring
+        source=biop.mac ioblpt=hexstring
         Konfiguriert die serielle Schnittstelle für Drucker 2
         Format: PSCBT
         P: Parität (0=keine, 1=ungerade, 2=gerade)
@@ -366,45 +366,45 @@ config SYSTEM_SERIAL_IOBLPT
         T: Treiber/Protokoll (0=DC1/DC3, 1=DTR+DSR, 2=Strombauch, 3=DTR+CTS, 5=PIO, ...)
         Beispiel: 01811 (ohne Parität, 1 Stopbit, 8 Bit, 9600 Bd, DTR)
         Beispiel: 11710 (ungerade Parität, 1 Stopbit, 7 Bit, 9600 Bd, DC1/3)
-        Siehe bios.mac Zeilen 349.387-489 für Details und weitere Beispiele.
+        Siehe biop.mac Zeilen 349.387-489 für Details und weitere Beispiele.
 
 config SYSTEM_SERIAL_LPTDAT
     string "lptdat (Daten-Adresse Drucker 2)"
     help
-        source=bios.mac lptdat=hexstring
+        source=biop.mac lptdat=hexstring
         Datenadresse für Drucker 1. Mögliche Anschlüsse und Adressen:
         Printer (nur senden) 0ch, V24 0dh, Kanal A (IFSS) 14h, Kanal B (IFSS) 15h
-        Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+        Siehe biop.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
 
 config SYSTEM_SERIAL_LPTSTA
     string "lptsta (Status-Adresse Drucker 2)"
     help
-        source=bios.mac lptsta=hexstring
+        source=biop.mac lptsta=hexstring
         Statusadresse für Drucker 2. Mögliche Anschlüsse und Adressen:
         Printer (nur senden) 0eh, V24 0fh, Kanal A (IFSS) 16h, Kanal B (IFSS) 16h
-        Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+        Siehe biop.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
 
 config SYSTEM_SERIAL_LPTCTS
     string "lptcts (CTS-Adresse Drucker 2)"
     help
-        source=bios.mac lptcts=hexstring
+        source=biop.mac lptcts=hexstring
         CTS-Adresse für Drucker 2. Mögliche Anschlüsse und Adressen:
         Printer (nur senden) 08h, V24 09h, Kanal A (IFSS) 10h, Kanal B (IFSS) 12h
-        Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+        Siehe biop.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
 
 config SYSTEM_SERIAL_LPTCTR
     string "lptctr (CTR-Adresse Drucker 2)"
     help
-        source=bios.mac lptctr=hexstring
+        source=biop.mac lptctr=hexstring
         CTR-Adresse für Drucker 1. Mögliche Anschlüsse und Adressen:
         Printer (nur senden) 08h, V24 09h, Kanal A (IFSS) 11h, Kanal B (IFSS) 12h
-        Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+        Siehe biop.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
 
 # Koppelschnittstelle
 config SYSTEM_SERIAL_IOBUC1
     string "iobuc1 (Koppelschnittstelle: Schnittstellen-Konfiguration)"
     help
-        source=bios.mac iobuc1=hexstring
+        source=biop.mac iobuc1=hexstring
         Konfiguriert die serielle Schnittstelle für die Koppelschnittstelle (UC1).
         Format: PSCBT
         P: Parität (0=keine, 1=ungerade, 2=gerade)
@@ -414,48 +414,48 @@ config SYSTEM_SERIAL_IOBUC1
         T: Treiber/Protokoll (0=DC1/DC3, 1=DTR+DSR, 2=Strombauch, 3=DTR+CTS, 5=PIO, ...)
         Beispiel: 01811 (ohne Parität, 1 Stopbit, 8 Bit, 9600 Bd, DTR)
         Beispiel: 11710 (ungerade Parität, 1 Stopbit, 7 Bit, 9600 Bd, DC1/3)
-        Siehe bios.mac Zeilen 349.387-489 für Details und weitere Beispiele.
+        Siehe biop.mac Zeilen 349.387-489 für Details und weitere Beispiele.
 
 config SYSTEM_SERIAL_UC1DAT
     string "uc1dat (Daten-Adresse UC1)"
     help
-        source=bios.mac uc1dat=hexstring
+        source=biop.mac uc1dat=hexstring
         Datenadresse für UC1. Mögliche Anschlüsse und Adressen:
         Printer (nur senden) 0ch, V24 0dh, Kanal A (IFSS) 14h, Kanal B (IFSS) 15h
-        Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+        Siehe biop.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
 
 config SYSTEM_SERIAL_UC1STA
     string "uc1sta (Status-Adresse UC1)"
     help
-        source=bios.mac uc1sta=hexstring
+        source=biop.mac uc1sta=hexstring
         Statusadresse für UC1. Mögliche Anschlüsse und Adressen:
         Printer (nur senden) 0eh, V24 0fh, Kanal A (IFSS) 16h, Kanal B (IFSS) 16h
-        Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+        Siehe biop.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
 
 config SYSTEM_SERIAL_UC1CTS
     string "uc1cts (CTS-Adresse UC1)"
     help
-        source=bios.mac uc1cts=hexstring
+        source=biop.mac uc1cts=hexstring
         CTS-Adresse für UC1. Mögliche Anschlüsse und Adressen:
         Printer (nur senden) 08h, V24 09h, Kanal A (IFSS) 10h, Kanal B (IFSS) 12h
-        Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+        Siehe biop.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
 
 config SYSTEM_SERIAL_UC1CTR
     string "uc1ctr (CTR-Adresse UC1)"
     help
-        source=bios.mac uc1ctr=hexstring
+        source=biop.mac uc1ctr=hexstring
         CTR-Adresse für UC1. Mögliche Anschlüsse und Adressen:
         Printer (nur senden) 08h, V24 09h, Kanal A (IFSS) 11h, Kanal B (IFSS) 12h
-        Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+        Siehe biop.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
 
 config SYSTEM_SERIAL_UC1BFL
     string "uc1bfl (UC1-Pufferlänge)"
     help
-        source=bios.mac uc1bfl=hexstring
+        source=biop.mac uc1bfl=hexstring
         Länge des UC1-Puffers. Muss z.B. 2k Bildschirmrollen abfangen können.
         Empfohlen: >=20 bei 9600 Baud.
         Beispiel: 20
-        Siehe bios.mac Kommentar zu uc1bfl.
+        Siehe biop.mac Kommentar zu uc1bfl.
 
 
 endmenu

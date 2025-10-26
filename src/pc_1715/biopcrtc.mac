@@ -379,5 +379,3 @@ statze:
 
 	ld	c,bsinic	;;Grundzustand Bildschirm
 	call	crto		;;einstellen
-
-

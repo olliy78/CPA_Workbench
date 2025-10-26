@@ -328,9 +328,10 @@ def patch_mac_file(mac_path, config_path, param_mappings, loglevel="info"):
                 print(f"[DEBUG] Zeile {idx+1} vor Patch: {before.rstrip()}")
                 print(f"[DEBUG] Zeile {idx+1} nach Patch: {after.rstrip()}")
 
-    with open(mac_path, "w", encoding="utf-8") as f:
-        f.writelines(mac_lines)
-    print(f"[INFO] *.mac Datei gepatcht (patch)")
+    # Schreibe Datei mit CRLF-Zeilenenden (\r\n) für M80-Kompatibilität
+    with open(mac_path, "w", encoding="utf-8", newline="") as f:
+        f.write("".join(line.rstrip("\r\n") + "\r\n" for line in mac_lines))
+    print(f"[INFO] *.mac Datei gepatcht (patch, CRLF enforced)")
 
 def main():
     """
