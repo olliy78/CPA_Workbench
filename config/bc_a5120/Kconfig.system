@@ -374,34 +374,11 @@ endchoice
 endmenu
 
 menu "Systemfunktionen"
-config SYSTEM_STATUSZEILE_ON
-        bool "Statuszeile"
+config SYSTEM_BCD_UHR
+        bool "Uhr"
         help
-            source=bios.mac cpastz=1
-            Statuszeile anzeigen (nur für PC1715)
-choice
-    prompt "Format der Statuszeile"
-    config SYSTEM_STATUSZEILE_05
-            bool "Statuszeile invers, normale Helligkeit"
-            help
-                source=bios.mac stzfrm=05h
-                invers, normale Helligkeit
-    config SYSTEM_STATUSZEILE_07
-            bool "Statuszeile invers, andere  Helligkeit"
-            help
-                source=bios.mac stzfrm=07h
-                invers, andere  Helligkeit
-    config SYSTEM_STATUSZEILE_04
-            bool "Statuszeile nicht invers, normale Helligkeit"
-            help
-                source=bios.mac stzfrm=04h
-                nicht invers, normale Helligkeit
-    config SYSTEM_STATUSZEILE_06
-            bool "Statuszeile nicht invers, andere  Helligkeit"
-            help
-                source=bios.mac stzfrm=06h
-                nicht invers, andere  Helligkeit
-endchoice
+            source=bios.mac uhrvar=1
+            Verwendung BCD Uhr auf System CTC Kanahl 2 und 3 Kanal 0,1 steht fuer den Anwender frei
 config SYSTEM_FORMATERKENNUNG
         bool "autom. Formaterkennung"
         default y
