@@ -24,6 +24,26 @@ Dieses Konfigurations- und Buildsystem hilft dabei, verschiedene CP/A-Varianten 
 
 Durch die automatisierte Erstellung und das Schreiben von bootfähigen Systemdisketten oder Images für Diskettenemulatoren wird der Aufwand für das Testen und die Inbetriebnahme neuer Varianten erheblich reduziert.
 
+## Versionshistorie
+
+### Version 0.2.0 (Beta)
+
+**Status:** Beta-Version für öffentliche Tests
+
+**Änderungen gegenüber Version 0.1.0:**
+
+- **Fehlerbeseitigungen:** Diverse Bugs wurden behoben, um die Stabilität und Zuverlässigkeit des Build-Systems zu verbessern
+- **CP/A Quelltext:** Alle Änderungen im CP/A Quelltext wurden zurückgesetzt, um die Originalversion zu verwenden
+- **Verbesserungen:** Optimierungen am Build-Prozess und der Systemkonfiguration
+
+**Hinweis:** Version 0.2.0 ist weiterhin als Beta-Version zu verstehen und befindet sich in der öffentlichen Testphase.
+
+### Version 0.1.0
+
+**Status:** Initiale Version
+
+Dies war die erste öffentliche Version der CPA Workbench mit grundlegender Funktionalität für das Konfigurieren und Bauen von CP/A-Betriebssystemen.
+
 ## Installationsanleitung
 
 ### Windows
