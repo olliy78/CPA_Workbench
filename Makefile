@@ -83,7 +83,6 @@ DEFAULT_DISKDEF = cpa780_withoutBoot
 # SYSTEMVAR: Name der Systemvariante (z.B. bc_a5120, pc_1715, ...)
 SYSTEMVAR :=
 ifeq ($(firstword $(MAKECMDGOALS)),config)
-	# make config <system> <target> → Systemvariante aus .config lesen
 	ifeq ($(wildcard .config),)
 		SYSTEMVAR := $(DEFAULT_SYSTEMVAR)
 	else
@@ -93,12 +92,10 @@ ifeq ($(firstword $(MAKECMDGOALS)),config)
 		endif
 	endif
 else
-	# make <system> <target> → Systemvariante ist erstes Argument, falls kein bekanntes Target
 	ifneq ($(filter-out os diskimage diskimagehfe diskimagescp writeimage clean help all menuconfig,$(firstword $(MAKECMDGOALS))),)
 		SYSTEMVAR := $(firstword $(MAKECMDGOALS))
 		override MAKECMDGOALS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 	else
-		# Fallback: aus .config
 		ifeq ($(wildcard .config),)
 			SYSTEMVAR := $(DEFAULT_SYSTEMVAR)
 		else
@@ -115,7 +112,7 @@ endif
 config:
 	@user_target=$(word 2,$(MAKECMDGOALS)); \
 	if [ -z "$$user_target" ]; then \
-		echo "[INFO] Bitte gib ein Target an, z.B. 'make config os' oder 'make config diskImage'"; exit 1; \
+		echo "[INFO] Bitte gib ein Target an, z.B. 'make help', 'make config os' oder 'make config diskImage'"; exit 1; \
 	fi; \
 	echo "[INFO] Baue explizit mit Target von Kommandozeile: Target='$$user_target'"; \
 	exec $(MAKE) FROM_CONFIG=1 $$user_target;
@@ -165,7 +162,6 @@ endif
 # menuconfig: Wrapper fuer den mehrstufigen Konfigurationsprozess
 .PHONY: menuconfig
 menuconfig:
-	@echo "Starte CPA-Konfigurationsmenue..."
 	python3 config/cpa_menuconfig.py
 
 # Haupttargets
@@ -193,11 +189,12 @@ help:
 
 # OS bauen (Betriebssystem @OS.COM)
 os: .config $(OS_TARGET)
+	@echo ""
 	@echo "[INFO] Target 'os' ist aktuell."
 
 # Build-Regel: zum aufrufen eines systemvariantenspezifischen separaten Makefiles
 $(OS_TARGET): $(SRC_DIR)/*.mac $(PREBUILT_DIR)/bdos.erl $(PREBUILT_DIR)/ccp.erl $(PREBUILT_DIR)/cpabas.erl
-	$(MAKE) -C config/$(SYSTEMVAR) BUILD_DIR="$(BUILD_DIR)" SRC_DIR="$(SRC_DIR)" PREBUILT_DIR="$(PREBUILT_DIR)" TOOLS_DIR="$(TOOLS_DIR)" CPM="$(CPM)" CPMEXE="$(CPMEXE)"
+	@$(MAKE) -C config/$(SYSTEMVAR) BUILD_DIR=$(BUILD_DIR) SRC_DIR=$(SRC_DIR) PREBUILT_DIR=$(PREBUILT_DIR) TOOLS_DIR=$(TOOLS_DIR) CPM=$(CPM)
 
 # Build-Regel fuer das Betriebssystem Diskettenimage
 diskimage: os $(FINAL_IMAGE)
@@ -250,8 +247,6 @@ $(FINAL_IMAGE): $(BOOTSECTOR) $(OS_TARGET)
 		dd if=$(BOOTSECTOR) bs=32 count=4 conv=notrunc of=$(TMP_IMAGE) 2>/dev/null; \
 	fi
 	@echo "[STEP 3] Kopiere Dateien aus '$(ADDITIONS_DIR)' ins Image"
-# Fuegt alle Dateien aus dem additions-Verzeichnis ins Diskettenimage ein
-	# Pruefe, ob ein Unterordner mit dem Namen der Systemvariante existiert
 	@if [ -d "$(ADDITIONS_DIR)/$(SYSTEMVAR)" ]; then \
 		echo "[STEP 3a] Kopiere Dateien aus '$(ADDITIONS_DIR)/$(SYSTEMVAR)' ins Image"; \
 		for f in $(ADDITIONS_DIR)/$(SYSTEMVAR)/*; do \
@@ -261,19 +256,17 @@ $(FINAL_IMAGE): $(BOOTSECTOR) $(OS_TARGET)
 				$(CPMCP) -f $(DISKDEF) $(TMP_IMAGE) $$f 0:$$fname; \
 			fi; \
 		done; \
-	fi; \
-	echo "[STEP 3b] Kopiere Dateien aus '$(ADDITIONS_DIR)' ins Image"; \
-	for f in $(ADDITIONS_DIR)/*; do \
+	fi;
+	@echo "[STEP 3b] Kopiere Dateien aus '$(ADDITIONS_DIR)' ins Image";
+	@for f in $(ADDITIONS_DIR)/*; do \
 		if [ -f "$$f" ]; then \
 			fname=$$(basename "$$f"); \
 			echo "  [ADD] $$fname"; \
 			$(CPMCP) -f $(DISKDEF) $(TMP_IMAGE) $$f 0:$$fname; \
 		fi; \
 	done; 
-#	@echo "[STEP 4] Zeige Dateien im Image (nach dem Kopieren):"
 	@echo "[STEP 4] Zeige Dateien im Image (nach dem Kopieren):"
-# Listet alle Dateien im Image zur Kontrolle auf
-	$(CPMLS) -Ff $(DISKDEF) $(TMP_IMAGE)
+	@$(CPMLS) -Ff $(DISKDEF) $(TMP_IMAGE)
 	@if [ "$(FORMAT)" = "cpa780" ]; then \
 		if [ -f "$(BOOTSECTOR)" ]; then \
 			echo "[STEP 5] Fuege Bootsektor aus $(BOOTSECTOR) hinzu"; \
@@ -285,8 +278,7 @@ $(FINAL_IMAGE): $(BOOTSECTOR) $(OS_TARGET)
 		echo "[STEP 5] Bootsektor braucht nicht hinzugefuegt zu werden"; \
 		cp $(TMP_IMAGE) $(FINAL_IMAGE); \
 	fi
-	# Entfernt die temporaere Image-Datei
-	rm -f $(TMP_IMAGE)
+	@rm -f $(TMP_IMAGE)
 	@echo "[DONE] Diskettenimage erstellt: $(FINAL_IMAGE)"
 
 # Diskettenimage im HFE-Format erzeugen
