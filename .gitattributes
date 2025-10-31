@@ -2,12 +2,12 @@
 * text=auto
 
 # Bestimmte Dateien immer mit CRLF auschecken
-*.sh text eol=crlf
+*.bat text eol=crlf
 *.py text eol=crlf
 *.mac text eol=crlf
 
 # Bestimmte Dateien immer mit LF auschecken
-*.bat text eol=lf
+*.sh text eol=lf
 
 # Binärdateien nie anfassen
 *.png binary
