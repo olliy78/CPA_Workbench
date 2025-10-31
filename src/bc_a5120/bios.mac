@@ -631,7 +631,7 @@ biosln	aset	biosln+70h
 ;diskC	equ	13580
 ;diskD	equ	0
 
-diskA	equ	00877
+diskA	equ	11580
 diskB	equ	11580
 diskC	equ	11580
 diskD	equ	0
@@ -1582,3 +1582,4 @@ uc1i	equ	dumi
 biosce: ;Code-Ende fuer BIOS
 
 	END
+
