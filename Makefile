@@ -132,7 +132,7 @@ OS := $(shell uname)
 CPMEXE = cpm.exe
 # Wie CP/M-Tools auf diesem Host gestartet werden (unter Linux via wine)
 ifeq ($(OS),Linux)
-CPM = wine $(CPMEXE)
+CPM = "wine $(CPMEXE)"
 else
 CPM = $(CPMEXE)
 endif

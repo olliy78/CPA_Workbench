@@ -87,7 +87,6 @@ alias ll="ls -alh"
 
 echo ""
 echo -e "${CYAN}=============================================${NC}"
-echo -e "${YELLOW}  Umgebung bereit! make help:\n\n"
 make help
 echo -e "${CYAN}=============================================${NC}"
 echo ""
