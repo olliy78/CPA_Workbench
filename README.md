@@ -80,7 +80,7 @@ Für die CP/M-Tools `cpmcp` und `cpmls` liegen im Ordner `tools` bereits unter D
   - `python3/`       – Python 3 Runtime für Windows
 - `build/`       – Build-Produkte und temporäre Dateien (wird bei jedem Build neu befüllt)
 - `examples/`    – Eigene kleine Programme und Beispiel-Makefiles (z.B. hello.mac, name.mac)
-- `doc/`         – Dokumentation (z.B. cpa_doc.txt)
+- `doc/`         – Dokumentation (z.B. cpa_doc.txt, gide_erweiterung.md für die GIDE-Erweiterung des BC A5120)
 - `config/` – Skripte und Konfigurationsdateien für das menübasierte Konfigurationssystem
 
 ## Build-System Übersicht
@@ -97,7 +97,7 @@ make menuconfig
 
 gestartet wird. Nach dem Aufruf öffnet sich ein mehrstufiges Menü:
 
-1. **Systemvariante auswählen:** Im ersten Schritt wird festgelegt, welche Systemvariante verwendet werden soll (z.B. BC A5120, PC1715 oder andere verfügbare Hardware-Konfigurationen)
+1. **Systemvariante auswählen:** Im ersten Schritt wird festgelegt, welche Systemvariante verwendet werden soll. Aktuell stehen vier Systemvarianten zur Verfügung: BC A5120, BC A5120 mit GIDE-Erweiterung, PC1715 und PC1715 (Version 870330)
 2. **Hardware- und Laufwerksoptionen:** Im nächsten Schritt können Hardwaredetails und Diskettenlaufwerke konfiguriert werden. Hier werden vordefinierte Einstellungen in die entsprechenden .mac-Dateien gepatcht (z.B. Laufwerkskonfiguration, serielle Schnittstellen)
 3. **Build-Optionen:** Abschließend werden Ausgabeformat und weitere Build-Parameter festgelegt
 4. **Hilfetexte:** Zu allen Optionen sind Hilfetexte verfügbar (mit [?] im Menü oder [F] für dauerhafte Anzeige)
