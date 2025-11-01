@@ -1,1 +1,1 @@
-Angeblich vom 25.09.89 - Läuft auf dem BC Vermutlich auch auf PC1715, CP/D und K8915
+BC A5120 mit GIDE Erweiterung - Basiert auf bc_a5120 vom 25.09.89 mit Unterstützung für GIDE Hardware-Erweiterung (IDE-Festplatten/Flash-Speicher und optional RTC)
