@@ -1,0 +1,1 @@
+BC A5120 mit GIDE Erweiterung - Basiert auf bc_a5120 vom 25.09.89 mit Unterstützung für GIDE Hardware-Erweiterung (IDE-Festplatten/Flash-Speicher und optional RTC)

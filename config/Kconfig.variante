@@ -17,6 +17,10 @@ config VARIANT_bc_a5120
     bool "bc_a5120"
     help
         Angeblich vom 25.09.89 - Läuft auf dem BC Vermutlich auch auf PC1715, CP/D und K8915
+config VARIANT_bc_a5120_gide
+    bool "bc_a5120_gide"
+    help
+        BC A5120 mit GIDE Erweiterung - Basiert auf bc_a5120 vom 25.09.89 mit Unterstützung für GIDE Hardware-Erweiterung (IDE-Festplatten/Flash-Speicher und optional RTC)
 config VARIANT_pc_1715
     bool "pc_1715"
     help
