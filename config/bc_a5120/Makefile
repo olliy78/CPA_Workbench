@@ -52,5 +52,5 @@ $(OS_TARGET): $(BASEDIR)/$(SRC_DIR)/bios.mac $(BASEDIR)/$(PREBUILT_DIR)/bdos.erl
 	echo "Verwende berechneten Linkwert: $$diff"; \
 	cd $(BASEDIR)/$(BUILD_DIR) && $(CPM) linkmt @OS=cpabas,ccp,bdos,bios/p:$$diff
 	@echo "[STEP 7] Aufraeumen temporaerer Dateien"
-	@rm -f $(BASEDIR)/$(BUILD_DIR)/*.syp $(BASEDIR)/$(BUILD_DIR)/*.rel $(BASEDIR)/$(BUILD_DIR)/*.mac $(BASEDIR)/$(BUILD_DIR)/*.erl $(BASEDIR)/$(BUILD_DIR)/bios.log $(BASEDIR)/$(BUILD_DIR)/$(CPMEXE) $(BASEDIR)/$(BUILD_DIR)/m80.com $(BASEDIR)/$(BUILD_DIR)/linkmt.com
+#	@rm -f $(BASEDIR)/$(BUILD_DIR)/*.syp $(BASEDIR)/$(BUILD_DIR)/*.rel $(BASEDIR)/$(BUILD_DIR)/*.mac $(BASEDIR)/$(BUILD_DIR)/*.erl $(BASEDIR)/$(BUILD_DIR)/bios.log $(BASEDIR)/$(BUILD_DIR)/$(CPMEXE) $(BASEDIR)/$(BUILD_DIR)/m80.com $(BASEDIR)/$(BUILD_DIR)/linkmt.com
 	@echo "[FERTIG] @OS.COM wurde erfolgreich erzeugt."
