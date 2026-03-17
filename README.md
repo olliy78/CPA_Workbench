@@ -46,28 +46,89 @@ Dies war die erste öffentliche Version der CPA Workbench mit grundlegender Funk
 
 ## Installationsanleitung
 
+### Voraussetzungen (alle Betriebssysteme)
+
+- **Python 3.8 oder neuer** (mit `tkinter` – wird bei den meisten Installationen mitgeliefert)
+- **CP/M-Emulator `cpm.exe`** (liegt im Ordner `tools/`)
+- **CP/M-Tools `cpmcp` und `cpmls`** (liegen im Ordner `tools/`)
+- Optional: **Greaseweazle** (`gw`) für das Schreiben auf physikalische Disketten und die Konvertierung in HFE/SCP-Formate
+
 ### Windows
 
-Das Programmpaket enthält fast alle Komponenten, die für den Betrieb unter Windows benötigt werden. Für die Installation wird lediglich 7-Zip benötigt. Das Projekt kann als .zip-Datei oder per `git clone` von GitHub heruntergeladen werden. Im Ordner `tools` muss die Datei `win_tools.7z` entpackt werden; sie enthält nahezu alle externen Abhängigkeiten des Projekts.
+1. Das Projekt als .zip-Datei herunterladen oder per `git clone` klonen.
+2. Im Ordner `tools` die Datei `win_tools.7z` mit 7-Zip entpacken. Sie enthält unter anderem:
+   - **python3**: Minimale Python-3-Umgebung (mit tkinter)
+   - **greaseweazle**: Tool zum Lesen/Schreiben von Disketten und zur Konvertierung von Image-Formaten
+3. Die CPA Workbench starten:
 
-Enthaltene Komponenten in `tools/win_tools.7z`:
+```
+python3 cpa_build.py
+```
 
-- **PortableGit**: Enthält die Git Bash, die als Shell für das Build-System verwendet wird. Zusätzlich sind verschiedene GNU-Tools wie `dd`, `sed`, `ed`, `grep` und `awk` enthalten, die in den Skripten benötigt werden.
-- **make**: GNU Make für Windows.
-- **python3**: Minimale Python-3-Umgebung für Windows.
-- **greaseweazle**: Tool zum Lesen und Schreiben von Disketten sowie zum Konvertieren verschiedener Disketten-Image-Formate.
+oder per Doppelklick auf `cpa_build.py`, falls Python mit `.py`-Dateien verknüpft ist.
 
-Zusätzlich befinden sich im Ordner `tools` die CP/M-Tools `cpmcp` und `cpmls` sowie der CP/M-Emulator `cpm.exe`.
+Zusätzlich befinden sich im Ordner `tools` die CP/M-Tools `cpmcp.exe`, `cpmls.exe` und der CP/M-Emulator `cpm.exe`.
 
-Zum Start der CP/A Workbench muss das Script start-cpa-build.cmd im Hauptverzeichnis (z.B. per Doppelklick) ausgeführt werden.
+### Linux
 
-### Linux and Mac
+Für die Verwendung unter Linux wird der Windows-Emulator **Wine** benötigt, da der verwendete CP/M-Emulator nur als 32-Bit-Windows-Version verfügbar ist.
 
-Für die Verwendung unter Linux und Mac wird der Windows-Emulator Wine benötigt, da der verwendete CP/M-Emulator nur als 32-Bit-Windows-Version verfügbar ist. Ein alternativer CP/M-Emulator wurde bisher nicht erfolgreich getestet.
+**Benötigte Pakete installieren (Debian/Ubuntu):**
 
-Die Tools `make`, `python3` und `greaseweazle` müssen über die jeweiligen Paketmanager installiert werden, falls sie nicht bereits vorhanden sind.
+```sh
+sudo apt install python3 python3-tk wine
+```
 
-Für die CP/M-Tools `cpmcp` und `cpmls` liegen im Ordner `tools` bereits unter Debian Linux kompilierte Versionen bei. Sollten diese Dateien nicht funktionieren, wird empfohlen, die CP/M-Tools selbst aus dem Quelltext zu übersetzen. Das mit Debian ausgelieferte Binärpaket ist fehlerhaft und verhält sich bei den hier verwendeten Diskettenformaten nicht wie erwartet.
+**Benötigte Pakete installieren (Fedora/RHEL):**
+
+```sh
+sudo dnf install python3 python3-tkinter wine
+```
+
+**Benötigte Pakete installieren (Arch Linux):**
+
+```sh
+sudo pacman -S python tk wine
+```
+
+Optional: `greaseweazle` über `pip` installieren:
+
+```sh
+pip3 install greaseweazle
+```
+
+Für die CP/M-Tools `cpmcp` und `cpmls` liegen im Ordner `tools` bereits unter Debian Linux kompilierte Versionen bei. Sollten diese nicht funktionieren, wird empfohlen, die CP/M-Tools selbst aus dem Quelltext zu übersetzen. Das mit Debian ausgelieferte Binärpaket ist fehlerhaft und verhält sich bei den hier verwendeten Diskettenformaten nicht wie erwartet.
+
+**CPA Workbench starten:**
+
+```sh
+python3 cpa_build.py
+```
+
+### macOS
+
+Unter macOS wird ebenfalls **Wine** benötigt, um den CP/M-Emulator auszuführen.
+
+**Voraussetzungen installieren (mit Homebrew):**
+
+```sh
+brew install python python-tk
+brew install --cask wine-stable
+```
+
+Optional: `greaseweazle` über `pip` installieren:
+
+```sh
+pip3 install greaseweazle
+```
+
+Für die CP/M-Tools `cpmcp` und `cpmls` müssen unter macOS die Quellen selbst kompiliert werden, da im Ordner `tools` nur Linux-Binaries beiliegen.
+
+**CPA Workbench starten:**
+
+```sh
+python3 cpa_build.py
+```
 
 ## Verzeichnisstruktur
 
@@ -75,149 +136,111 @@ Für die CP/M-Tools `cpmcp` und `cpmls` liegen im Ordner `tools` bereits unter D
 - `prebuilt/`    – Vorgefertigte Systemteile (z.B. BDOS.ERL, CCP.ERL, CPABAS.ERL)
   - Zusätzlich: `bootsec.bin` – Bootsektor-Datei für die Erstellung bootfähiger Disketten/Images
 - `tools/`       – Build-Tools (m80.com, linkmt.com, cpm.exe, ...)
-  - `gnu/`           – GNU-Tools für Windows
-  - `greaseweazle/`  – Greaseweazle-Tool für Diskettenzugriff unter Windows
-  - `python3/`       – Python 3 Runtime für Windows
 - `build/`       – Build-Produkte und temporäre Dateien (wird bei jedem Build neu befüllt)
-- `examples/`    – Eigene kleine Programme und Beispiel-Makefiles (z.B. hello.mac, name.mac)
 - `doc/`         – Dokumentation (z.B. cpa_doc.txt)
-- `config/` – Skripte und Konfigurationsdateien für das menübasierte Konfigurationssystem
+- `config/`      – Konfigurations-Skripte und Kconfig-Dateien
 
 ## Build-System Übersicht
 
-Das CPA Workbench Build-System bietet verschiedene Wege zur Konfiguration und zum Bau des Systems:
+Das CPA Workbench Build-System bietet eine grafische Benutzeroberfläche (GUI) zur Konfiguration und zum Bau des Systems. Es basiert vollständig auf Python und benötigt keine Makefiles, Bash-Skripte oder GNU-Tools mehr.
 
-### 1. Menübasiertes Konfigurationssystem (empfohlener Weg)
+### Starten der CPA Workbench
 
-Das Buildsystem bietet ein menübasiertes Konfigurationssystem, das über den Befehl
-
-```sh
-make menuconfig
-```
-
-gestartet wird. Nach dem Aufruf öffnet sich ein mehrstufiges Menü:
-
-1. **Systemvariante auswählen:** Im ersten Schritt wird festgelegt, welche Systemvariante verwendet werden soll (z.B. BC A5120, PC1715 oder andere verfügbare Hardware-Konfigurationen)
-2. **Hardware- und Laufwerksoptionen:** Im nächsten Schritt können Hardwaredetails und Diskettenlaufwerke konfiguriert werden. Hier werden vordefinierte Einstellungen in die entsprechenden .mac-Dateien gepatcht (z.B. Laufwerkskonfiguration, serielle Schnittstellen)
-3. **Build-Optionen:** Abschließend werden Ausgabeformat und weitere Build-Parameter festgelegt
-4. **Hilfetexte:** Zu allen Optionen sind Hilfetexte verfügbar (mit [?] im Menü oder [F] für dauerhafte Anzeige)
-
-Die getroffene Auswahl wird in der Datei `.config` gespeichert und beim nächsten Build automatisch verwendet. Nach Abschluss der Konfiguration wird das System automatisch neu gebaut.
-
-### 2. Config-basierte Builds (empfohlener Build-Weg)
-
-Nach der Konfiguration sollten alle Builds mit dem `config`-Wrapper ausgeführt werden:
+Die CPA Workbench wird auf allen Betriebssystemen einheitlich gestartet:
 
 ```sh
-make config os            # Baut das Betriebssystem (@OS.COM) gemäß .config
-make config diskimage     # Erstellt Diskettenimage (IMG-Format)
-make config diskimagehfe  # Erstellt HFE-Diskettenimage
-make config diskimagescp  # Erstellt SCP-Diskettenimage
-make config writeimage    # Schreibt Image auf physikalisches Laufwerk
+python3 cpa_build.py
 ```
 
-Der `config`-Wrapper stellt sicher, dass die Builds reproduzierbar sind und die aktuellen Konfigurationseinstellungen verwendet werden.
+Es öffnet sich ein grafisches Fenster mit drei Tabs und einem Log-Bereich.
 
-### 3. Direkte Builds (für Entwickler und Experimente)
+### Tab 1: Systemvariante
 
-Für erweiterte Nutzung oder Experimente können auch direkte Builds ohne `.config` durchgeführt werden:
+Im ersten Tab wird die gewünschte Systemvariante ausgewählt (z.B. BC A5120, PC1715 oder andere verfügbare Varianten). Die Varianten werden automatisch aus dem Ordner `src/` erkannt. Zu jeder Variante wird (sofern vorhanden) der Inhalt der `about.txt` als Beschreibung angezeigt.
 
-```sh
-make os                   # Baut mit fest eingetragenem DEFAULT_SYSTEMVAR
-make pc_1715 os          # Baut für spezifische Systemvariante
-make clean               # Entfernt Build-Artefakte
-```
+Beim Wechsel der Variante werden die aktuellen Konfigurationswerte automatisch aus den Assembler-Quelldateien ausgelesen.
 
-**Wichtiger Hinweis:** Die Standardsystemvariante ist über `DEFAULT_SYSTEMVAR := pc_1715` im Makefile festgelegt. Dies wird als Fallback verwendet, wenn keine `.config` existiert oder bei direkten Builds.
+### Tab 2: Systemkonfiguration
+
+Im zweiten Tab können Hardwaredetails und Systemoptionen konfiguriert werden. Der Inhalt dieses Tabs wird dynamisch aus der Datei `config/<systemvariante>/Kconfig.system` geladen und ändert sich mit der gewählten Variante. Je nach Variante stehen folgende Konfigurationskategorien zur Verfügung:
+
+- **Hardwarevariante:** Geräteversion, Prozessortakt, CPU-Typ, Floppy-Karte, Bildschirm-Karte, RAM-Größe
+- **RAM Disk Optionen:** Auswahl der RAM-Floppy-Hardware (OSS, EM256, MKD256, RAF, NANOS)
+- **Diskettenlaufwerke:** Typ und Format für Laufwerk A–D
+- **Systemstart:** Autoexec-Befehl, Kaltstart/Reset-Verhalten
+- **Systemfunktionen:** Uhr, Formaterkennung, Monitor, Umlaute usw.
+- **Serielle Schnittstellen:** Drucker 1/2, Koppelschnittstelle mit Adressen und Parametern
+
+Zu jeder Option kann über den **[?]**-Button ein Hilfetext angezeigt werden.
+
+### Tab 3: Build-Optionen
+
+Im dritten Tab wird das Build-Ziel festgelegt:
+
+| Option | Beschreibung |
+|--------|-------------|
+| **Nur @OS.COM bauen** | Erstellt nur das Betriebssystem im `build/`-Verzeichnis |
+| **Diskettenimage als *.img** | Erstellt ein CP/M-kompatibles Diskettenimage |
+| **Diskettenimage als *.hfe** | Erstellt ein HFE-Image für Diskettenemulatoren |
+| **Diskettenimage als *.scp** | Erstellt ein SCP-Image |
+| **Auf Laufwerk schreiben** | Schreibt das Image direkt auf eine physikalische Diskette (Greaseweazle nötig) |
+
+Zusätzlich kann gewählt werden:
+
+- **Clean vor Build:** Löscht alte Build-Artefakte vor dem Bauen
+- **Diskettentyp:** 780 kByte (A5120 mit Bootspuren) oder 800 kByte (PC1715)
+
+### Build starten
+
+Über die Schaltflächen am unteren Rand des Fensters:
+
+- **Speichern** – Sichert die aktuelle Konfiguration in `.config`
+- **Clean** – Leert das `build/`-Verzeichnis
+- **Bauen** – Speichert die Konfiguration, patcht die Assembler-Quellen und führt den vollständigen Build aus
+
+Der Build-Fortschritt wird im Log-Bereich am unteren Fensterrand angezeigt. Das Fenster bleibt während des Builds bedienbar.
+
+### Konfigurationsdatei `.config`
+
+Die gesamte Konfiguration wird in der Datei `.config` im Projektverzeichnis gespeichert. Das Format ist kompatibel mit dem bisherigen menuconfig-System. Die Datei kann auch manuell bearbeitet werden.
 
 ### Systemvarianten und Ordnerstruktur
 
 Das Build-System erkennt Systemvarianten automatisch anhand der Ordnerstruktur:
 
 - **Quelltexte:** `src/<systemvariante>/` (z.B. `src/pc_1715/`)
-- **Konfiguration:** `config/<systemvariante>/` mit variantenspezifischem Makefile
+- **Konfiguration:** `config/<systemvariante>/Kconfig.system`
 - **Prebuilt-Files:** `prebuilt/<systemvariante>/` (BDOS, CCP, Bootsektor etc.)
 - **Additions:** `additions/<systemvariante>/` (optionale systemspezifische Tools)
 
 ### Voraussetzungen
 
-- Linux oder Windows
-- Wine (unter Linux, um CP/M-Tools auszuführen)
-- Die Tools m80.com, linkmt.com und cpm.exe müssen im Verzeichnis `tools/` liegen
+- Python 3.8+ mit tkinter
+- Wine (unter Linux und macOS, um den CP/M-Emulator auszuführen)
+- Die Tools `m80.com`, `linkmt.com` und `cpm.exe` müssen im Verzeichnis `tools/` liegen
 
-### Build-Prozess unter Linux und Windows
+### Build-Prozess
 
-#### Linux Build
+Der Build-Prozess läuft auf allen Betriebssystemen identisch ab. Die Unterschiede bestehen nur im CP/M-Emulator-Aufruf:
 
-Im Hauptverzeichnis kann der Build-Prozess direkt über die Kommandozeile gestartet werden:
+- **Linux/macOS:** CP/M-Emulator wird automatisch über Wine aufgerufen
+- **Windows:** CP/M-Emulator wird direkt ausgeführt
 
-```sh
-make menuconfig
-```
+Der Build umfasst folgende automatische Schritte:
 
-#### Windows Build
-
-Unter Windows wird der Build-Prozess über das Skript `start-cpa-build.cmd` gestartet. Dieses Skript kann per Doppelklick ausgeführt werden und übernimmt folgende Schritte:
-
-1. Prüft, ob Git Bash installiert ist (z.B. innerhalb des tools-Ordners). Sollte die Bash woanders liegen, muss das Skript angepasst werden
-2. Startet Git Bash und ruft darin das Setup-Skript `setup-environment.sh` auf
-3. Die Umgebung verhält sich anschließend wie unter Linux: Es steht eine Bash-Shell zur Verfügung, in der alle Build-Kommandos wie gewohnt ausgeführt werden können
-
-```sh
-make menuconfig
-```
-
-**Hinweis:** Git Bash muss auf dem Rechner installiert sein. Das Setup-Skript richtet die benötigte Umgebung ein (UTF-8, PATH, Tools etc.) und prüft, ob alle notwendigen Tools (make, python3, greaseweazle) verfügbar sind.
+1. Kopiere `.mac`-Quelldateien und `.erl`-Prebuilt-Dateien ins `build/`-Verzeichnis
+2. Assembliere die Hauptquelldatei mit M80 (erzeugt Listing und ERL-Datei)
+3. Extrahiere die Ladeadresse `/p:` aus dem Assembler-Log
+4. Linke mit LINKMT zu `@OS.COM` unter Verwendung der ermittelten Adresse
+5. Räume temporäre Dateien auf
 
 ### Aufräumen
 
-```sh
-make clean
-```
+Das Build-Verzeichnis kann über den **Clean**-Button in der GUI oder direkt aufgeräumt werden. Dabei werden alle Dateien im `build/`-Verzeichnis gelöscht.
 
-Entfernt alle Build-Produkte und temporäre Dateien.
-
-**Tipp:** Es ist sinnvoll, vor jedem neuen Build ein `make clean` auszuführen, besonders nach Konfigurationsänderungen. So werden alte Build-Artefakte entfernt und mögliche Fehler durch veraltete Dateien vermieden.
+**Tipp:** Es ist sinnvoll, vor jedem neuen Build ein Clean auszuführen, besonders nach Konfigurationsänderungen.
 
 ## Erweiterte Möglichkeiten für Entwickler
-
-Das Build-System kann weit über das Menü hinaus flexibel und direkt über die Kommandozeile genutzt werden. Dies ist besonders hilfreich für Entwickler, die eigene Experimente, Erweiterungen oder spezielle Anpassungen vornehmen möchten.
-
-### Systemvarianten und DEFAULT_SYSTEMVAR
-
-Das Build-System erkennt vorhandene Systemvarianten automatisch anhand der Ordnerstruktur und bietet diese im Menüsystem zur Auswahl an. Die Auswahl wird dann in der .config gespeichert. Wenn das Menüsystem und die .config nicht verwendet werden sollen, kann die Standard-Systemvariante im Makefile als `DEFAULT_SYSTEMVAR := pc_1715` festgelegt werden und wird in folgenden Fällen verwendet:
-
-- Bei direkten Builds ohne `.config` (z.B. `make os`)
-- Als Fallback, wenn keine `.config` existiert
-- Bei unvollständiger Konfiguration
-
-**Praktische Build-Beispiele:**
-
-```sh
-# Kompletter Build mit Konfiguration
-make menuconfig          # Konfiguration setzen
-make clean               # Aufräumen
-make config diskimage    # Image gemäß .config erstellen
-make config writeimage   # Image auf Diskette schreiben (Greaseweazle erforderlich)
-
-# Direkter Build ohne .config und Menü
-make os
-make pc_1715 os         
-make pc_1715 diskimagehfe
-```
-
-### Makefile-Parameter und Build-Anpassungen
-
-Das Makefile unterstützt verschiedene Parameter zur Anpassung des Build-Prozesses:
-
-**Wichtige Build-Variablen:**
-
-- `SYSTEMVAR` – Systemvariante (automatisch erkannt oder aus DEFAULT_SYSTEMVAR)
-- `BUILD_DIR` – Zielverzeichnis für Build-Produkte (Standard: `build/`)
-- `SRC_DIR` – Quelltextverzeichnis (Standard: `src/<systemvariante>/`)
-- `PREBUILT_DIR` – Vorgefertigte Systemteile (Standard: `prebuilt/<systemvariante>/`)
-- `TOOLS_DIR` – Build-Tools-Verzeichnis (Standard: `tools/`)
-- `CPM` – CP/M-Emulator-Pfad (automatisch: Linux via Wine, Windows direkt)
 
 ### Eigene Systemvariante anlegen – Schritt für Schritt
 
@@ -227,24 +250,18 @@ Das Anlegen einer eigenen Systemvariante ist ideal für Experimente, Erweiterung
 
 - `src/<neue_variante>/` – Quelltexte für BIOS, Makros etc. (z.B. von `src/bc_a5120` kopieren)
 - `prebuilt/<neue_variante>/` – Vorgefertigte Systemteile (z.B. BDOS.ERL, CCP.ERL, bootsec.bin)
-- `config/<neue_variante>/Kconfig.system` – Konfigurationsdatei für das Menüsystem
-- `config/<neue_variante>/Makefile` – Systemvariantenspezifisches Makefile
+- `config/<neue_variante>/Kconfig.system` – Konfigurationsdatei für das GUI-System
 - `additions/<neue_variante>/` – Zusatztools, die auf die Diskette kopiert werden sollen
 
-1. **Dateien anpassen:**
+2. **Dateien anpassen:**
 
-Das Kconfig-System bildet die Grundlage für das menübasierte Konfigurationssystem und steuert, welche Optionen beim Build gesetzt werden können. Jede Systemvariante besitzt eine eigene `Kconfig.system`-Datei im jeweiligen `config/<systemvariante>/`-Verzeichnis. Diese Datei beschreibt die verfügbaren Konfigurationsoptionen, deren Typen und die Zuordnung zu Symbolnamen in den Assembler-Quelltexten (z.B. in `bios.mac`).
+Das Kconfig-System bildet die Grundlage für das Konfigurationssystem und steuert, welche Optionen in der GUI angezeigt werden. Jede Systemvariante besitzt eine eigene `Kconfig.system`-Datei im jeweiligen `config/<systemvariante>/`-Verzeichnis. Diese Datei beschreibt die verfügbaren Konfigurationsoptionen, deren Typen und die Zuordnung zu Symbolnamen in den Assembler-Quelltexten (z.B. in `bios.mac`).
 
-Das Makefile steuert den Bau der @OS.COM aus den .mac- und .erl-Dateien. Es wird vom Haupt-Makefile im Hauptordner aufgerufen. Je nach Systemvariante kann es sein, dass sich Dateinamen oder Aufrufparameter von Assembler und Linker ändern. In diesem Fall muss das systemspezifische Makefile angepasst werden.
+Die Build-Engine erkennt die Hauptquelldatei automatisch (z.B. `bios.mac` oder `biop.mac`) anhand der `source=`-Einträge in der `Kconfig.system` oder durch Dateisystem-Prüfung.
 
 3. **Build durchführen:**
 
-- Wähle die neue Variante im Menüsystem aus (`make menuconfig`) oder setze `SYSTEMVAR` beim Build:
-  
-  ```sh
-  make os SYSTEMVAR=<neue_variante>
-  make diskimage SYSTEMVAR=<neue_variante>
-  ```
+- Starte die GUI mit `python3 cpa_build.py` und wähle die neue Variante im Tab „Systemvariante" aus
 
 **Tipp:**
 Starte mit einer Kopie einer lauffähigen Variante (z.B. `bc_a5120`) und passe die Dateien schrittweise an. So kannst du gezielt experimentieren und Erweiterungen testen, ohne das Originalsystem zu verändern.
@@ -298,63 +315,18 @@ In den vorhandenen Konfigurationsdateien für bc_a5120 und pc_1715 sind viele we
 - Der Datentyp muss passend gewählt werden (z.B. `bool` für Features, `hexstring` für Adressen).
 - Die `source`-Angabe muss auf die korrekte `.mac`-Datei zeigen, die beim Build modifiziert werden soll.
 
-### Variantenspezifisches Makefile
-
-Im `config/<systemvariante>/`-Verzeichnis muss ein systemspezifisches Makefile erstellt werden, das den eigentlichen Build-Prozess für diese Variante steuert. Dieses Makefile wird vom Haupt-Makefile aufgerufen und übernimmt folgende Aufgaben:
-
-**1. Assembler-Aufruf (M80):**
-Das Makefile ruft den Z80-Assembler M80 auf, um die Quelltexte zu assemblieren:
-
-```makefile
-$(CPM) m80 =$(SRC_DIR)/bios.mac
-```
-
-Der Assembler erzeugt eine `.REL`-Datei und gibt dabei automatisch die Ladeadresse aus, die für den nachfolgenden Linker-Schritt benötigt wird.
-
-**2. Extraktion der Linker-Adresse:**
-Die vom Assembler ausgegebene Systemadresse wird automatisch aus der M80-Ausgabe extrahiert:
-
-```makefile
-SYSADR = $(shell $(CPM) m80 =$(SRC_DIR)/bios.mac 2>&1 | grep -i "system" | awk '{print $$NF}')
-```
-
-Diese Adresse wird dann an den Linker weitergegeben.
-
-**3. Linker-Aufruf (LINKMT):**
-Der Linker LINKMT wird mit der extrahierten Systemadresse und allen erforderlichen .REL- und .ERL-Dateien aufgerufen:
-
-```makefile
-$(CPM) linkmt $(BUILD_DIR)/bios.rel[s$(SYSADR)],$(BUILD_DIR)/@os.com=$(PREBUILT_DIR)/bdos.erl,$(PREBUILT_DIR)/ccp.erl,$(PREBUILT_DIR)/cpabas.erl
-```
-
-**4. Verwendung korrekter Dateinamen:**
-Im Makefile muss sichergestellt werden, dass die richtigen Dateien verwendet werden:
-
-- Hauptquelldatei: `$(SRC_DIR)/bios.mac` (systemvariantenspezifische BIOS-Quellen)
-- Ausgabedatei: `$(BUILD_DIR)/@os.com` (das fertige Betriebssystem)
-- Arbeitsverzeichnis: Alle Dateien werden ins `$(BUILD_DIR)` kopiert, da CP/M-Tools keine Pfade verstehen
-
-**5. Einbindung von Prebuilt-.ERL-Dateien:**
-Vorgefertigte Systemkomponenten werden beim Linken eingebunden:
-
-- `bdos.erl` – Das Basic Disk Operating System
-- `ccp.erl` – Die Console Command Processor
-- `cpabas.erl` – Wird irgendwie auch benötigt
-- Weitere systemspezifische .ERL-Dateien nach Bedarf
-
-Das variantenspezifische Makefile kann von einem bestehenden System (z.B. `config/pc_1715/Makefile`) kopiert und entsprechend den Anforderungen der neuen Systemvariante angepasst werden.
-
 ### Hinweise zum Build-System
 
+- Die Build-Engine (`config/cpa_builder.py`) erkennt die Hauptquelldatei automatisch anhand der Kconfig.system-Einträge oder des Dateisystems (`biop.mac` hat Priorität vor `bios.mac`).
 - Die CP/M-Tools können keine Verzeichnisse verarbeiten. Alle benötigten Dateien werden vor dem Build ins Arbeitsverzeichnis kopiert.
-- Die Makefiles sind ausführlich kommentiert und zeigen die einzelnen Schritte.
-- Die Systemadresse für das Linken wird automatisch aus der M80-Ausgabe extrahiert.
+- Die Ladeadresse für das Linken wird automatisch aus der M80-Assembler-Ausgabe extrahiert.
+- Das System ist plattformübergreifend: Unter Linux/macOS wird Wine automatisch verwendet, unter Windows wird der CP/M-Emulator direkt aufgerufen.
 
 ---
 
 ## Erstellung von Bootdisketten und Unterschiede der Formate
 
-Die Erstellung von Bootdisketten erfolgt über die Makefile-Targets wie `diskimage`, `diskimagehfe`, `diskimagescp` oder `writeimage`. Dabei werden die passenden Geometrien und Bootsektoren automatisch eingebunden.
+Die Erstellung von Bootdisketten erfolgt über die GUI (Tab „Build-Optionen"). Dabei werden die passenden Geometrien und Bootsektoren automatisch eingebunden.
 
 ### 800 kByte Disketten für PC1715
 
@@ -375,21 +347,22 @@ Diese Disketten besitzen separate Bootspuren, die am Anfang der Diskette liegen.
 - Datenspuren: 5 Sektoren à 1024 Bytes
 Das Format ist in `cpa780` (diskdefs/cpaFormates.cfg) beschrieben.
 
-Der Unterschied liegt also in der Bootfähigkeit: Der BC A5120 benötigt explizite Bootspuren, während der PC1715 mit speziellen Einträgen in der Zuordnungstabelle auskommt. Die Makefile-Logik und die Formatdefinitionen sorgen dafür, dass beim Erstellen der Images die korrekten Strukturen und Bootsektoren verwendet werden.
+Der Unterschied liegt also in der Bootfähigkeit: Der BC A5120 benötigt explizite Bootspuren, während der PC1715 mit speziellen Einträgen in der Zuordnungstabelle auskommt. Die Build-Logik und die Formatdefinitionen sorgen dafür, dass beim Erstellen der Images die korrekten Strukturen und Bootsektoren verwendet werden.
 
 ### Verwendung der bootsec.bin
 
 Für die Erstellung bootfähiger Disketten oder Images wird die Datei `bootsec.bin` aus dem jeweiligen `prebuilt/<systemvariante>/`-Ordner verwendet. Diese Datei enthält die notwendigen Bootsektoren und wird beim Image-Bau automatisch an die richtige Stelle im Diskettenimage geschrieben – entweder als separate Bootspuren (BC A5120) oder als spezielle Einträge im Image (PC1715). Dadurch wird sichergestellt, dass die erzeugten Disketten tatsächlich bootfähig sind und den jeweiligen Systemanforderungen entsprechen.
 
 ---
-Das Erstellen und Schreiben von Systemdisketten erfolgt komfortabel über das Makefile und die bereitgestellten Targets:
+Das Erstellen und Schreiben von Systemdisketten erfolgt komfortabel über die GUI:
 
-- **diskImage**: Erstellt ein Standard-Diskettenimage (`build/cpadisk.img`).
-- **diskimagehfe**: Erstellt ein HFE-Diskettenimage für Emulatoren und spezielle Hardware.
-- **diskimagescp**: Erstellt ein SCP-Diskettenimage für erweiterte Kompatibilität.
-- **writeimage**: Schreibt das erzeugte Diskettenimage direkt auf eine physikalische Diskette, sofern ein Greaseweazle-Laufwerk angeschlossen ist.
+- **Nur @OS.COM bauen**: Erstellt nur das Betriebssystem im `build/`-Verzeichnis.
+- **Diskettenimage als *.img**: Erstellt ein Standard-Diskettenimage (`build/cpadisk.img`).
+- **Diskettenimage als *.hfe**: Erstellt ein HFE-Diskettenimage für Emulatoren und spezielle Hardware.
+- **Diskettenimage als *.scp**: Erstellt ein SCP-Diskettenimage für erweiterte Kompatibilität.
+- **Auf Laufwerk schreiben**: Schreibt das erzeugte Diskettenimage direkt auf eine physikalische Diskette, sofern ein Greaseweazle-Laufwerk angeschlossen ist.
 
-Die Auswahl des gewünschten Ziel-Formats (IMG, HFE, SCP oder direktes Schreiben) kann entweder direkt über die Makefile-Targets erfolgen (z.B. `make diskimagehfe`), oder komfortabel über das menübasierte Konfigurationssystem (`make menuconfig`).
+Die Auswahl des gewünschten Ziel-Formats erfolgt im Tab „Build-Optionen" der GUI.
 
 Zusatztools aus dem Verzeichnis `additions/` werden automatisch mit auf die Systemdiskette kopiert und stehen nach dem Booten zur Verfügung.
 
@@ -444,7 +417,7 @@ Die CPA-Workbench (alle eigenen Skripte, Buildsysteme und Dokumente in diesem Re
 - Die MIT-Lizenz gilt ausschließlich für die CPA-Workbench und die zugehörigen eigenen Dateien (eigene Skripte, Buildsysteme und Dokumente).
 - Das Betriebssystem CP/A sowie alle eventuell mitgelieferten Originaldateien aus CP/A (einschließlich cpa_doc.txt) unterliegen anderen Lizenzen und sind ausdrücklich von der MIT-Lizenz ausgenommen.
 - Externe Programme und Tools im Ordner `tools` (z.B. make, Python, Greaseweazle, cpmtools, CP/M-Emulator, m80, linkmt) stehen jeweils unter eigenen Lizenzen, die beachtet werden müssen.
-- Auch die Dateien `menuconfig.py` und `kconfiglib.py` im Ordner `config` stehen unter abweichenden Lizenzen, die in den jeweiligen Dateien selbst beschrieben sind.
+- Auch die Dateien `menuconfig.py` und `kconfiglib.py` im Ordner `config` stehen unter abweichenden Lizenzen, die in den jeweiligen Dateien selbst beschrieben sind. Diese Dateien werden vom neuen GUI-Build-System nicht mehr benötigt, liegen aber weiterhin im Repository.
 - Bitte prüfe die jeweiligen Lizenzdateien und Hinweise in den entsprechenden Unterordnern oder auf den Homepages der jeweiligen Tools und Komponenten.
 
 ---

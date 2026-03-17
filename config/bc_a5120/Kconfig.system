@@ -49,14 +49,17 @@ choice
     config SYSTEM_CPU_K2521
         bool "K2521 (1)"
         help
+            ein U880 z.B. PRG, K8911 - K8915
             source=bios.mac cpu=k2521
     config SYSTEM_CPU_K2526
         bool "K2526 (6)"
         help
+            zwei U880 typisch A5120, K8924
             source=bios.mac cpu=k2526
     config SYSTEM_CPU_C1715
         bool "C1715 (7)"
         help
+            ein U880 PC1715
             source=bios.mac cpu=c1715
 endchoice
 
@@ -66,10 +69,13 @@ choice
     config SYSTEM_FDC_K5120
         bool "K5120 (0)"
         help
+            Floppycontroller für K5600.10 und K5601
             source=bios.mac fdc=k5120
     config SYSTEM_FDC_K5122
         bool "K5122 (1)"
         help
+            Floppycontroller für MF6400, K5600.10, K5601
+            typisch A5120, K8924
             source=bios.mac fdc=k5122
     config SYSTEM_FDC_K5126
         bool "K5126 (6)"
@@ -91,6 +97,8 @@ choice
     config SYSTEM_CRT_K7024
         bool "K7024 (0) Bildschirm-Karte mit Kursor durch Bit 7"
         help
+            Typisch A5120, K8924, PRG, K8911 - K8915
+            Für Bildschirm K7222
             source=bios.mac crt=k7024
     config SYSTEM_CRT_DSY5
         bool "DSY5 (1) Bildschirm-Karte mit Invers durch Bit 7 (z.B. VDE Buch)"
@@ -108,6 +116,8 @@ choice
     config SYSTEM_RAM_64
         bool "64 kBytes"
         help
+            K3526 oder 
+            Typisch A5120, K8924, PRG, K8911 - K8915
             source=bios.mac ramkb=64
     config SYSTEM_RAM_32
         bool "32 kBytes"
