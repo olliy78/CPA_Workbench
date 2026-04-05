@@ -5,93 +5,75 @@
 
 This project provides a configuration and build tool for the CPA operating system, targeting classic East German computers of the K1520 series and the PC1715. It enables flexible selection of system variants, hardware options, and build parameters for reproducible builds and disk images. Note: The software and documentation are primarily in German, and it is assumed that there are probably no non-German-speaking users for this tool.
 
+> **Hinweis:** Die Software und Dokumentation sind vollständig auf Deutsch gehalten.
+
 ## Tool zur Konfiguration des CPA Betriebssystems für Rechner der K1520-Reihe und des PC1715
 
-Dieses Projekt stellt ein Konfigurationswerkzeug bereit, mit dem das CPA-Betriebssystem für verschiedene Rechner der K1520-Reihe und den PC1715 flexibel angepasst und gebaut werden kann. Über ein menübasiertes System lassen sich Systemvarianten, Hardwareoptionen und Build-Parameter komfortabel auswählen und in reproduzierbaren Builds umsetzen.
-
-![CPA Workbench Hauptfenster](doc/hardwarevariante.png)
-*Abbildung 1: Konfigurationsmenü - Hardwarevariante BC A5120
+Dieses Projekt stellt ein Konfigurationswerkzeug bereit, mit dem das CPA-Betriebssystem für verschiedene Rechner der K1520-Reihe und den PC1715 flexibel angepasst und gebaut werden kann. Über ein grafisches Menüsystem lassen sich Systemvarianten, Hardwareoptionen und Build-Parameter komfortabel auswählen und in reproduzierbaren Builds umsetzen.
 
 Das CPA-Betriebssystem wurde ursprünglich in den 1980er Jahren für verschiedene 8-Bit-Computer entwickelt und jeweils an die spezifische Hardware angepasst. Daher existieren unterschiedliche Varianten im Quelltext, die sich im Detail durch Anpassungen an die Hardware und die im System verbauten EPROMs (Firmware) unterscheiden. In jüngerer Zeit wurden zudem inoffizielle Erweiterungen geschaffen, um neue oder geänderte Hardware zu unterstützen und die Funktionalität zu erweitern.
 
-![CPA Workbench Build-Details](doc/build_ziel.png)
-*Abbildung 2: Konfigurationsmenü - Auswahl Build Ziel
-
-Dieses Konfigurations- und Buildsystem hilft dabei, verschiedene CP/A-Varianten komfortabel zu konfigurieren und zu generieren. Es unterstützt Entwickler und Anwender bei der Anpassung, Weiterentwicklung und dem Test von Erweiterungen und ermöglicht reproduzierbare Builds für unterschiedliche Zielsysteme.
-
-![CPA Workbench Disketten-Image](doc/asembler_linker.png)
-*Abbildung 3: Ausgabe Assembler und Linker mit Übergabe der Adresse
+![CPA Workbench Systemkonfiguration und Build-Ausgabe](doc/syskonfig_buildausgabe.png)
+*Systemkonfiguration (oben) und Assembler-/Linker-Ausgabe während des Builds (unten)*
 
 Durch die automatisierte Erstellung und das Schreiben von bootfähigen Systemdisketten oder Images für Diskettenemulatoren wird der Aufwand für das Testen und die Inbetriebnahme neuer Varianten erheblich reduziert.
 
 ## Versionshistorie
 
-### Version 0.2.0 (Beta)
+### Version 0.3.0
+
+**Status:** Beta-Version für öffentliche Tests
+
+**Änderungen gegenüber Version 0.2.0:**
+
+- **CP/M-Emulator `cparun`:** In C++ geschrieben, Quelltext im Projekt enthalten. Läuft als `cparun` (Linux) bzw. `cparun.exe` (Windows) direkt aus dem `tools/`-Ordner
+- **Neue Zusatztools:** `readDiskUI.py` (Disketten einlesen und Dateien extrahieren) und `writeDiskUI.py` (Disketten-Image erstellen und auf Diskette schreiben) als eigenständige GUI-Tools
+- **Greaseweazle-Integration verbessert:** Live-Ausgabe während `gw read`/`gw write`, kein Timeout mehr
+- **Format-Beschreibungen:** Die Combobox für das Diskettenformat zeigt nun den Kommentar aus der `diskdefs`-Datei als Beschreibung an
+- **Option „Temporäre .img löschen":** Beide Disk-Tools können die temporäre Image-Datei nach der Operation auch behalten
+
+### Version 0.2.0
 
 **Status:** Beta-Version für öffentliche Tests
 
 **Änderungen gegenüber Version 0.1.0:**
 
-- **Fehlerbeseitigungen:** Diverse Bugs wurden behoben, um die Stabilität und Zuverlässigkeit des Build-Systems zu verbessern
-- **CP/A Quelltext:** Alle Änderungen im CP/A Quelltext wurden zurückgesetzt, um die Originalversion zu verwenden
-- **Verbesserungen:** Optimierungen am Build-Prozess und der Systemkonfiguration
-
-**Hinweis:** Version 0.2.0 ist weiterhin als Beta-Version zu verstehen und befindet sich in der öffentlichen Testphase.
+- Diverse Fehlerbeseitigungen und Stabilitätsverbesserungen
+- CP/A Quelltext: Originaldateien wiederhergestellt
+- Optimierungen am Build-Prozess und der Systemkonfiguration
 
 ### Version 0.1.0
 
-**Status:** Initiale Version
-
-Dies war die erste öffentliche Version der CPA Workbench mit grundlegender Funktionalität für das Konfigurieren und Bauen von CP/A-Betriebssystemen.
+**Status:** Initiale Version – erste öffentliche Version mit grundlegender Build-Funktionalität.
 
 ## Installationsanleitung
 
 ### Voraussetzungen (alle Betriebssysteme)
 
-- **Python 3.8 oder neuer** (mit `tkinter` – wird bei den meisten Installationen mitgeliefert)
-- **CP/M-Emulator `cpm.exe`** (liegt im Ordner `tools/`)
-- **CP/M-Tools `cpmcp` und `cpmls`** (liegen im Ordner `tools/`)
-- Optional: **Greaseweazle** (`gw`) für das Schreiben auf physikalische Disketten und die Konvertierung in HFE/SCP-Formate – wird bei Bedarf automatisch in eine virtuelle Umgebung (`.venv`) installiert
-
-### Windows
-
-1. Das Projekt als .zip-Datei herunterladen oder per `git clone` klonen.
-2. Im Ordner `tools` die Datei `win_tools.7z` mit 7-Zip entpacken. Sie enthält unter anderem:
-   - **python3**: Minimale Python-3-Umgebung (mit tkinter)
-   - **greaseweazle**: Tool zum Lesen/Schreiben von Disketten und zur Konvertierung von Image-Formaten
-3. Die CPA Workbench starten:
-
-```
-python3 cpa_build.py
-```
-
-oder per Doppelklick auf `cpa_build.py`, falls Python mit `.py`-Dateien verknüpft ist.
-
-Zusätzlich befinden sich im Ordner `tools` die CP/M-Tools `cpmcp.exe`, `cpmls.exe` und der CP/M-Emulator `cpm.exe`.
+- **Python 3.8 oder neuer** mit `tkinter` (wird bei den meisten Installationen mitgeliefert)
+- **CP/M-Tools `cpmcp` und `cpmls`** (liegen als vorkompilierte Binaries im Ordner `tools/`)
+- **CP/M-Emulator `cparun` / `cparun.exe`** (liegt im Ordner `tools/`, Quelltext im Projekt enthalten)
+- Optional: **Greaseweazle** (`gw`) für das Lesen/Schreiben physikalischer Disketten und die Konvertierung in HFE/SCP-Formate – wird bei Bedarf automatisch in eine virtuelle Umgebung (`.venv`) installiert
 
 ### Linux
-
-Für die Verwendung unter Linux wird der Windows-Emulator **Wine** benötigt, da der verwendete CP/M-Emulator nur als 32-Bit-Windows-Version verfügbar ist.
 
 **Benötigte Pakete installieren (Debian/Ubuntu):**
 
 ```sh
-sudo apt install python3 python3-tk wine
+sudo apt install python3 python3-tk
 ```
 
 **Benötigte Pakete installieren (Fedora/RHEL):**
 
 ```sh
-sudo dnf install python3 python3-tkinter wine
+sudo dnf install python3 python3-tkinter
 ```
 
 **Benötigte Pakete installieren (Arch Linux):**
 
 ```sh
-sudo pacman -S python tk wine
+sudo pacman -S python tk
 ```
-
-Für die CP/M-Tools `cpmcp` und `cpmls` liegen im Ordner `tools` bereits unter Debian Linux kompilierte Versionen bei. Sollten diese nicht funktionieren, wird empfohlen, die CP/M-Tools selbst aus dem Quelltext zu übersetzen. Das mit Debian ausgelieferte Binärpaket ist fehlerhaft und verhält sich bei den hier verwendeten Diskettenformaten nicht wie erwartet.
 
 **CPA Workbench starten:**
 
@@ -99,52 +81,85 @@ Für die CP/M-Tools `cpmcp` und `cpmls` liegen im Ordner `tools` bereits unter D
 python3 cpa_build.py
 ```
 
+Für die CP/M-Tools `cpmcp` und `cpmls` liegen im Ordner `tools/` unter Debian Linux kompilierte Versionen bei. Sollten diese nicht funktionieren, wird empfohlen, die CP/M-Tools aus dem Quelltext zu übersetzen. Das mit Debian ausgelieferte Binärpaket ist fehlerhaft und verhält sich bei den hier verwendeten Diskettenformaten nicht wie erwartet.
+
+### Windows
+
+1. Das Projekt als .zip-Datei herunterladen oder per `git clone` klonen.
+2. Im Ordner `tools` die Datei `win_tools.7z` mit 7-Zip entpacken. Sie enthält unter anderem:
+   - **greaseweazle**: Tool zum Lesen/Schreiben von Disketten und zur Konvertierung von Image-Formaten
+3. Die CPA Workbench starten:
+
+```bat
+start.bat
+```
+
+oder direkt:
+
+```
+python3 cpa_build.py
+```
+
+Im Ordner `tools` befinden sich außerdem die Windows-Versionen der CP/M-Tools (`cpmcp.exe`, `cpmls.exe`) sowie `cparun.exe`.
+
 ### macOS
 
-Unter macOS wird ebenfalls **Wine** benötigt, um den CP/M-Emulator auszuführen.
+Für macOS muss `cparun` aus dem enthaltenen C++-Quelltext selbst kompiliert werden. Für die CP/M-Tools `cpmcp` und `cpmls` müssen ebenfalls die Quellen kompiliert werden, da im Ordner `tools/` nur Linux-Binaries enthalten sind.
 
 **Voraussetzungen installieren (mit Homebrew):**
 
 ```sh
 brew install python python-tk
-brew install --cask wine-stable
-```
-
-Für die CP/M-Tools `cpmcp` und `cpmls` müssen unter macOS die Quellen selbst kompiliert werden, da im Ordner `tools` nur Linux-Binaries beiliegen.
-
-**CPA Workbench starten:**
-
-```sh
-python3 cpa_build.py
 ```
 
 ## Verzeichnisstruktur
 
-- `src/`         – Quelltexte für BIOS, Makros und Systemteile
-- `prebuilt/`    – Vorgefertigte Systemteile (z.B. BDOS.ERL, CCP.ERL, CPABAS.ERL)
-  - Zusätzlich: `bootsec.bin` – Bootsektor-Datei für die Erstellung bootfähiger Disketten/Images
-- `tools/`       – Build-Tools (m80.com, linkmt.com, cpm.exe, ...)
-- `build/`       – Build-Produkte und temporäre Dateien (wird bei jedem Build neu befüllt)
-- `doc/`         – Dokumentation (z.B. cpa_doc.txt)
-- `config/`      – Konfigurations-Skripte und Kconfig-Dateien
+```
+CPA_Workbench/
+├── cpa_build.py          – Hauptprogramm (startet die GUI)
+├── diskdefs              – CP/M-Dateisystem-Definitionen (cpmtools-Format)
+├── cpaFormates.cfg       – Physikalische Diskettengeometrien (Greaseweazle-Format)
+├── src/                  – Quelltexte für BIOS, Makros und Systemteile
+│   └── <systemvariante>/ – z.B. bc_a5120/ oder pc_1715/
+├── prebuilt/             – Vorgefertigte Systemteile (BDOS.ERL, CCP.ERL, bootsec.bin …)
+│   └── <systemvariante>/
+├── config/               – Konfigurations-Skripte und Kconfig-Dateien
+│   └── <systemvariante>/
+│       ├── Kconfig.system
+│       └── Makefile
+├── additions/            – Dateien, die auf jede Systemdiskette kopiert werden
+│   └── <systemvariante>/ – Systemvariantenspezifische Zusatztools
+├── tools/                – Build- und Hilfswerkzeuge
+│   ├── cparun            – CP/M-Emulator (Linux)
+│   ├── cparun.exe        – CP/M-Emulator (Windows)
+│   ├── cparun_src/       – C++-Quelltext von cparun
+│   ├── cpmcp / cpmcp.exe – CP/M-Dateikopier-Tool
+│   ├── cpmls / cpmls.exe – CP/M-Dateilisten-Tool
+│   ├── m80.com           – Macro-Assembler (CP/M-Programm)
+│   ├── linkmt.com        – Linker (CP/M-Programm)
+│   ├── readDiskUI.py     – GUI: Disketten einlesen / Dateien extrahieren
+│   ├── writeDiskUI.py    – GUI: Disketten-Image erstellen und schreiben
+│   ├── extract_files     – Kommandozeilen-Tool zum Extrahieren von Dateien
+│   └── win_tools.7z      – Windows-Paket (Greaseweazle u.a.)
+├── build/                – Build-Artefakte und temporäre Dateien
+└── doc/                  – Dokumentation und Screenshots
+```
 
 ## Build-System Übersicht
 
-Das CPA Workbench Build-System bietet eine grafische Benutzeroberfläche (GUI) zur Konfiguration und zum Bau des Systems. Es basiert vollständig auf Python und benötigt keine Makefiles, Bash-Skripte oder GNU-Tools mehr.
+Das CPA Workbench Build-System bietet eine grafische Benutzeroberfläche (GUI) zur Konfiguration und zum Bau des CPA-Betriebssystems. Es basiert vollständig auf Python.
 
 ### Starten der CPA Workbench
-
-Die CPA Workbench wird auf allen Betriebssystemen einheitlich gestartet:
 
 ```sh
 python3 cpa_build.py
 ```
 
-Es öffnet sich ein grafisches Fenster mit drei Tabs und einem Log-Bereich.
+Es öffnet sich ein grafisches Fenster mit drei Tabs, einem Log-Bereich und einer Menüleiste.
 
 ### Tab 1: Systemvariante
 
-Im ersten Tab wird die gewünschte Systemvariante ausgewählt (z.B. BC A5120, PC1715 oder andere verfügbare Varianten). Die Varianten werden automatisch aus dem Ordner `src/` erkannt. Zu jeder Variante wird (sofern vorhanden) der Inhalt der `about.txt` als Beschreibung angezeigt.
+Im ersten Tab wird die gewünschte Systemvariante ausgewählt (z.B. BC A5120 oder PC1715). Die Varianten werden automatisch aus dem Ordner `src/` erkannt. Zu jeder Variante wird (sofern vorhanden) der Inhalt der `about.txt` als Beschreibung angezeigt.
 
 Beim Wechsel der Variante werden die aktuellen Konfigurationswerte automatisch aus den Assembler-Quelldateien ausgelesen.
 
@@ -153,13 +168,13 @@ Beim Wechsel der Variante werden die aktuellen Konfigurationswerte automatisch a
 Im zweiten Tab können Hardwaredetails und Systemoptionen konfiguriert werden. Der Inhalt dieses Tabs wird dynamisch aus der Datei `config/<systemvariante>/Kconfig.system` geladen und ändert sich mit der gewählten Variante. Je nach Variante stehen folgende Konfigurationskategorien zur Verfügung:
 
 - **Hardwarevariante:** Geräteversion, Prozessortakt, CPU-Typ, Floppy-Karte, Bildschirm-Karte, RAM-Größe
-- **RAM Disk Optionen:** Auswahl der RAM-Floppy-Hardware (OSS, EM256, MKD256, RAF, NANOS)
+- **RAM Disk Optionen:** OSS, EM256, MKD256, RAF, NANOS
 - **Diskettenlaufwerke:** Typ und Format für Laufwerk A–D
 - **Systemstart:** Autoexec-Befehl, Kaltstart/Reset-Verhalten
 - **Systemfunktionen:** Uhr, Formaterkennung, Monitor, Umlaute usw.
 - **Serielle Schnittstellen:** Drucker 1/2, Koppelschnittstelle mit Adressen und Parametern
 
-Zu jeder Option kann über den **[?]**-Button ein Hilfetext angezeigt werden.
+Zu jeder Option kann über den **[?]**-Button ein Hilfetext eingeblendet werden.
 
 ### Tab 3: Build-Optionen
 
@@ -188,225 +203,160 @@ Zusätzlich kann gewählt werden:
 
 Der Build-Fortschritt wird im Log-Bereich am unteren Fensterrand angezeigt. Das Fenster bleibt während des Builds bedienbar.
 
+### Build-Prozess im Detail
+
+Der Build-Prozess umfasst folgende automatische Schritte:
+
+1. `build/`-Verzeichnis vorbereiten (optional: bereinigen)
+2. `.mac`-Quelldateien und `.erl`-Prebuilt-Dateien ins `build/`-Verzeichnis kopieren
+3. Assembler-Quellen mit den konfigurierten Werten patchen
+4. BIOS-Quelle mit `cparun m80` assemblieren (erzeugt Listing und `.erl`-Datei)
+5. Ladeadresse `/p:` aus dem Assembler-Log extrahieren
+6. Mit `cparun linkmt` zu `@OS.COM` linken
+7. Bootsektor (`bootsec.bin`) ins Image schreiben (falls Diskettenimage gewählt)
+8. Zusatzdateien aus `additions/` auf das Image kopieren
+9. Optional: Image in HFE/SCP konvertieren oder auf Diskette schreiben
+
+`cparun` (bzw. `cparun.exe` unter Windows) ist ein in C++ geschriebener CP/M-Emulator, dessen Quelltext im Projekt enthalten ist.
+
 ### Konfigurationsdatei `.config`
 
-Die gesamte Konfiguration wird in der Datei `.config` im Projektverzeichnis gespeichert. Das Format ist kompatibel mit dem bisherigen menuconfig-System. Die Datei kann auch manuell bearbeitet werden.
+Die gesamte Konfiguration wird in der Datei `.config` im Projektverzeichnis gespeichert. Das Format entspricht dem Kconfig-Standard und kann auch manuell bearbeitet werden.
 
-### Systemvarianten und Ordnerstruktur
+## Zusatztools: readDiskUI und writeDiskUI
 
-Das Build-System erkennt Systemvarianten automatisch anhand der Ordnerstruktur:
+Über die Menüleiste der CPA Workbench (Menü „Tools") sind zwei eigenständige GUI-Tools erreichbar:
 
-- **Quelltexte:** `src/<systemvariante>/` (z.B. `src/pc_1715/`)
-- **Konfiguration:** `config/<systemvariante>/Kconfig.system`
-- **Prebuilt-Files:** `prebuilt/<systemvariante>/` (BDOS, CCP, Bootsektor etc.)
-- **Additions:** `additions/<systemvariante>/` (optionale systemspezifische Tools)
+### readDiskUI – Disketten einlesen
 
-### Voraussetzungen
+`tools/readDiskUI.py` ermöglicht das Einlesen von CP/M-Disketten und das Extrahieren von Dateien:
 
-- Python 3.8+ mit tkinter
-- Wine (unter Linux und macOS, um den CP/M-Emulator auszuführen)
-- Die Tools `m80.com`, `linkmt.com` und `cpm.exe` müssen im Verzeichnis `tools/` liegen
+- **Quelle:** Image-Datei (`.img`, `.hfe`, `.scp`) oder physische Diskette über Greaseweazle
+- **Disketteninhalt anzeigen:** Listet alle Dateien auf der Diskette auf
+- **Dateien extrahieren:** Kopiert alle Dateien in ein wählbares Zielverzeichnis
+- HFE/SCP-Images werden automatisch in ein temporäres `.img` konvertiert
+- Diskettenformat aus `diskdefs` wählbar – mit Beschreibungstext pro Format
+- Option: Temporäre `.img`-Datei nach der Operation löschen oder behalten
 
-### Build-Prozess
-
-Der Build-Prozess läuft auf allen Betriebssystemen identisch ab. Die Unterschiede bestehen nur im CP/M-Emulator-Aufruf:
-
-- **Linux/macOS:** CP/M-Emulator wird automatisch über Wine aufgerufen
-- **Windows:** CP/M-Emulator wird direkt ausgeführt
-
-Der Build umfasst folgende automatische Schritte:
-
-1. Kopiere `.mac`-Quelldateien und `.erl`-Prebuilt-Dateien ins `build/`-Verzeichnis
-2. Assembliere die Hauptquelldatei mit M80 (erzeugt Listing und ERL-Datei)
-3. Extrahiere die Ladeadresse `/p:` aus dem Assembler-Log
-4. Linke mit LINKMT zu `@OS.COM` unter Verwendung der ermittelten Adresse
-5. Räume temporäre Dateien auf
-
-### Aufräumen
-
-Das Build-Verzeichnis kann über den **Clean**-Button in der GUI oder direkt aufgeräumt werden. Dabei werden alle Dateien im `build/`-Verzeichnis gelöscht.
-
-**Tipp:** Es ist sinnvoll, vor jedem neuen Build ein Clean auszuführen, besonders nach Konfigurationsänderungen.
-
-## Erweiterte Möglichkeiten für Entwickler
-
-### Eigene Systemvariante anlegen – Schritt für Schritt
-
-Das Anlegen einer eigenen Systemvariante ist ideal für Experimente, Erweiterungen oder spezielle Hardwareanpassungen. Gehe dabei wie folgt vor:
-
-1. **Verzeichnisse anlegen:**
-
-- `src/<neue_variante>/` – Quelltexte für BIOS, Makros etc. (z.B. von `src/bc_a5120` kopieren)
-- `prebuilt/<neue_variante>/` – Vorgefertigte Systemteile (z.B. BDOS.ERL, CCP.ERL, bootsec.bin)
-- `config/<neue_variante>/Kconfig.system` – Konfigurationsdatei für das GUI-System
-- `additions/<neue_variante>/` – Zusatztools, die auf die Diskette kopiert werden sollen
-
-2. **Dateien anpassen:**
-
-Das Kconfig-System bildet die Grundlage für das Konfigurationssystem und steuert, welche Optionen in der GUI angezeigt werden. Jede Systemvariante besitzt eine eigene `Kconfig.system`-Datei im jeweiligen `config/<systemvariante>/`-Verzeichnis. Diese Datei beschreibt die verfügbaren Konfigurationsoptionen, deren Typen und die Zuordnung zu Symbolnamen in den Assembler-Quelltexten (z.B. in `bios.mac`).
-
-Die Build-Engine erkennt die Hauptquelldatei automatisch (z.B. `bios.mac` oder `biop.mac`) anhand der `source=`-Einträge in der `Kconfig.system` oder durch Dateisystem-Prüfung.
-
-3. **Build durchführen:**
-
-- Starte die GUI mit `python3 cpa_build.py` und wähle die neue Variante im Tab „Systemvariante" aus
-
-**Tipp:**
-Starte mit einer Kopie einer lauffähigen Variante (z.B. `bc_a5120`) und passe die Dateien schrittweise an. So kannst du gezielt experimentieren und Erweiterungen testen, ohne das Originalsystem zu verändern.
-
-### Anpassung Kconfig.system
-
-- Jede Option ist einem bestimmten Datentyp zugeordnet:
-  - `bool` – Ein-/Ausschalter (true/false), z.B. für Hardwarefeatures oder Auswahlfelder verwendeter Laufwerkstyp
-  - `hexstring` – Hexadezimale Werte, z.B. Adressen
-  - `string` – Freitext, z.B. Versionsbezeichnung oder Textfelder
-- Die Option enthält mindestens einen Symbolnamen, der in der zu modifizierenden `.mac`-Datei verwendet wird.
-- Der Wert, der im Menü gewählt wird, wird beim Build automatisch in die entsprechende `.mac`-Datei gepatcht.
-
-**Beispiele für Optionen:**
-
-```kconfig
-config SYSTEM_RAMDISK_RAF
-    bool "RAF-Karte (raf=1)"
-    help
-        source=bios.mac oss=0 em256=0 raf=1
-        Nutzt mindestens eine RAF-Karte (max. 4, je 2MB) als RAM-Floppy 'M:'.
-config SYSTEM_DRIVE_A_11580
-    bool "DD, DS, 5', 80 Tracks (K5601 !!!)"
-    help
-        source=bios.mac diskA=11580
-        Verwendet K5601 als Laufwerk A
-
-config SYSTEM_AUTOEXEC_STR
-    string "Automatische Kommando-Ausführung (autoexec)"
-    help
-        source=bios.mac kltbef=string
-        Es besteht die Moeglichkeit, beim Kaltstart des Systems automatisch
-        ein Kommando auszufuehren z.B. 'DIR *.COM'. Dies kann auch ueber SUBMIT eine Kommando-
-        folge sein.
-
-config SYSTEM_SERIAL_TTYDAT
-    string "ttydat (Daten-Adresse Drucker 1)"
-    help
-        source=bios.mac ttydat=hexstring
-        Datenadresse für Drucker 1. Mögliche Anschlüsse und Adressen:
-        Printer (nur senden) 0ch, V24 0dh, Kanal A (IFSS) 14h, Kanal B (IFSS) 15h
-        Siehe bios.mac Zeilen 349-387 für weitere Karten und Bemerkungen.
+```sh
+python3 tools/readDiskUI.py
 ```
 
-In den vorhandenen Konfigurationsdateien für bc_a5120 und pc_1715 sind viele weitere Beispiele zum Übernehmen und Anpassen vorhanden
+### writeDiskUI – Disketten erstellen
 
-**Anpassungen bei einer neuen Systemvariante:**
+`tools/writeDiskUI.py` erstellt aus einem Ordner voller Dateien ein CP/M-Disketten-Image und schreibt es optional auf eine physische Diskette:
 
-- Die `Kconfig.system` muss alle relevanten Optionen enthalten, die für die Hardware und das BIOS der neuen Variante benötigt werden.
-- Für jede Option muss der Symbolname mit dem Namen in der `.mac`-Datei übereinstimmen.
-- Der Datentyp muss passend gewählt werden (z.B. `bool` für Features, `hexstring` für Adressen).
-- Die `source`-Angabe muss auf die korrekte `.mac`-Datei zeigen, die beim Build modifiziert werden soll.
+- **Quelle:** Beliebiges Verzeichnis mit zu schreibenden Dateien
+- **Ausgabe:** `.img`, `.hfe` oder `.scp`-Datei oder direkt auf Diskette (Greaseweazle)
+- Vorschau der Quelldateien mit Größenangaben
+- Temporäres Image mit CP/M-Standard (0xE5) vorgefüllt
+- Diskettenformat aus `diskdefs` wählbar – mit Beschreibungstext pro Format
+- Option: Temporäre `.img`-Datei nach der Operation löschen oder behalten
 
-### Hinweise zum Build-System
-
-- Die Build-Engine (`config/cpa_builder.py`) erkennt die Hauptquelldatei automatisch anhand der Kconfig.system-Einträge oder des Dateisystems (`biop.mac` hat Priorität vor `bios.mac`).
-- Die CP/M-Tools können keine Verzeichnisse verarbeiten. Alle benötigten Dateien werden vor dem Build ins Arbeitsverzeichnis kopiert.
-- Die Ladeadresse für das Linken wird automatisch aus der M80-Assembler-Ausgabe extrahiert.
-- Das System ist plattformübergreifend: Unter Linux/macOS wird Wine automatisch verwendet, unter Windows wird der CP/M-Emulator direkt aufgerufen.
-
----
-
-## Erstellung von Bootdisketten und Unterschiede der Formate
-
-Die Erstellung von Bootdisketten erfolgt über die GUI (Tab „Build-Optionen"). Dabei werden die passenden Geometrien und Bootsektoren automatisch eingebunden.
-
-### 800 kByte Disketten für PC1715
-
-Diese Disketten besitzen keine separaten Bootspuren. Der PC1715 kann direkt von diesen Disketten booten, da spezielle Einträge im 1. und 4. Eintrag der Datenzuordnungstabelle (Directory Allocation Table) gesetzt werden. Die Geometrie ist:
-
-- 80 Zylinder (Tracks)
-- 2 Köpfe (Double Side)
-- 5 Sektoren à 1024 Bytes pro Track
-Das Format ist in `cpa800` (diskdefs/cpaFormates.cfg) beschrieben.
-
-### 720 kByte Disketten für BC A5120
-
-Diese Disketten besitzen separate Bootspuren, die am Anfang der Diskette liegen. Die ersten Spuren enthalten spezielle Sektoren (26 Sektoren a 128 Bytes), die als Bootsektoren dienen. Erst danach folgen die regulären Datenspuren mit 5 Sektoren à 1024 Bytes. Die Geometrie ist:
-
-- 80 Zylinder (Tracks)
-- 2 Köpfe (Double Side)
-- Bootspuren: 2 Spuren mit 26 Sektoren à 128 Bytes (Kopf 0), 1 Spur mit 26 Sektoren à 128 Bytes (Kopf 1)
-- Datenspuren: 5 Sektoren à 1024 Bytes
-Das Format ist in `cpa780` (diskdefs/cpaFormates.cfg) beschrieben.
-
-Der Unterschied liegt also in der Bootfähigkeit: Der BC A5120 benötigt explizite Bootspuren, während der PC1715 mit speziellen Einträgen in der Zuordnungstabelle auskommt. Die Build-Logik und die Formatdefinitionen sorgen dafür, dass beim Erstellen der Images die korrekten Strukturen und Bootsektoren verwendet werden.
-
-### Verwendung der bootsec.bin
-
-Für die Erstellung bootfähiger Disketten oder Images wird die Datei `bootsec.bin` aus dem jeweiligen `prebuilt/<systemvariante>/`-Ordner verwendet. Diese Datei enthält die notwendigen Bootsektoren und wird beim Image-Bau automatisch an die richtige Stelle im Diskettenimage geschrieben – entweder als separate Bootspuren (BC A5120) oder als spezielle Einträge im Image (PC1715). Dadurch wird sichergestellt, dass die erzeugten Disketten tatsächlich bootfähig sind und den jeweiligen Systemanforderungen entsprechen.
-
----
-Das Erstellen und Schreiben von Systemdisketten erfolgt komfortabel über die GUI:
-
-- **Nur @OS.COM bauen**: Erstellt nur das Betriebssystem im `build/`-Verzeichnis.
-- **Diskettenimage als *.img**: Erstellt ein Standard-Diskettenimage (`build/cpadisk.img`).
-- **Diskettenimage als *.hfe**: Erstellt ein HFE-Diskettenimage für Emulatoren und spezielle Hardware (Greaseweazle wird bei Bedarf automatisch installiert).
-- **Diskettenimage als *.scp**: Erstellt ein SCP-Diskettenimage für erweiterte Kompatibilität (Greaseweazle wird bei Bedarf automatisch installiert).
-- **Auf Laufwerk schreiben**: Schreibt das erzeugte Diskettenimage direkt auf eine physikalische Diskette (Greaseweazle-Hardware und -Software nötig, wird bei Bedarf automatisch installiert).
-
-Die Auswahl des gewünschten Ziel-Formats erfolgt im Tab „Build-Optionen" der GUI.
-
-Zusatztools aus dem Verzeichnis `additions/` werden automatisch mit auf die Systemdiskette kopiert und stehen nach dem Booten zur Verfügung.
-
-**Hinweis:**
-Die Systemdiskette enthält nach dem Build alle im additions-Ordner befindlichen Tools.
-Für den Schreibvorgang werden ggf. Administratorrechte benötigt.
+```sh
+python3 tools/writeDiskUI.py
+```
 
 ## Diskettenformate: diskdefs und cpaFormates.cfg
 
-Die Diskettenformate für das Erstellen einer CP/A-Diskette, eines Diskettenimages oder für das Skript `extract_files` sind in zwei Dateien beschrieben:
+Die Diskettenformate für das Erstellen von Images und das Einlesen von Disketten sind in zwei Dateien beschrieben:
 
-- **diskdefs**: Enthält die Definitionen für das CP/M-Dateisystem (z.B. Sektorgröße, Anzahl der Tracks, Verzeichnisstruktur). Diese Datei wird von cpmtools und beim Erstellen von Images verwendet.
-- **cpaFormates.cfg**: Beschreibt die physikalische Geometrie und das Aufzeichnungsverfahren der Disketten (z.B. Anzahl der Zylinder, Köpfe, Sektoren, MFM-Codierung). Diese Datei wird von Greaseweazle und beim direkten Zugriff auf Disketten genutzt.
+- **`diskdefs`**: CP/M-Dateisystem-Definitionen (Sektorgröße, Anzahl der Tracks, Verzeichnisstruktur). Wird von cpmtools (`cpmcp`, `cpmls`) und beim Erstellen von Images verwendet.
+- **`cpaFormates.cfg`**: Physikalische Diskettengeometrie und Aufzeichnungsverfahren (Zylinder, Köpfe, MFM-Codierung). Wird von Greaseweazle beim direkten Diskettenzugriff verwendet.
 
-Beide Dateien sind essenziell, um die korrekten Formate für das Buildsystem und das Extrahieren von Dateien mit `extract_files` zu gewährleisten. So kann sowohl das logische Dateisystem als auch die physikalische Struktur der Diskette exakt abgebildet werden.
+Beide Dateien können angepasst werden, wenn z.B. Disketten von anderen Systemen gelesen oder für andere Formate Images erstellt werden sollen.
 
-**Hinweis:**
-Die Dateien `diskdefs` und `cpaFormates.cfg` können bei Bedarf angepasst werden, wenn z.B. Disketten von einem anderen System gelesen oder CP/A System-Disketten für andere Systeme und Formate erstellt werden sollen.
+### Diskettenformate im Überblick
 
-## Zusatztool: extract_files
+#### 800 kByte – PC1715 (`cpa800`)
 
-Das Skript `extract_files` dient dazu, alle Dateien aus einem CP/M-Diskettenimage oder direkt von einer Diskette (über Greaseweazle) in ein neues Verzeichnis zu extrahieren. Es unterstützt verschiedene Formate und kann sowohl Images als auch physische Disketten verarbeiten.
+- 80 Zylinder, 2 Köpfe (Double Side)
+- 5 Sektoren à 1024 Bytes pro Track
+- Keine separaten Bootspuren; bootfähig durch spezielle Einträge in der Directory Allocation Table
 
-**Funktionen:**
+#### 780 kByte – BC A5120 (`cpa780`)
 
-- Extrahiert alle Dateien aus einem Image (`.img`) oder direkt von Diskette.
-- Unterstützt verschiedene Dateisystemformate (z.B. cpa800).
-- Legt die extrahierten Dateien in einem neuen Unterordner im Verzeichnis `Disketten/` ab.
-- Temporäre Images werden nach der Extraktion automatisch gelöscht.
+- 80 Zylinder, 2 Köpfe (Double Side)
+- Bootspuren: Spuren 0–2 mit 26 Sektoren à 128 Bytes
+- Datenspuren: 5 Sektoren à 1024 Bytes
+- Separate Bootspuren am Anfang der Diskette
 
-**Verwendung:**
+### bootsec.bin
+
+Für die Erstellung bootfähiger Images wird die Datei `bootsec.bin` aus dem jeweiligen `prebuilt/<systemvariante>/`-Ordner verwendet. Die Build-Engine schreibt sie automatisch an die korrekte Stelle im Diskettenimage.
+
+## Zusatztool: extract_files (Kommandozeile)
+
+Das Skript `tools/extract_files` extrahiert alle Dateien aus einem CP/M-Diskettenimage oder direkt von einer Diskette (über Greaseweazle) in einen neuen Unterordner.
 
 ```sh
 tools/extract_files [-t FORMAT] -f <disk_image.img> | -g <DiskName>
 ```
 
-- `-t FORMAT`   Dateisystemformat für cpmtools (Standard: cpa800)
-- `-f FILE`     Image-Datei einlesen (z.B. foo.img)
-- `-g DiskName` Diskette mit Greaseweazle einlesen (legt DiskName.img temporär an)
-- `-h`          Zeigt Hilfe an
+| Parameter | Beschreibung |
+|-----------|-------------|
+| `-t FORMAT` | Dateisystemformat für cpmtools (Standard: `cpa800`) |
+| `-f FILE` | Image-Datei einlesen (`.img`) |
+| `-g DiskName` | Diskette mit Greaseweazle einlesen (legt `DiskName.img` temporär an) |
+| `-h` | Hilfe anzeigen |
 
-Die extrahierten Dateien werden im Ordner `Disketten/<ImageName>/` abgelegt. Nach Abschluss wird die Anzahl der extrahierten Dateien ausgegeben.
+Die extrahierten Dateien werden im Ordner `Disketten/<ImageName>/` abgelegt. Um sie auf neue Disketten zu übernehmen, können sie in den `additions/`-Ordner (ggf. systemvariantenspezifischen Unterordner) kopiert werden.
 
-Um die extrahierten Dateien danach wieder auf die zu erstellenden Disketten zu bekommen, brauchen sie einfach nur in den Ordner additions kopiert werden. Wenn es sich um systemvariantenspezifische Dateien handelt, in den entsprechenden Unterordner. Dadurch wird erreicht, dass eine FORMAT.COM für einen PC1715 nicht auf die Startdiskette für einen A5120 kopiert wird.
+## Erweiterte Möglichkeiten für Entwickler
+
+### Eigene Systemvariante anlegen
+
+1. **Verzeichnisse anlegen:**
+   - `src/<neue_variante>/` – Quelltexte (z.B. von `src/bc_a5120/` kopieren)
+   - `prebuilt/<neue_variante>/` – Vorgefertigte Systemteile (BDOS.ERL, CCP.ERL, bootsec.bin)
+   - `config/<neue_variante>/Kconfig.system` – Konfigurationsdatei
+   - `additions/<neue_variante>/` – Systemspezifische Zusatztools
+
+2. **Kconfig.system anpassen:**
+
+   Jede Option enthält einen Datentyp und einen Symbolnamen, der in der `.mac`-Datei verwendet wird:
+
+   | Typ | Bedeutung |
+   |-----|-----------|
+   | `bool` | Ein-/Ausschalter |
+   | `hexstring` | Hexadezimalwert (z.B. I/O-Adresse) |
+   | `string` | Freitext (z.B. Autoexec-Kommando) |
+
+   Beispiele:
+
+   ```kconfig
+   config SYSTEM_RAMDISK_RAF
+       bool "RAF-Karte (raf=1)"
+       help
+           source=bios.mac oss=0 em256=0 raf=1
+           Nutzt mindestens eine RAF-Karte (max. 4, je 2 MB) als RAM-Floppy 'M:'.
+
+   config SYSTEM_SERIAL_TTYDAT
+       string "ttydat (Daten-Adresse Drucker 1)"
+       help
+           source=bios.mac ttydat=hexstring
+           Datenadresse für Drucker 1. Mögliche Anschlüsse: 0Ch, 0Dh, 14h, 15h …
+   ```
+
+3. **Build starten:** GUI mit `python3 cpa_build.py` öffnen und neue Variante im Tab „Systemvariante" auswählen.
+
+**Tipp:** Starte mit einer Kopie einer lauffähigen Variante (z.B. `bc_a5120`) und passe die Dateien schrittweise an.
+
+### Hinweise zum Build-System
+
+- Die Build-Engine (`config/cpa_builder.py`) erkennt die Hauptquelldatei automatisch anhand der `Kconfig.system`-Einträge oder des Dateisystems (`biop.mac` hat Priorität vor `bios.mac`).
+- Die Ladeadresse für den Linker wird automatisch aus der M80-Assembler-Ausgabe extrahiert.
+- Die CP/M-Tools können keine Verzeichnisse verarbeiten – alle benötigten Dateien werden vor dem Build ins `build/`-Arbeitsverzeichnis kopiert.
 
 ## Lizenz
 
-Die CPA-Workbench (alle eigenen Skripte, Buildsysteme und Dokumente in diesem Repository) steht unter der MIT-Lizenz. Siehe dazu die Datei [LICENSE](./LICENSE) im Hauptverzeichnis.
+Die CPA-Workbench (alle eigenen Skripte, Buildsysteme und Dokumente in diesem Repository) steht unter der **MIT-Lizenz**. Siehe Datei [LICENSE](./LICENSE).
 
-**Wichtiger Hinweis:**
+**Wichtige Hinweise:**
 
-- Die MIT-Lizenz gilt ausschließlich für die CPA-Workbench und die zugehörigen eigenen Dateien (eigene Skripte, Buildsysteme und Dokumente).
-- Das Betriebssystem CP/A sowie alle eventuell mitgelieferten Originaldateien aus CP/A (einschließlich cpa_doc.txt) unterliegen anderen Lizenzen und sind ausdrücklich von der MIT-Lizenz ausgenommen.
-- Externe Programme und Tools im Ordner `tools` (z.B. make, Python, Greaseweazle, cpmtools, CP/M-Emulator, m80, linkmt) stehen jeweils unter eigenen Lizenzen, die beachtet werden müssen.
-- Auch die Dateien `menuconfig.py` und `kconfiglib.py` im Ordner `config` stehen unter abweichenden Lizenzen, die in den jeweiligen Dateien selbst beschrieben sind. Diese Dateien werden vom neuen GUI-Build-System nicht mehr benötigt, liegen aber weiterhin im Repository.
-- Bitte prüfe die jeweiligen Lizenzdateien und Hinweise in den entsprechenden Unterordnern oder auf den Homepages der jeweiligen Tools und Komponenten.
+- Die MIT-Lizenz gilt **ausschließlich** für die eigenen Dateien der CPA-Workbench (Skripte, Buildsystem, Dokumentation).
+- Das Betriebssystem **CP/A** sowie alle mitgelieferten Originaldateien aus CP/A (einschließlich `cpa_doc.txt`) unterliegen anderen Lizenzen und sind von der MIT-Lizenz ausgenommen.
+- Die externen Tools im Ordner `tools/` (Greaseweazle, cpmtools, m80, linkmt) stehen jeweils unter eigenen Lizenzen.
 
 ---
 
@@ -414,17 +364,10 @@ Die CPA-Workbench (alle eigenen Skripte, Buildsysteme und Dokumente in diesem Re
 
 Für Fehler, Verbesserungsvorschläge oder neue Funktionen nutze bitte das [GitHub-Ticketsystem (Issues)](https://github.com/olliy78/CPA_Workbench/issues).
 
-- **Fehlerberichte:** Melde Bugs und Probleme über die Vorlage „Fehlerbericht“.
-- **Erweiterungswünsche:** Schlage neue Funktionen oder Verbesserungen über die Vorlage „Erweiterungswunsch“ vor.
-- **Fragen:** Auch allgemeine Fragen können als Issue eingestellt werden.
+- **Fehlerberichte:** Vorlage „Fehlerbericht"
+- **Erweiterungswünsche:** Vorlage „Erweiterungswunsch"
+- **Fragen:** Auch allgemeine Fragen können als Issue eingestellt werden
 
 Bitte prüfe vor dem Erstellen eines neuen Tickets, ob das Thema bereits gemeldet wurde.
 
-**Hinweis:**  
-Für Bug-Reports und Feature-Requests stehen strukturierte deutsche Vorlagen zur Verfügung, die dir beim Ausfüllen helfen.
-
-Direkt zum Ticketsystem: [GitHub Issues](https://github.com/olliy78/CPA_Workbench/issues)
-
-Für allgemeine Fragen und Diskussionen kann auch das Forum von [robotrontechnik.de](https://www.robotrontechnik.de) genutzt werden.
-
-Fragen und Beiträge sind willkommen!
+Für allgemeine Fragen und Diskussionen steht auch das Forum von [robotrontechnik.de](https://www.robotrontechnik.de) zur Verfügung.

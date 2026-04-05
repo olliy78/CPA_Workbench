@@ -62,15 +62,38 @@ def _parse_diskdefs_formats(diskdefs_path):
     Durchsucht die Datei nach 'diskdef <name>' Einträgen und gibt eine
     Liste der gefundenen Formatnamen zurück (z.B. ['cpa200', 'cpa800', ...]).
     """
+def _parse_diskdefs_formats(diskdefs_path):
+    """Formatnamen und Kommentare aus der diskdefs-Datei auslesen.
+
+    Durchsucht die Datei nach 'diskdef <name>' Einträgen. Der Kommentar
+    in der Zeile direkt davor (beginnt mit '#') wird als Beschreibung
+    des Formats verwendet.
+
+    Returns:
+        tuple: (formats, comments) mit
+            formats  -- Liste der Formatnamen (z.B. ['cpa200', 'cpa800', ...])
+            comments -- Dict {name: kommentar_text}
+    """
     formats = []
+    comments = {}
     if not os.path.isfile(diskdefs_path):
-        return formats
+        return formats, comments
+    last_comment = ''
     with open(diskdefs_path, 'r', encoding='utf-8') as f:
         for line in f:
-            m = re.match(r'^diskdef\s+(\S+)', line)
-            if m:
-                formats.append(m.group(1))
-    return formats
+            stripped = line.strip()
+            if stripped.startswith('#'):
+                last_comment = stripped.lstrip('#').strip()
+            else:
+                m = re.match(r'^diskdef\s+(\S+)', stripped)
+                if m:
+                    name = m.group(1)
+                    formats.append(name)
+                    comments[name] = last_comment
+                    last_comment = ''
+                elif stripped:
+                    last_comment = ''
+    return formats, comments
 
 
 # ============================================================================
@@ -112,9 +135,10 @@ class ExtractApp:
 
         # Verfügbare Diskettenformate aus der diskdefs-Datei laden
         diskdefs_path = os.path.join(PROJECT_DIR, 'diskdefs')
-        self.formats = _parse_diskdefs_formats(diskdefs_path)
+        self.formats, self.format_comments = _parse_diskdefs_formats(diskdefs_path)
         if not self.formats:
             self.formats = ['cpa800', 'cpa780']  # Fallback-Formate
+            self.format_comments = {}
 
         self._create_ui()    # Oberfläche aufbauen
         self._poll_log()     # Log-Polling-Timer starten
@@ -192,6 +216,13 @@ class ExtractApp:
         fmt_combo = ttk.Combobox(settings_frame, textvariable=self.format_var,
                                  values=self.formats, state='readonly', width=25)
         fmt_combo.grid(row=row, column=1, sticky='w', pady=4)
+        # Beschreibungs-Label: zeigt den Kommentar zum gewählten Format
+        self.fmt_desc_var = tk.StringVar()
+        ttk.Label(settings_frame, textvariable=self.fmt_desc_var,
+                  foreground='#555555', wraplength=300, justify='left').grid(
+            row=row, column=2, sticky='w', padx=(8, 0), pady=4)
+        fmt_combo.bind('<<ComboboxSelected>>', self._on_format_change)
+        self._on_format_change()  # Initial-Beschreibung setzen
         row += 1
 
         # Zielverzeichnis
@@ -204,6 +235,15 @@ class ExtractApp:
         ttk.Button(settings_frame, text='Durchsuchen...',
                    command=self._choose_target).grid(row=row, column=2,
                                                       padx=(5, 0), pady=4)
+        row += 1
+
+        # Option: Temporäres Image nach der Operation löschen
+        self.delete_tmp_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            settings_frame,
+            text='Temporäre .img löschen',
+            variable=self.delete_tmp_var
+        ).grid(row=row, column=0, columnspan=3, sticky='w', padx=(4, 0), pady=(6, 2))
         row += 1
 
         # Initial: GW-spezifische Felder deaktivieren (bis GW gewählt wird)
@@ -267,6 +307,11 @@ class ExtractApp:
             self.file_entry.config(state='disabled')
             self.file_btn.config(state='disabled')
             self.diskname_entry.config(state='normal')
+
+    def _on_format_change(self, _event=None):
+        """Beschreibungs-Label mit dem Kommentar des gewählten Formats aktualisieren."""
+        fmt = self.format_var.get()
+        self.fmt_desc_var.set(self.format_comments.get(fmt, ''))
 
     def _choose_file(self):
         """Dateiauswahl-Dialog für Image-Dateien (öffnet Systemdialog)."""
@@ -390,13 +435,33 @@ class ExtractApp:
         self.gw_cmd = gw_venv
         self._log(f"[DONE] Greaseweazle installiert: {gw_venv}")
 
-    def _run(self, cmd):
+    def _run(self, cmd, stream=False):
         """Externen Befehl ausführen, Ausgabe loggen und Fehler werfen.
 
         Alle Befehle werden mit cwd=PROJECT_DIR ausgeführt, sodass
         relative Pfade korrekt aufgelöst werden.
+
+        Bei stream=True: Ausgabe via Popen live anzeigen (stdout+stderr
+        zusammengeführt), kein Timeout. Geeignet für lange laufende Befehle
+        wie 'gw read' (Diskette einlesen).
         """
         self._log(f"  > {' '.join(cmd)}")
+        if stream:
+            with subprocess.Popen(
+                cmd, cwd=PROJECT_DIR,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, errors='replace', bufsize=1
+            ) as proc:
+                for line in proc.stdout:
+                    line = line.rstrip('\r\n')
+                    if line:
+                        self._log(f"    {line}")
+                returncode = proc.wait()
+            if returncode != 0:
+                raise RuntimeError(
+                    f"Befehl fehlgeschlagen (exit {returncode}): {' '.join(cmd)}"
+                )
+            return subprocess.CompletedProcess(cmd, returncode, '', '')
         result = subprocess.run(
             cmd, cwd=PROJECT_DIR, capture_output=True, text=True,
             timeout=300, errors='replace'
@@ -495,7 +560,7 @@ class ExtractApp:
             ])
             self._log("[DONE] Disketteninhalt angezeigt.")
 
-            if temp_img and os.path.isfile(temp_img):
+            if temp_img and os.path.isfile(temp_img) and self.delete_tmp_var.get():
                 os.remove(temp_img)
 
             self._set_status('Bereit')
@@ -578,7 +643,7 @@ class ExtractApp:
                     self.gw_cmd, 'read',
                     '--diskdefs=cpaFormates.cfg', f'--format={fmt}',
                     img_rel
-                ])
+                ], stream=True)
                 temp_img = os.path.join(PROJECT_DIR, img_rel)
             else:
                 # Datei einlesen: bei HFE/SCP zuerst nach IMG konvertieren
@@ -656,8 +721,11 @@ class ExtractApp:
 
             # Temporäres Image löschen (nur bei GW-Einlesen oder HFE/SCP-Konvertierung)
             if temp_img and os.path.isfile(temp_img):
-                os.remove(temp_img)
-                self._log(f"[INFO] Temporäres Image gelöscht.")
+                if self.delete_tmp_var.get():
+                    os.remove(temp_img)
+                    self._log(f"[INFO] Temporäres Image gelöscht.")
+                else:
+                    self._log(f"[INFO] Temporäres Image behalten: {temp_img}")
 
             self._set_status('Fertig')
 

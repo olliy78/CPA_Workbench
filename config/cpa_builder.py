@@ -7,16 +7,15 @@ cpa_builder.py - Build-Engine für das CP/A Betriebssystem
 Dieses Modul bildet den Kern des Build-Systems und ersetzt sämtliche Makefiles
 durch reines Python. Es steuert den gesamten Build-Prozess:
 
-  - Assemblierung der Z80-Quellen mit M80 (via CPM-Emulator unter Wine/Linux
-    oder nativ unter Windows)
+  - Assemblierung der Z80-Quellen mit M80 (via cparun CP/M-Emulator)
   - Linken der erzeugten ERL-Module mit LINKMT zu @OS.COM
   - Erzeugung von Diskettenimages (IMG-Format, gefüllt mit 0xE5)
   - Konvertierung in HFE- und SCP-Formate (via Greaseweazle)
   - Schreiben auf physikalische Diskettenlaufwerke (via Greaseweazle)
 
 Die Build-Engine arbeitet plattformübergreifend:
-  - Linux: M80/LINKMT werden über Wine und cpm.exe ausgeführt
-  - Windows: M80/LINKMT laufen nativ über cpm.exe
+  - Linux: M80/LINKMT werden über cparun (eigener CP/M-Emulator) ausgeführt
+  - Windows: M80/LINKMT laufen über cparun.exe
 
 Die Klasse CPABuilder wird von der GUI (cpa_build.py) instanziiert und
 über einen Log-Callback mit der Oberfläche verbunden.
@@ -51,7 +50,7 @@ class CPABuilder:
     # Verzeichnis-Konstanten (relativ zum Projektverzeichnis)
     BUILD_DIR = 'build'               # Ausgabeverzeichnis für Build-Artefakte
     ADDITIONS_DIR = 'additions'        # Zusätzliche Dateien für die Diskette
-    TOOLS_DIR = 'tools'                # cpmcp, cpmls, m80.com, linkmt.com
+    TOOLS_DIR = 'tools'                # cparun, cpmcp, cpmls, m80.com, linkmt.com
     GW_INSTALL_URL = 'git+https://github.com/keirf/greaseweazle@latest'
     CFG_FILE = 'cpaFormates.cfg'       # Greaseweazle-Formatdefinitionen
 
@@ -73,18 +72,17 @@ class CPABuilder:
     def _setup_platform(self):
         """Plattformspezifische Pfade und Kommandos ermitteln.
 
-        Linux: M80/LINKMT laufen über Wine + cpm.exe (CP/M-Emulator).
-        Windows: cpm.exe wird direkt aufgerufen.
+        M80/LINKMT werden über cparun (eigener CP/M-Emulator) ausgeführt.
         cpmtools (cpmcp/cpmls) befinden sich im tools/-Verzeichnis.
         """
         is_linux = platform.system() == 'Linux'
 
         if is_linux:
-            self.cpm_cmd = ['wine', 'cpm.exe']
+            self.cparun = os.path.join('tools', 'cparun')
             self.cpmcp = os.path.join('tools', 'cpmcp')
             self.cpmls = os.path.join('tools', 'cpmls')
         else:
-            self.cpm_cmd = ['cpm.exe']
+            self.cparun = os.path.join('tools', 'cparun.exe')
             self.cpmcp = os.path.join('tools', 'cpmcp.exe')
             self.cpmls = os.path.join('tools', 'cpmls.exe')
 
@@ -147,36 +145,62 @@ class CPABuilder:
         """Log-Nachricht ausgeben."""
         self.log_callback(msg)
 
-    def _run(self, cmd, cwd=None, check=True):
+    def _run(self, cmd, cwd=None, check=True, timeout=120, stream=False):
         """Externen Befehl ausführen, Ausgabe loggen und optional Fehler werfen.
 
         Args:
-            cmd: Befehl als Liste (z.B. ['wine', 'cpm.exe', 'm80', ...])
+            cmd: Befehl als Liste (z.B. ['tools/cparun', '-dir', 'build', 'm80', ...])
             cwd: Arbeitsverzeichnis (Standard: self.project_dir)
             check: Bei True wird bei Rückgabewert != 0 ein RuntimeError geworfen
+            timeout: Timeout in Sekunden (Standard: 120, None = kein Timeout)
+            stream: Bei True wird die Ausgabe via Popen live angezeigt (kein Timeout).
+                    stdout und stderr werden zusammengeführt – geeignet für
+                    lange laufende Befehle wie 'gw write' (Diskette schreiben).
         Returns:
             subprocess.CompletedProcess Objekt mit stdout/stderr
         """
         cwd = cwd or self.project_dir
         self.log(f"  > {' '.join(cmd)}")
         try:
-            result = subprocess.run(
-                cmd, cwd=cwd, capture_output=True, text=True,
-                timeout=120, errors='replace'
-            )
-            if result.stdout.strip():
-                for line in result.stdout.strip().splitlines():
-                    self.log(f"    {line}")
-            if result.stderr.strip():
-                for line in result.stderr.strip().splitlines():
-                    self.log(f"    {line}")
-            if check and result.returncode != 0:
-                raise RuntimeError(
-                    f"Befehl fehlgeschlagen (exit {result.returncode}): {' '.join(cmd)}"
+            if stream:
+                # Streaming-Modus: Ausgabe Zeile für Zeile in Echtzeit anzeigen.
+                # stderr wird nach stdout umgeleitet (gw schreibt Fortschritt auf stderr).
+                # Kein Timeout – Befehl läuft bis zum natürlichen Ende.
+                with subprocess.Popen(
+                    cmd, cwd=cwd,
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, errors='replace', bufsize=1
+                ) as proc:
+                    for line in proc.stdout:
+                        line = line.rstrip('\r\n')
+                        if line:
+                            self.log(f"    {line}")
+                    returncode = proc.wait()
+                if check and returncode != 0:
+                    raise RuntimeError(
+                        f"Befehl fehlgeschlagen (exit {returncode}): {' '.join(cmd)}"
+                    )
+                return subprocess.CompletedProcess(cmd, returncode, '', '')
+            else:
+                result = subprocess.run(
+                    cmd, cwd=cwd, capture_output=True, text=True,
+                    timeout=timeout, errors='replace'
                 )
-            return result
+                if result.stdout.strip():
+                    for line in result.stdout.strip().splitlines():
+                        self.log(f"    {line}")
+                if result.stderr.strip():
+                    for line in result.stderr.strip().splitlines():
+                        self.log(f"    {line}")
+                if check and result.returncode != 0:
+                    raise RuntimeError(
+                        f"Befehl fehlgeschlagen (exit {result.returncode}): {' '.join(cmd)}"
+                    )
+                return result
         except FileNotFoundError:
             raise RuntimeError(f"Programm nicht gefunden: {cmd[0]}")
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(f"Timeout nach {timeout}s: {' '.join(cmd)}")
 
     # -----------------------------------------------------------------------
     # Konfigurationsdatei - .config im Kconfig-Format lesen/schreiben
@@ -382,7 +406,7 @@ class CPABuilder:
         Ablauf in 7 Schritten:
         1. .mac-Quelldateien nach build/ kopieren (gemeinsam + variantenspezifisch)
         2. Vorkompilierte .erl-Module aus prebuilt/ kopieren
-        3. Build-Tools (m80.com, linkmt.com, cpm.exe) nach build/ kopieren
+        3. Build-Tools (m80.com, linkmt.com) nach build/ kopieren
         4. M80: Listing erzeugen (für /p:-Wert-Extraktion)
         5. M80: ERL-Datei assemblieren
         6. /p:-Wert extrahieren und mit LINKMT zu @OS.COM linken
@@ -426,9 +450,10 @@ class CPABuilder:
             if not os.path.exists(dst):
                 shutil.copy2(erl, dst)
 
-        # STEP 3: Build-Tools (M80 Assembler, LINKMT Linker, CP/M-Emulator) kopieren
+        # STEP 3: Build-Tools (M80 Assembler, LINKMT Linker) nach build/ kopieren
+        # cparun bleibt in tools/ und wird mit -dir auf build/ gelenkt
         self.log("[STEP 3] Kopiere Build-Tools nach build/")
-        for tool in ['m80.com', 'linkmt.com', 'cpm.exe']:
+        for tool in ['m80.com', 'linkmt.com']:
             src = os.path.join(self._abs(paths['tools_dir']), tool)
             if os.path.isfile(src):
                 shutil.copy2(src, build_abs)
@@ -436,15 +461,16 @@ class CPABuilder:
         # STEP 4: Assemblieren mit M80 - Listing erzeugen (für /p:-Wert-Extraktion)
         # Das Listing enthält den /p:-Wert, der für den Linker benötigt wird
         self.log("[STEP 4] Assemblieren mit M80")
+        cparun_abs = os.path.abspath(self._abs(self.cparun))
         result = self._run(
-            self.cpm_cmd + ['m80', f'={main_src}/L'],
+            [cparun_abs, '-dir', build_abs, 'm80', f'={main_src}/L'],
             cwd=build_abs, check=False
         )
 
         # STEP 5: M80 Assemblierung - ERL-Datei (relocatable Objektcode) erzeugen
         self.log(f"[STEP 5] Assembliere {main_src}.erl")
         self._run(
-            self.cpm_cmd + ['m80', f'{main_src}.erl={main_src}'],
+            [cparun_abs, '-dir', build_abs, 'm80', f'{main_src}.erl={main_src}'],
             cwd=build_abs
         )
 
@@ -458,14 +484,14 @@ class CPABuilder:
         # Reihenfolge: cpabas (BIOS-Basis), ccp (Console Command Processor),
         # bdos (Basic Disk Operating System), bios/biop (BIOS der Variante)
         self._run(
-            self.cpm_cmd + ['linkmt', f'@OS=cpabas,ccp,bdos,{main_src}/p:{p_value}'],
+            [cparun_abs, '-dir', build_abs, 'linkmt', f'@OS=cpabas,ccp,bdos,{main_src}/p:{p_value}'],
             cwd=build_abs
         )
 
         # STEP 7: Temporäre Dateien aufräumen (alles außer @os.com entfernen)
         self.log("[STEP 7] Aufräumen temporärer Dateien")
         for pattern in ['*.syp', '*.rel', '*.mac', '*.MAC', '*.erl',
-                        'cpm.exe', 'm80.com', 'linkmt.com']:
+                        'm80.com', 'linkmt.com']:
             for f in glob.glob(os.path.join(build_abs, pattern)):
                 basename = os.path.basename(f).lower()
                 if basename != '@os.com':
@@ -646,7 +672,7 @@ class CPABuilder:
             self.gw_cmd, 'write',
             f'--diskdefs={self.CFG_FILE}', f'--format={fmt}',
             final_image
-        ])
+        ], stream=True)
         self.log("[DONE] Diskettenimage auf Laufwerk geschrieben.")
 
     # -----------------------------------------------------------------------

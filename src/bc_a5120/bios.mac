@@ -203,7 +203,7 @@ rambyt	equ	ramkb*1024
 ; Bei "oss"=0 erfolgt kein Test auf eine evtl. vorhandene
 ; OSS-Karte.
 
-oss	equ	0	;=0, wenn keine OSS-Karte vorhanden
+oss	equ	1	;=0, wenn keine OSS-Karte vorhanden
 ;			 =1, wenn evtl. OSS-Karte vorhanden
 	IF	oss
 biosln	aset	biosln+180h
@@ -633,7 +633,7 @@ biosln	aset	biosln+70h
 
 diskA	equ	11580
 diskB	equ	11580
-diskC	equ	11580
+diskC	equ	0
 diskD	equ	0
 
 ; Es wird eine automatische Formaterkennung fuer gaengige CP/M-

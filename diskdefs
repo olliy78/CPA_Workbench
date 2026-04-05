@@ -96,7 +96,7 @@ diskdef cpa800
   os 2.2
 end 
 
-# Diskdefinition für SCPX780 (5" 80T double sided) mit 2 Bootsektoren
+# Diskdefinition für SCPX780 (5" 80T double sided) mit 4 Bootsektoren für PRG710
 diskdef scpx780
   seclen 1024
   tracks 160
@@ -127,6 +127,5 @@ diskdef scpprg780
   maxdir 128
   skew 0
   boottrk 0
-  offset 
   os 2.2
 end

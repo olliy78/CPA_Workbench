@@ -56,32 +56,45 @@ GW_INSTALL_URL = 'git+https://github.com/keirf/greaseweazle@latest'
 # ---------------------------------------------------------------------------
 
 def _parse_diskdefs(diskdefs_path):
-    """Formate mit ihren Größen aus der diskdefs-Datei auslesen.
+    """Formate mit ihren Größen und Kommentaren aus der diskdefs-Datei auslesen.
 
     Berechnet für jedes Format die Image-Größe in Kilobyte aus den
     Parametern seclen, sectrk und tracks: size_kb = seclen * sectrk * tracks / 1024.
+    Der Kommentar in der Zeile direkt vor 'diskdef' wird als Beschreibung genutzt.
 
     Returns:
-        list: Liste von Tupeln (name, size_kb), z.B. [('cpa800', 800), ('cpa780', 780)]
+        tuple: (formats, comments) mit
+            formats  -- Liste von Tupeln (name, size_kb)
+            comments -- Dict {name: kommentar_text}
     """
     formats = []
+    comments = {}
     if not os.path.isfile(diskdefs_path):
-        return formats
+        return formats, comments
     name = None
     seclen = sectrk = tracks = 0
+    last_comment = ''
     with open(diskdefs_path, 'r', encoding='utf-8') as f:
         for line in f:
+            raw = line
             line = line.strip()
+            if line.startswith('#'):
+                last_comment = line.lstrip('#').strip()
+                continue
             m = re.match(r'^diskdef\s+(\S+)', line)
             if m:
                 if name is not None:
                     size_kb = (seclen * sectrk * tracks) // 1024
                     formats.append((name, size_kb))
                 name = m.group(1)
+                comments[name] = last_comment
                 seclen = sectrk = tracks = 0
+                last_comment = ''
                 continue
             if name is None:
                 continue
+            if line and not line.startswith('diskdef'):
+                last_comment = ''
             m = re.match(r'^seclen\s+(\d+)', line)
             if m:
                 seclen = int(m.group(1))
@@ -91,13 +104,11 @@ def _parse_diskdefs(diskdefs_path):
             m = re.match(r'^tracks\s+(\d+)', line)
             if m:
                 tracks = int(m.group(1))
-            if line == 'end':
-                pass
     # Letztes Format in der Datei abschließen
     if name is not None:
         size_kb = (seclen * sectrk * tracks) // 1024
         formats.append((name, size_kb))
-    return formats
+    return formats, comments
 
 
 # ============================================================================
@@ -139,12 +150,13 @@ class WriteDiskApp:
 
         # Verfügbare Diskettenformate mit Größenangaben laden
         diskdefs_path = os.path.join(PROJECT_DIR, 'diskdefs')
-        self.disk_formats = _parse_diskdefs(diskdefs_path)
+        self.disk_formats, self.format_comments = _parse_diskdefs(diskdefs_path)
         self.format_names = [name for name, _ in self.disk_formats]  # Nur Namen für Combobox
         self.format_sizes = {name: size for name, size in self.disk_formats}  # Name → Größe
         if not self.format_names:
             self.format_names = ['cpa800', 'cpa780']  # Fallback-Formate
             self.format_sizes = {'cpa800': 800, 'cpa780': 780}
+            self.format_comments = {}
 
         self._create_ui()    # Oberfläche aufbauen
         self._poll_log()     # Log-Polling-Timer starten
@@ -194,6 +206,13 @@ class WriteDiskApp:
         fmt_combo = ttk.Combobox(settings_frame, textvariable=self.format_var,
                                  values=self.format_names, state='readonly', width=25)
         fmt_combo.grid(row=row, column=1, sticky='w', pady=4)
+        # Beschreibungs-Label: zeigt den Kommentar zum gewählten Format
+        self.fmt_desc_var = tk.StringVar()
+        ttk.Label(settings_frame, textvariable=self.fmt_desc_var,
+                  foreground='#555555', wraplength=300, justify='left').grid(
+            row=row, column=2, sticky='w', padx=(8, 0), pady=4)
+        fmt_combo.bind('<<ComboboxSelected>>', self._on_format_change)
+        self._on_format_change()  # Initial-Beschreibung setzen
         row += 1
 
         # Separator
@@ -233,6 +252,15 @@ class WriteDiskApp:
         self.outfile_btn = ttk.Button(settings_frame, text='Durchsuchen...',
                                       command=self._choose_outfile)
         self.outfile_btn.grid(row=row, column=2, padx=(5, 0), pady=4)
+        row += 1
+
+        # Option: Temporäres Image nach der Operation löschen
+        self.delete_tmp_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            settings_frame,
+            text='Temporäre .img löschen',
+            variable=self.delete_tmp_var
+        ).grid(row=row, column=0, columnspan=3, sticky='w', padx=(4, 0), pady=(6, 2))
         row += 1
 
         # Initial: Ausgabefelder je nach Medium aktualisieren
@@ -300,6 +328,11 @@ class WriteDiskApp:
             stem = Path(current).stem if current else 'cpadisk'
             ext_map = {'img': '.img', 'hfe': '.hfe', 'scp': '.scp'}
             self.outfile_var.set(f"{stem}{ext_map[output]}")
+
+    def _on_format_change(self, _event=None):
+        """Beschreibungs-Label mit dem Kommentar des gewählten Formats aktualisieren."""
+        fmt = self.format_var.get()
+        self.fmt_desc_var.set(self.format_comments.get(fmt, ''))
 
     def _choose_source(self):
         """Verzeichnisauswahl-Dialog für Quellordner."""
@@ -427,13 +460,33 @@ class WriteDiskApp:
         self.gw_cmd = gw_venv
         self._log(f"[DONE] Greaseweazle installiert: {gw_venv}")
 
-    def _run(self, cmd):
+    def _run(self, cmd, stream=False):
         """Externen Befehl ausführen, Ausgabe loggen und Fehler werfen.
 
         Alle Befehle werden mit cwd=PROJECT_DIR ausgeführt, sodass
         relative Pfade korrekt aufgelöst werden.
+
+        Bei stream=True: Ausgabe via Popen live anzeigen (stdout+stderr
+        zusammengeführt), kein Timeout. Geeignet für lange laufende Befehle
+        wie 'gw write' (Diskette beschreiben).
         """
         self._log(f"  > {' '.join(cmd)}")
+        if stream:
+            with subprocess.Popen(
+                cmd, cwd=PROJECT_DIR,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, errors='replace', bufsize=1
+            ) as proc:
+                for line in proc.stdout:
+                    line = line.rstrip('\r\n')
+                    if line:
+                        self._log(f"    {line}")
+                returncode = proc.wait()
+            if returncode != 0:
+                raise RuntimeError(
+                    f"Befehl fehlgeschlagen (exit {returncode}): {' '.join(cmd)}"
+                )
+            return subprocess.CompletedProcess(cmd, returncode, '', '')
         result = subprocess.run(
             cmd, cwd=PROJECT_DIR, capture_output=True, text=True,
             timeout=300, errors='replace'
@@ -617,12 +670,15 @@ class WriteDiskApp:
                     self.gw_cmd, 'write',
                     '--diskdefs=cpaFormates.cfg', f'--format={fmt}',
                     tmp_image
-                ])
+                ], stream=True)
                 self._log("[DONE] Image auf Diskette geschrieben.")
 
             # Temporäres Image im build/-Verzeichnis aufräumen
             if os.path.isfile(tmp_image_abs):
-                os.remove(tmp_image_abs)
+                if self.delete_tmp_var.get():
+                    os.remove(tmp_image_abs)
+                else:
+                    self._log(f"[INFO] Temporäres Image behalten: {tmp_image_abs}")
 
             self._set_status('Fertig')
 
