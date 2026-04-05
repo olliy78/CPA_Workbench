@@ -51,7 +51,7 @@ Dies war die erste öffentliche Version der CPA Workbench mit grundlegender Funk
 - **Python 3.8 oder neuer** (mit `tkinter` – wird bei den meisten Installationen mitgeliefert)
 - **CP/M-Emulator `cpm.exe`** (liegt im Ordner `tools/`)
 - **CP/M-Tools `cpmcp` und `cpmls`** (liegen im Ordner `tools/`)
-- Optional: **Greaseweazle** (`gw`) für das Schreiben auf physikalische Disketten und die Konvertierung in HFE/SCP-Formate
+- Optional: **Greaseweazle** (`gw`) für das Schreiben auf physikalische Disketten und die Konvertierung in HFE/SCP-Formate – wird bei Bedarf automatisch in eine virtuelle Umgebung (`.venv`) installiert
 
 ### Windows
 
@@ -91,12 +91,6 @@ sudo dnf install python3 python3-tkinter wine
 sudo pacman -S python tk wine
 ```
 
-Optional: `greaseweazle` über `pip` installieren:
-
-```sh
-pip3 install greaseweazle
-```
-
 Für die CP/M-Tools `cpmcp` und `cpmls` liegen im Ordner `tools` bereits unter Debian Linux kompilierte Versionen bei. Sollten diese nicht funktionieren, wird empfohlen, die CP/M-Tools selbst aus dem Quelltext zu übersetzen. Das mit Debian ausgelieferte Binärpaket ist fehlerhaft und verhält sich bei den hier verwendeten Diskettenformaten nicht wie erwartet.
 
 **CPA Workbench starten:**
@@ -114,12 +108,6 @@ Unter macOS wird ebenfalls **Wine** benötigt, um den CP/M-Emulator auszuführen
 ```sh
 brew install python python-tk
 brew install --cask wine-stable
-```
-
-Optional: `greaseweazle` über `pip` installieren:
-
-```sh
-pip3 install greaseweazle
 ```
 
 Für die CP/M-Tools `cpmcp` und `cpmls` müssen unter macOS die Quellen selbst kompiliert werden, da im Ordner `tools` nur Linux-Binaries beiliegen.
@@ -358,9 +346,9 @@ Das Erstellen und Schreiben von Systemdisketten erfolgt komfortabel über die GU
 
 - **Nur @OS.COM bauen**: Erstellt nur das Betriebssystem im `build/`-Verzeichnis.
 - **Diskettenimage als *.img**: Erstellt ein Standard-Diskettenimage (`build/cpadisk.img`).
-- **Diskettenimage als *.hfe**: Erstellt ein HFE-Diskettenimage für Emulatoren und spezielle Hardware.
-- **Diskettenimage als *.scp**: Erstellt ein SCP-Diskettenimage für erweiterte Kompatibilität.
-- **Auf Laufwerk schreiben**: Schreibt das erzeugte Diskettenimage direkt auf eine physikalische Diskette, sofern ein Greaseweazle-Laufwerk angeschlossen ist.
+- **Diskettenimage als *.hfe**: Erstellt ein HFE-Diskettenimage für Emulatoren und spezielle Hardware (Greaseweazle wird bei Bedarf automatisch installiert).
+- **Diskettenimage als *.scp**: Erstellt ein SCP-Diskettenimage für erweiterte Kompatibilität (Greaseweazle wird bei Bedarf automatisch installiert).
+- **Auf Laufwerk schreiben**: Schreibt das erzeugte Diskettenimage direkt auf eine physikalische Diskette (Greaseweazle-Hardware und -Software nötig, wird bei Bedarf automatisch installiert).
 
 Die Auswahl des gewünschten Ziel-Formats erfolgt im Tab „Build-Optionen" der GUI.
 

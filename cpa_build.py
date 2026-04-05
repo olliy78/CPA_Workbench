@@ -1,59 +1,89 @@
 #!/usr/bin/env python3
-# Copyright (c) 2025 by olliy78
+# Copyright (c) 2026 Olaf Krieger
 # SPDX-License-Identifier: MIT
 """
 CP/A Workbench - Grafisches Konfigurations- und Build-System
 
-Ersetzt das konsolenbasierte menuconfig und die Makefiles durch eine
-grafische Tkinter-Oberfläche mit Mausbedienung.
+Dieses Modul bildet die Hauptanwendung der CP/A Workbench. Es stellt eine
+grafische Benutzeroberfläche (GUI) auf Basis von Tkinter bereit, die das
+konsolenbasierte menuconfig und die Makefiles vollständig ersetzt.
+
+Die Anwendung ermöglicht:
+  - Tab 1: Auswahl der Systemvariante (aus src/ Unterordnern, z.B. bc_a5120, pc_1715)
+  - Tab 2: Dynamische Systemkonfiguration (Hardware, RAM-Disk, Laufwerke, Schnittstellen)
+           basierend auf Kconfig.system der gewählten Variante
+  - Tab 3: Build-Optionen (Ausgabeformat: OS, IMG, HFE, SCP, Diskette schreiben)
+  - Build-Steuerung mit Echtzeit-Log-Ausgabe in separatem Thread
+  - Tools-Menü zum Starten von ReadDisk und WriteDisk
+  - Hilfe-Menü mit README-Anzeige (Markdown-Rendering) und CP/A-Dokumentation
+
+Die Konfiguration wird im Kconfig-Format (.config) gespeichert und über
+patch_mac.py bidirektional mit den Assembler-Quelldateien (.mac) synchronisiert.
+
+Autor:   Olaf Krieger
+Lizenz:  MIT (siehe LICENSE)
 
 Verwendung:
     python cpa_build.py
-
-Funktionalität:
-  - Tab 1: Auswahl der Systemvariante (aus src/ Unterordnern)
-  - Tab 2: Systemkonfiguration (Hardware, RAM-Disk, Laufwerke, Schnittstellen)
-  - Tab 3: Build-Optionen (Ausgabeformat, Diskettentyp)
-  - Build-Steuerung mit Echtzeit-Log-Ausgabe
 """
 
 import os
 import sys
 import re
+import subprocess
 import threading
 import queue
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 
-# Projektverzeichnis ermitteln
+# ---------------------------------------------------------------------------
+# Projektverzeichnis ermitteln und config/-Verzeichnis in den Importpfad
+# aufnehmen, damit cpa_kconfig_parser und cpa_builder importiert werden können
+# ---------------------------------------------------------------------------
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(PROJECT_DIR, 'config'))
 
+# Kconfig-Parser für die hierarchische Konfigurationsstruktur
 from cpa_kconfig_parser import parse_kconfig, KconfigConfig, KconfigChoice, KconfigMenu
+# Build-Engine für Assemblierung, Linken und Image-Erzeugung
 from cpa_builder import CPABuilder
 
-
+# Pfad zur zentralen Konfigurationsdatei (.config im Kconfig-Format)
 CONFIG_FILE = os.path.join(PROJECT_DIR, '.config')
 
 
+# ============================================================================
+# ScrollableFrame - Scrollbarer Frame für lange Konfigurationsseiten
+# ============================================================================
+
 class ScrollableFrame(ttk.Frame):
-    """Frame mit vertikalem Scrollbalken für lange Konfigurationsseiten."""
+    """Frame mit vertikalem Scrollbalken für lange Konfigurationsseiten.
+
+    Wird für die Tabs Systemvariante, Systemkonfiguration und Build-Optionen
+    verwendet, damit auch umfangreiche Konfigurationen vollständig angezeigt
+    werden können. Der innere Frame (self.inner) passt sich automatisch an
+    die Canvas-Breite an und unterstützt Mausrad-Scrolling.
+    """
 
     def __init__(self, parent):
         super().__init__(parent)
+        # Canvas als Scroll-Container
         self.canvas = tk.Canvas(self, highlightthickness=0)
         scrollbar = ttk.Scrollbar(self, orient='vertical', command=self.canvas.yview)
+        # Innerer Frame, der die eigentlichen Widgets enthält
         self.inner = ttk.Frame(self.canvas)
 
+        # Events: Scrollbereich und Breitenanpassung bei Größenänderung
         self.inner.bind('<Configure>', self._on_inner_configure)
         self.canvas.bind('<Configure>', self._on_canvas_configure)
+        # Inneren Frame als Fenster im Canvas einbetten (oben links verankert)
         self.canvas_window = self.canvas.create_window((0, 0), window=self.inner, anchor='nw')
         self.canvas.configure(yscrollcommand=scrollbar.set)
 
         self.canvas.pack(side='left', fill='both', expand=True)
         scrollbar.pack(side='right', fill='y')
 
-        # Mausrad-Scrolling
+        # Mausrad-Scrolling: nur aktiv wenn Maus über dem Canvas ist
         self.canvas.bind('<Enter>', self._bind_mousewheel)
         self.canvas.bind('<Leave>', self._unbind_mousewheel)
 
@@ -66,56 +96,88 @@ class ScrollableFrame(ttk.Frame):
         self.canvas.itemconfig(self.canvas_window, width=event.width)
 
     def _bind_mousewheel(self, event):
+        """Mausrad-Events global binden (bei Maus-Enter über Canvas)."""
         self.canvas.bind_all('<MouseWheel>', self._on_mousewheel)
-        self.canvas.bind_all('<Button-4>', self._on_mousewheel)
-        self.canvas.bind_all('<Button-5>', self._on_mousewheel)
+        self.canvas.bind_all('<Button-4>', self._on_mousewheel)   # Linux: Hoch
+        self.canvas.bind_all('<Button-5>', self._on_mousewheel)   # Linux: Runter
 
     def _unbind_mousewheel(self, event):
+        """Mausrad-Events global entbinden (bei Maus-Leave)."""
         self.canvas.unbind_all('<MouseWheel>')
         self.canvas.unbind_all('<Button-4>')
         self.canvas.unbind_all('<Button-5>')
 
     def _on_mousewheel(self, event):
-        if event.num == 4:
+        """Mausrad-Scrolling verarbeiten (Linux Button-4/5 und Windows/macOS delta)."""
+        if event.num == 4:          # Linux: Mausrad hoch
             self.canvas.yview_scroll(-3, 'units')
-        elif event.num == 5:
+        elif event.num == 5:        # Linux: Mausrad runter
             self.canvas.yview_scroll(3, 'units')
-        elif event.delta:
+        elif event.delta:           # Windows/macOS: delta-Wert
             self.canvas.yview_scroll(int(-event.delta / 120), 'units')
 
 
+# ============================================================================
+# CPAWorkbenchApp - Hauptanwendung der CP/A Workbench
+# ============================================================================
+
 class CPAWorkbenchApp:
-    """Hauptanwendung für das CP/A Workbench GUI."""
+    """Hauptanwendung für das CP/A Workbench GUI.
+
+    Verwaltet die gesamte Benutzeroberfläche mit drei Tabs:
+    - Systemvariante: Auswahl des Ziel-Hardwaresystems (z.B. A5120, PC1715)
+    - Systemkonfiguration: Dynamisch aus Kconfig.system erzeugte Optionen
+    - Build-Optionen: Ausgabeformat und Diskettentyp
+
+    Die Klasse steuert außerdem den Build-Prozess (in separatem Thread),
+    die Konfigurationsverwaltung (.config Datei) und die Integration mit
+    patch_mac.py für die bidirektionale Synchronisation der Assembler-Quellen.
+    """
 
     def __init__(self):
+        """Fenster initialisieren, Builder erstellen, UI aufbauen und Config laden."""
         self.root = tk.Tk()
         self.root.title('CP/A Workbench - Konfigurations- und Build-System')
         self.root.geometry('1200x900')
         self.root.minsize(900, 600)
 
-        self.config = {}                # Aktuelle Konfiguration
-        self.variant_var = tk.StringVar()
-        self.system_widgets = {}        # name → tk.Variable für System-Configs
-        self.build_widgets = {}         # name → tk.Variable für Build-Configs
-        self.log_queue = queue.Queue()
-        self.build_running = False
+        self.config = {}                # Aktuelle Konfiguration (Dict: CONFIG_KEY → Wert)
+        self.variant_var = tk.StringVar()  # Gewählte Systemvariante als String
+        self.system_widgets = {}        # CONFIG_KEY → (Typ, tk.Variable) für System-Configs
+        self.build_widgets = {}         # CONFIG_KEY → (Typ, tk.Variable) für Build-Configs
+        self.log_queue = queue.Queue()  # Thread-sichere Warteschlange für Log-Nachrichten
+        self.build_running = False      # Flag: läuft gerade ein Build?
 
+        # Build-Engine mit Callback für Log-Ausgaben in die GUI
         self.builder = CPABuilder(PROJECT_DIR, log_callback=self._queue_log)
 
-        self._create_ui()
-        self._load_config()
-        self._poll_log()
+        self._create_ui()               # Oberfläche aufbauen
+        self._load_config()             # Konfiguration aus .config laden
+        self._poll_log()                # Log-Polling-Timer starten
 
-    # --- UI aufbauen ---
+    # -----------------------------------------------------------------------
+    # UI aufbauen - Menüleiste, Tabs und Log-Bereich
+    # -----------------------------------------------------------------------
 
     def _create_ui(self):
-        """Hauptoberfläche erstellen."""
-        # Menüleiste
+        """Hauptoberfläche erstellen mit Menüleiste, Notebook-Tabs und Log-Bereich."""
+        # --- Menüleiste ---
         menubar = tk.Menu(self.root)
+
+        # Datei-Menü mit Beenden-Eintrag
         file_menu = tk.Menu(menubar, tearoff=0)
         file_menu.add_command(label='Beenden', command=self._on_close)
         menubar.add_cascade(label='Datei', menu=file_menu)
 
+        # Tools-Menü zum Starten externer Werkzeuge (ReadDisk/WriteDisk)
+        tools_menu = tk.Menu(menubar, tearoff=0)
+        tools_menu.add_command(label='ReadDisk (Diskette einlesen)',
+                               command=self._launch_readdisk)
+        tools_menu.add_command(label='WriteDisk (Diskette schreiben)',
+                               command=self._launch_writedisk)
+        menubar.add_cascade(label='Tools', menu=tools_menu)
+
+        # Hilfe-Menü mit README und CP/A-Dokumentation
         help_menu = tk.Menu(menubar, tearoff=0)
         help_menu.add_command(label='README anzeigen',
                              command=lambda: self._show_readme())
@@ -131,29 +193,29 @@ class CPAWorkbenchApp:
         main_pane = ttk.PanedWindow(self.root, orient='vertical')
         main_pane.pack(fill='both', expand=True, padx=5, pady=5)
 
-        # Notebook (Tabs)
+        # Notebook (Tabs) für die drei Konfigurationsbereiche
         self.notebook = ttk.Notebook(main_pane)
         main_pane.add(self.notebook, weight=3)
 
-        # Tab 1: Systemvariante
+        # Tab 1: Systemvariante (welche Hardware soll gebaut werden?)
         self.variant_tab = ScrollableFrame(self.notebook)
         self.notebook.add(self.variant_tab, text='  Systemvariante  ')
         self._create_variant_tab()
 
-        # Tab 2: Systemkonfiguration (wird dynamisch geladen)
+        # Tab 2: Systemkonfiguration (wird dynamisch bei Variantenwechsel geladen)
         self.system_tab = ScrollableFrame(self.notebook)
         self.notebook.add(self.system_tab, text='  Systemkonfiguration  ')
 
-        # Tab 3: Build-Optionen
+        # Tab 3: Build-Optionen (Ausgabeformat, Diskettentyp)
         self.build_tab = ScrollableFrame(self.notebook)
         self.notebook.add(self.build_tab, text='  Build-Optionen  ')
         self._create_build_tab()
 
-        # Unterer Bereich: Buttons + Log
+        # --- Unterer Bereich: Aktions-Buttons und scrollbarer Log-Bereich ---
         bottom_frame = ttk.Frame(main_pane)
         main_pane.add(bottom_frame, weight=2)
 
-        # Button-Leiste
+        # Button-Leiste: Speichern, Clean, Bauen, Log löschen
         btn_frame = ttk.Frame(bottom_frame)
         btn_frame.pack(fill='x', pady=(0, 5))
 
@@ -171,11 +233,11 @@ class CPAWorkbenchApp:
                                         command=self._clear_log)
         self.btn_clear_log.pack(side='right', padx=2)
 
-        # Status
+        # Status-Anzeige rechts in der Button-Leiste
         self.status_var = tk.StringVar(value='Bereit')
         ttk.Label(btn_frame, textvariable=self.status_var).pack(side='right', padx=10)
 
-        # Log
+        # Scrollbarer Log-Bereich mit Monospace-Schrift
         self.log_text = scrolledtext.ScrolledText(
             bottom_frame, height=12, state='disabled',
             font=('Consolas', 9) if sys.platform == 'win32' else ('monospace', 9),
@@ -183,15 +245,23 @@ class CPAWorkbenchApp:
         )
         self.log_text.pack(fill='both', expand=True)
 
-        # Help-Fenster-Info
+        # Variable für optionale Hilfe-Anzeige
         self.help_var = tk.StringVar()
 
+        # Fenster-Schließen-Event abfangen (für Build-Abbruch-Warnung)
         self.root.protocol('WM_DELETE_WINDOW', self._on_close)
 
-    # --- Tab 1: Systemvariante ---
+    # -----------------------------------------------------------------------
+    # Tab 1: Systemvariante - Auswahl der Ziel-Hardware
+    # -----------------------------------------------------------------------
 
     def _create_variant_tab(self):
-        """Varianten-Auswahl-Tab aufbauen."""
+        """Varianten-Auswahl-Tab aufbauen.
+
+        Liest alle verfügbaren Systemvarianten aus dem src/-Verzeichnis
+        (z.B. bc_a5120, pc_1715) und erstellt Radiobuttons mit optionaler
+        Beschreibung aus about.txt.
+        """
         frame = self.variant_tab.inner
 
         ttk.Label(frame, text='Systemvariante auswählen:',
@@ -200,9 +270,11 @@ class CPAWorkbenchApp:
                   'Die Konfiguration wird aus src/<variante>/ geladen.',
                   wraplength=800).pack(anchor='w', padx=10, pady=(0, 10))
 
+        # Verfügbare Varianten ermitteln (Name + Beschreibung aus about.txt)
         self.variants = self.builder.get_available_variants()
         self.variant_radios = []
 
+        # Für jede Variante einen Radiobutton mit optionalem Beschreibungstext erstellen
         for name, about in self.variants:
             var_frame = ttk.Frame(frame)
             var_frame.pack(fill='x', padx=10, pady=2)
@@ -218,13 +290,21 @@ class CPAWorkbenchApp:
                 ttk.Label(var_frame, text=f'  — {about}',
                           foreground='gray').pack(side='left', padx=(5, 0))
 
+        # Erste Variante als Vorgabe auswählen
         if self.variants:
             self.variant_var.set(self.variants[0][0])
 
-    # --- Tab 2: Systemkonfiguration ---
+    # -----------------------------------------------------------------------
+    # Tab 2: Systemkonfiguration - dynamisch aus Kconfig.system erzeugt
+    # -----------------------------------------------------------------------
 
     def _refresh_system_tab(self):
-        """System-Tab für die gewählte Variante neu aufbauen."""
+        """System-Tab für die gewählte Variante neu aufbauen.
+
+        Löscht alle vorhandenen Widgets, parst die zugehörige Kconfig.system
+        und rendert die Konfigurationsoptionen (Choice, Config, Menu, Hint)
+        als interaktive GUI-Elemente.
+        """
         # Alte Widgets entfernen
         for w in self.system_tab.inner.winfo_children():
             w.destroy()
@@ -252,7 +332,7 @@ class CPAWorkbenchApp:
             ttk.Label(self.system_tab.inner, text=kconfig.title,
                       font=('', 10, 'bold')).pack(anchor='w', padx=10, pady=(10, 5))
 
-        # Items rendern in eigenem Frame für Grid-Layout
+        # Items im tabellarischen Grid-Layout rendern
         content = ttk.Frame(self.system_tab.inner)
         content.pack(fill='x', padx=0, pady=0)
         self._render_kconfig_items(content, kconfig.children,
@@ -268,7 +348,12 @@ class CPAWorkbenchApp:
         return '\n'.join(filtered).strip()
 
     def _render_kconfig_items(self, parent, items, widgets_dict, prefix):
-        """Kconfig-Elemente als tabellarisches Grid rendern."""
+        """Kconfig-Elemente als tabellarisches Grid rendern.
+
+        Jedes Element wird je nach Typ (Menu, Choice, Config, Hint) in
+        ein dreispaltiges Grid-Layout eingesetzt:
+        Spalte 0: Label, Spalte 1: Widget (Checkbox/Combobox/Entry), Spalte 2: Hilfetext.
+        """
         parent.columnconfigure(0, weight=0)   # Label-Spalte
         parent.columnconfigure(1, weight=0)   # Widget-Spalte
         parent.columnconfigure(2, weight=1)   # Hilfetext-Spalte
@@ -304,7 +389,12 @@ class CPAWorkbenchApp:
                   foreground='#555555', font=('', 9)).pack(anchor='w')
 
     def _render_choice(self, parent, choice, widgets_dict, prefix, row):
-        """choice...endchoice als Label + Combobox mit Hilfetext rendern."""
+        """choice...endchoice als Label + Combobox mit dynamischem Hilfetext rendern.
+
+        Eine Choice-Gruppe stellt eine Exklusiv-Auswahl dar (z.B. RAM-Disk-Typ).
+        Alle Optionen werden in einer Combobox zusammengefasst. Der Hilfetext
+        rechts neben der Combobox aktualisiert sich bei Auswahländerung.
+        """
         if not choice.configs:
             return
 
@@ -317,12 +407,12 @@ class CPAWorkbenchApp:
                            padx=15, pady=(0, 3))
             row[0] += 1
 
-        # Combobox-Werte: (config_name, label_text)
+        # Combobox-Werte aus den Config-Einträgen zusammenstellen (HINT_ ausfiltern)
         options = []
         option_configs = []
         for cfg in choice.configs:
             if cfg.name.startswith('HINT_'):
-                continue
+                continue  # Hinweis-Einträge nicht als Auswahl anzeigen
             display = cfg.label or cfg.name
             options.append((cfg.name, display))
             option_configs.append(cfg)
@@ -361,7 +451,7 @@ class CPAWorkbenchApp:
                                foreground='#555555', font=('', 9))
         help_label.grid(row=row[0], column=2, sticky='nw', padx=(10, 5), pady=3)
 
-        # Hilfetext-Map aufbauen (ohne source= Zeilen)
+        # Hilfetext-Map aufbauen: Anzeigename → bereinigter Hilfetext (ohne source= Zeilen)
         help_map = {}
         for (cfg_name, display), cfg in zip(options, option_configs):
             ht = self._display_help_text(cfg.help_text)
@@ -369,13 +459,15 @@ class CPAWorkbenchApp:
                 help_map[display] = ht
 
         def update_help(event=None):
+            """Hilfetext rechts neben der Combobox bei Auswahländerung aktualisieren."""
             sel = var.get()
             help_label.config(text=help_map.get(sel, ''))
 
         combo.bind('<<ComboboxSelected>>', update_help)
-        update_help()  # Initialen Hilfetext setzen
+        update_help()  # Initialen Hilfetext für die Vorgabe-Auswahl setzen
 
-        # Widget speichern: alle Config-Namen dieser Choice → gleiche Variable
+        # Widget speichern: Alle Config-Namen dieser Choice-Gruppe teilen sich
+        # die gleiche Variable (nur eine Option kann aktiv sein)
         choice_data = {'var': var, 'options': options, 'combo': combo,
                        'update_help': update_help}
         for cfg_name, _ in options:
@@ -384,7 +476,11 @@ class CPAWorkbenchApp:
         row[0] += 1
 
     def _render_config(self, parent, cfg, widgets_dict, prefix, row):
-        """Einzelnes config-Element als Checkbox oder Entry mit Hilfetext rendern."""
+        """Einzelnes config-Element als Checkbox (bool) oder Entry (string) mit Hilfetext rendern.
+
+        Bool-Optionen werden als Checkbox dargestellt, String-Optionen als Eingabefeld.
+        In Spalte 2 erscheint ggf. ein erklärender Hilfetext aus der Kconfig-Datei.
+        """
         config_key = prefix + cfg.name
         help_text = self._display_help_text(cfg.help_text)
 
@@ -415,10 +511,16 @@ class CPAWorkbenchApp:
 
         row[0] += 1
 
-    # --- Tab 3: Build-Optionen ---
+    # -----------------------------------------------------------------------
+    # Tab 3: Build-Optionen - Ausgabeformat und Diskettentyp
+    # -----------------------------------------------------------------------
 
     def _create_build_tab(self):
-        """Build-Optionen-Tab aufbauen."""
+        """Build-Optionen-Tab aufbauen.
+
+        Lädt die Kconfig.build-Datei und rendert die darin definierten
+        Build-Ziele (OS, Diskimage, HFE, SCP, Schreiben) und Diskettentyp-Optionen.
+        """
         kconfig_path = os.path.join(PROJECT_DIR, 'config', 'Kconfig.build')
         if not os.path.isfile(kconfig_path):
             ttk.Label(self.build_tab.inner,
@@ -431,13 +533,15 @@ class CPAWorkbenchApp:
             ttk.Label(self.build_tab.inner, text=kconfig.title,
                       font=('', 10, 'bold')).pack(anchor='w', padx=10, pady=(10, 5))
 
-        # Items rendern in eigenem Frame für Grid-Layout
+        # Items im tabellarischen Grid-Layout rendern
         content = ttk.Frame(self.build_tab.inner)
         content.pack(fill='x', padx=0, pady=0)
         self._render_kconfig_items(content, kconfig.children,
                                    self.build_widgets, 'CONFIG_')
 
-    # --- Hilfe anzeigen ---
+    # -----------------------------------------------------------------------
+    # Hilfe-Anzeige - Popup-Fenster, Textdateien, README mit Markdown
+    # -----------------------------------------------------------------------
 
     def _show_help(self, text):
         """Hilfetext in einem Popup-Fenster anzeigen."""
@@ -468,8 +572,26 @@ class CPAWorkbenchApp:
         txt.config(state='disabled')
         ttk.Button(win, text='Schlie\u00dfen', command=win.destroy).pack(pady=5)
 
+    # -----------------------------------------------------------------------
+    # Externe Tools starten (ReadDisk / WriteDisk)
+    # -----------------------------------------------------------------------
+
+    def _launch_readdisk(self):
+        """ReadDisk-Tool als separaten Prozess starten (tools/readDiskUI.py)."""
+        script = os.path.join(PROJECT_DIR, 'tools', 'readDiskUI.py')
+        subprocess.Popen([sys.executable, script], cwd=PROJECT_DIR)
+
+    def _launch_writedisk(self):
+        """WriteDisk-Tool als separaten Prozess starten (tools/writeDiskUI.py)."""
+        script = os.path.join(PROJECT_DIR, 'tools', 'writeDiskUI.py')
+        subprocess.Popen([sys.executable, script], cwd=PROJECT_DIR)
+
     def _show_readme(self):
-        """README.md mit einfacher Markdown-Formatierung anzeigen."""
+        """README.md mit einfacher Markdown-Formatierung in einem Fenster anzeigen.
+
+        Unterstützt Überschriften (h1-h3), Fettdruck, Kursiv, Inline-Code,
+        Code-Blöcke und Aufzählungslisten.
+        """
         filepath = os.path.join(PROJECT_DIR, 'README.md')
         if not os.path.isfile(filepath):
             messagebox.showerror('Fehler', f'Datei nicht gefunden:\n{filepath}')
@@ -502,7 +624,11 @@ class CPAWorkbenchApp:
 
     @staticmethod
     def _render_markdown(txt, content):
-        """Einfache Markdown-Formatierung in ein Text-Widget rendern."""
+        """Einfache Markdown-Formatierung in ein Text-Widget rendern.
+
+        Verarbeitet zeilenweise: Code-Blöcke (```), Überschriften (#, ##, ###),
+        Aufzählungen (- / *) und Inline-Formatierungen (**bold**, *italic*, `code`).
+        """
         in_code_block = False
         for line in content.split('\n'):
             # Code-Block Start/Ende
@@ -526,7 +652,8 @@ class CPAWorkbenchApp:
             elif line.startswith('  - ') or line.startswith('  * '):
                 txt.insert('end', '    \u2022 ' + line[4:] + '\n', 'bullet')
             else:
-                # Inline-Formatierung: **bold**, *italic*, `code`
+                # Inline-Formatierung: **bold**, *italic*, `code` erkennen
+                # und mit entsprechenden Tags einfügen
                 pos = 0
                 remaining = line
                 while remaining:
@@ -535,7 +662,7 @@ class CPAWorkbenchApp:
                     m_bold = re.search(r'\*\*([^*]+)\*\*', remaining)
                     m_italic = re.search(r'(?<!\*)\*([^*]+)\*(?!\*)', remaining)
 
-                    # Frühestes Match finden
+                    # Frühestes Inline-Match finden (Position im String)
                     matches = []
                     if m:
                         matches.append(('code', m))
@@ -558,34 +685,43 @@ class CPAWorkbenchApp:
                     remaining = remaining[match.end():]
 
                 txt.insert('end', '\n')
-    # --- Konfiguration laden/speichern ---
+
+    # -----------------------------------------------------------------------
+    # Konfiguration laden/speichern - Synchronisation zwischen GUI und .config
+    # -----------------------------------------------------------------------
 
     def _load_config(self):
-        """Konfiguration aus .config laden und GUI aktualisieren."""
+        """Konfiguration aus .config laden und alle GUI-Widgets aktualisieren."""
         self.config = CPABuilder.load_config(CONFIG_FILE)
-        self._config_to_gui()
-        self._on_variant_changed(save=False)
+        self._config_to_gui()           # Config-Werte in GUI-Widgets übertragen
+        self._on_variant_changed(save=False)  # System-Tab für gewählte Variante laden
         self.log_msg('[INFO] Konfiguration geladen.')
 
     def _save_config(self):
-        """GUI-Werte in .config speichern."""
-        self._gui_to_config()
+        """GUI-Werte sammeln und als .config-Datei speichern."""
+        self._gui_to_config()           # GUI-Werte ins Config-Dict übernehmen
         CPABuilder.save_config(self.config, CONFIG_FILE)
         self.log_msg('[INFO] Konfiguration gespeichert.')
 
     def _config_to_gui(self):
-        """Config-Dict → GUI-Widgets."""
-        # Variante
+        """Config-Dict → GUI-Widgets: Variante und Build-Optionen setzen."""
+        # Variante aus Config ermitteln und Radiobutton setzen
         variant = self.builder.get_variant(self.config)
         if variant:
             self.variant_var.set(variant)
 
-        # Build-Widgets
+        # Build-Widgets mit gespeicherten Werten füllen
         self._apply_config_to_widgets(self.build_widgets)
 
     def _apply_config_to_widgets(self, widgets_dict):
-        """Config-Werte auf Widget-Dict anwenden."""
-        applied_choices = set()
+        """Config-Werte auf ein Widget-Dict anwenden.
+
+        Unterstützt drei Widget-Typen:
+        - bool: Checkbox (True/False aus '=y' / 'is not set')
+        - string: Eingabefeld (Textwert)
+        - choice: Combobox (exklusive Auswahl aus mehreren Optionen)
+        """
+        applied_choices = set()  # Bereits verarbeitete Choice-Gruppen (deduplizieren)
         for config_key, (wtype, wdata) in widgets_dict.items():
             val = self.config.get(config_key)
 
@@ -607,19 +743,18 @@ class CPAWorkbenchApp:
                     if self.config.get(full_key) == 'y':
                         wdata['var'].set(display)
                         break
-                # Hilfetext aktualisieren
+                # Hilfetext für die aktive Option aktualisieren
                 if 'update_help' in wdata:
                     wdata['update_help']()
 
     def _gui_to_config(self):
-        """GUI-Widgets → Config-Dict."""
-        # Variante
+        """GUI-Widgets → Config-Dict: Alle Werte aus der Oberfläche sammeln."""
+        # Variante: Alte VARIANT_ Einträge entfernen und neue setzen
         variant = self.variant_var.get()
-        # Alte VARIANT_ Einträge entfernen
         keys_to_remove = [k for k in self.config if k.startswith('CONFIG_VARIANT_')]
         for k in keys_to_remove:
             del self.config[k]
-        # Neue Variante setzen
+        # Neue Variante: nur die gewählte auf 'y' setzen, alle anderen None
         for name, _ in self.variants:
             key = f'CONFIG_VARIANT_{name}'
             self.config[key] = 'y' if name == variant else None
@@ -631,7 +766,12 @@ class CPAWorkbenchApp:
         self._collect_widgets_to_config(self.build_widgets)
 
     def _collect_widgets_to_config(self, widgets_dict):
-        """Widget-Werte ins Config-Dict übernehmen."""
+        """Widget-Werte ins Config-Dict übernehmen.
+
+        Durchläuft alle Widgets und schreibt deren aktuelle Werte
+        in self.config. Bei Choice-Gruppen wird nur die gewählte
+        Option auf 'y' gesetzt, alle anderen auf None.
+        """
         processed_choices = set()
         for config_key, (wtype, wdata) in widgets_dict.items():
             if wtype == 'bool':
@@ -651,10 +791,17 @@ class CPAWorkbenchApp:
                     full_key = 'CONFIG_' + cfg_name
                     self.config[full_key] = 'y' if display == selected_display else None
 
-    # --- Variante gewechselt ---
+    # -----------------------------------------------------------------------
+    # Variante gewechselt - System-Tab neu laden und Config synchronisieren
+    # -----------------------------------------------------------------------
 
     def _on_variant_changed(self, save=True):
-        """Wird aufgerufen, wenn die Systemvariante geändert wird."""
+        """Wird aufgerufen, wenn die Systemvariante geändert wird.
+
+        Speichert die aktuelle Konfiguration, führt patch_mac.py extract
+        aus (um aktuelle Werte aus den .mac-Quellen zu lesen), lädt die
+        Konfiguration neu und baut den System-Tab für die neue Variante auf.
+        """
         variant = self.variant_var.get()
         if not variant:
             return
@@ -689,10 +836,16 @@ class CPAWorkbenchApp:
 
         self.log_msg(f'[INFO] Variante gewechselt: {variant}')
 
-    # --- Build-Aktionen ---
+    # -----------------------------------------------------------------------
+    # Build-Aktionen - Clean und Build mit verschiedenen Targets
+    # -----------------------------------------------------------------------
 
     def _get_build_target(self):
-        """Build-Target aus den Build-Widgets ermitteln."""
+        """Build-Target aus den Build-Widgets ermitteln.
+
+        Mappt die CONFIG_BUILD_TARGET_* Schlüssel auf die internen
+        Target-Namen der Build-Engine (os, diskimage, diskimagehfe, etc.).
+        """
         target_map = {
             'CONFIG_BUILD_TARGET_OS': 'os',
             'CONFIG_BUILD_TARGET_DISKIMAGE': 'diskimage',
@@ -714,12 +867,17 @@ class CPAWorkbenchApp:
         self.builder.clean()
 
     def _do_build(self):
-        """Build starten (in separatem Thread)."""
+        """Build starten in einem separaten Thread.
+
+        Ablauf: Config speichern → patch_mac patch (Assembler-Quellen aktualisieren)
+        → optional Clean → Build-Engine für gewähltes Target aufrufen.
+        Der Build läuft im Hintergrund-Thread, damit die GUI responsiv bleibt.
+        """
         if self.build_running:
             messagebox.showwarning('Warnung', 'Build läuft bereits!')
             return
 
-        # Konfiguration speichern
+        # Konfiguration speichern, damit patch_mac die aktuellen Werte hat
         self._save_config()
 
         variant = self.variant_var.get()
@@ -727,7 +885,7 @@ class CPAWorkbenchApp:
             messagebox.showerror('Fehler', 'Keine Systemvariante gewählt!')
             return
 
-        # patch_mac.py patch ausführen
+        # patch_mac.py patch ausführen: .config-Werte in die .mac-Dateien schreiben
         kconfig_sys = os.path.join(PROJECT_DIR, 'config', variant, 'Kconfig.system')
         if os.path.isfile(kconfig_sys):
             try:
@@ -736,14 +894,14 @@ class CPAWorkbenchApp:
                 self.log_msg(f'[FEHLER] patch_mac patch: {e}')
                 return
 
-        # Clean wenn gewünscht
+        # Clean wenn in den Build-Optionen aktiviert
         if self.config.get('CONFIG_BUILD_CLEAN') == 'y':
             self.builder.clean()
 
         # Build-Target ermitteln
         target = self._get_build_target()
 
-        # Build in separatem Thread starten
+        # Build in separatem Thread starten, damit die GUI nicht blockiert
         self.build_running = True
         self._set_buttons_state('disabled')
         self.status_var.set(f'Build läuft: {target}...')
@@ -768,21 +926,27 @@ class CPAWorkbenchApp:
         self.btn_clean.config(state=state)
         self.btn_save.config(state=state)
 
-    # --- Logging ---
+    # -----------------------------------------------------------------------
+    # Logging - Thread-sichere Log-Ausgabe in der GUI
+    # -----------------------------------------------------------------------
 
     def _queue_log(self, msg):
-        """Log-Nachricht in Queue einreihen (thread-safe)."""
+        """Log-Nachricht thread-sicher in die Queue einreihen (für Build-Thread)."""
         self.log_queue.put(msg)
 
     def log_msg(self, msg):
-        """Log-Nachricht direkt ausgeben (nur vom Main-Thread)."""
+        """Log-Nachricht direkt im GUI-Text-Widget ausgeben (nur vom Main-Thread)."""
         self.log_text.config(state='normal')
         self.log_text.insert('end', msg + '\n')
         self.log_text.see('end')
         self.log_text.config(state='disabled')
 
     def _poll_log(self):
-        """Log-Queue abfragen und Nachrichten anzeigen (Timer-basiert)."""
+        """Log-Queue periodisch abfragen und Nachrichten im GUI anzeigen.
+
+        Wird alle 100ms per Timer aufgerufen, um Log-Nachrichten aus dem
+        Build-Thread in das Text-Widget zu übertragen.
+        """
         while not self.log_queue.empty():
             try:
                 msg = self.log_queue.get_nowait()
@@ -797,7 +961,9 @@ class CPAWorkbenchApp:
         self.log_text.delete('1.0', 'end')
         self.log_text.config(state='disabled')
 
-    # --- Beenden ---
+    # -----------------------------------------------------------------------
+    # Beenden - Fenster schließen mit Build-Abbruch-Warnung
+    # -----------------------------------------------------------------------
 
     def _on_close(self):
         """Anwendung beenden."""
@@ -807,7 +973,9 @@ class CPAWorkbenchApp:
                 return
         self.root.destroy()
 
-    # --- Starten ---
+    # -----------------------------------------------------------------------
+    # Starten - Hauptschleife und Einstiegspunkt
+    # -----------------------------------------------------------------------
 
     def run(self):
         """Hauptschleife starten."""

@@ -815,7 +815,7 @@ biosln	aset	biosln+20h
 ; Unterstuetzung der deutschen Umlaute moeglich.
 ; Genauere Informationen: IH Mittweida, Koll. Geiler
 
-umlaut	equ	1	;=1, wenn Umlaute zu unterstuetzen
+umlaut	equ	0	;=1, wenn Umlaute zu unterstuetzen
 			;=0 sonst
 
 

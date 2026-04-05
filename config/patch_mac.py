@@ -1,19 +1,42 @@
 #!/usr/bin/env python3
-# Copyright (c) 2025 by olliy78
+# Copyright (c) 2026 Olaf Krieger
 # SPDX-License-Identifier: MIT
 """
-Generisches Konfigurations- und Patch-Tool für beliebige *.mac Dateien
+patch_mac.py - Bidirektionaler Konfigurationspatcher für Z80-Assembler-Quellen
 
-Dieses Skript liest die Kconfig.system einer Systemvariante und extrahiert die konfigurierbaren Parameter
-sowie deren Mapping zu Zieldateien und Werten. Es kann im Modus 'extract' die aktuelle Konfiguration aus
-*.mac auslesen und in die .config schreiben, oder im Modus 'patch' die *.mac Datei gemäß .config patchen.
+Dieses Skript synchronisiert die Konfiguration (.config im Kconfig-Format)
+bidirektional mit den Z80-Assembler-Quelldateien (.mac):
+
+  - Modus 'extract': Liest aktuelle Konfigurationswerte aus den .mac-Dateien
+    und schreibt sie in die .config-Datei. Wird beim Variantenwechsel in der
+    GUI aufgerufen, um die aktuellen Quellwerte zu erfassen.
+
+  - Modus 'patch': Schreibt die Werte aus der .config-Datei in die .mac-Dateien
+    zurück. Wird vor dem Build aufgerufen, um die Assembler-Quellen mit den
+    gewählten Optionen zu aktualisieren.
+
+Das Mapping zwischen Kconfig-Optionen und Assembler-Labels wird in den
+Kconfig.system-Dateien der jeweiligen Systemvariante definiert. Jeder
+konfigurierbare Parameter hat einen help-Block mit einer source=-Zeile:
+
+    config SYSTEM_OPTION_1
+        bool "Beschreibung"
+        help
+            source=bios.mac LABEL1=1 LABEL2=0
+
+Unterstützte Parametertypen:
+  - bool: EQU-Werte (0/1, mit Invertierung bei 'is not set')
+  - string: DB-Strings (z.B. db 'text',0)
+  - hexstring: EQU-Hex-Werte (z.B. 0E800h)
+
+Die .mac-Dateien werden mit CRLF-Zeilenenden geschrieben, da der M80-Assembler
+dies erwartet.
+
+Autor:   Olaf Krieger
+Lizenz:  MIT (siehe LICENSE)
 
 Verwendung:
     python patch_mac.py <extract|patch> <config> <systemvariante> [loglevel=debug|loglevel=info]
-
-Optionale Argumente:
-    loglevel=debug   Aktiviere ausführliche Debug-Ausgaben
-    loglevel=info    Standard, weniger Ausgaben
 
 Beispiel:
     python patch_mac.py extract .config bc_a5120 loglevel=debug
@@ -23,15 +46,25 @@ import sys
 import os
 import re
 
-# --- Funktionsdefinitionen ---
+# ============================================================================
+# Kconfig.system-Parser - Mapping zwischen Config-Optionen und .mac-Dateien
+# ============================================================================
+
 def parse_kconfig_system(path):
-    """
-    Extrahiert alle konfigurierbaren Parameter aus Kconfig.system und deren Mapping.
-    Liefert eine Liste von Dicts: {config_name, source, key_values}
+    """Alle konfigurierbaren Parameter aus Kconfig.system und deren Mapping extrahieren.
+
+    Durchsucht die Kconfig.system nach 'config'-Blöcken mit zugehörigen
+    help-Abschnitten, die eine 'source='-Zeile enthalten. Diese Zeilen
+    definieren das Mapping: welche Datei (.mac), welche Labels und Werte.
+
     Args:
-        path (str): Pfad zur Kconfig.system
+        path: Pfad zur Kconfig.system-Datei
+
     Returns:
-        list: Liste der Parametermappings
+        list: Liste von Dicts mit den Schlüsseln:
+            - config_name: Name der Kconfig-Option (ohne CONFIG_-Präfix)
+            - source: Ziel-.mac-Datei (z.B. 'bios.mac')
+            - key_values: Dict der Label→Wert-Zuordnungen (z.B. {'RDTYP': '3'})
     """
     results = []
     if not os.path.exists(path):
@@ -44,7 +77,7 @@ def parse_kconfig_system(path):
         line = lines[i].strip()
         if line.startswith("config "):
             config_name = line.split()[1]
-            # Suche nach help block
+            # Suche nach dem zugehörigen help-Block mit source=-Zeile
             help_source = None
             key_values = {}
             j = i + 1
@@ -56,7 +89,7 @@ def parse_kconfig_system(path):
                     while k < len(lines):
                         l3 = lines[k].strip()
                         if l3.startswith("source="):
-                            # Split after 'source=' into filename and key/value pairs
+                            # source=-Zeile parsen: 'source=datei.mac KEY1=val1 KEY2=val2'
                             source_line = l3[len("source="):].strip()
                             source_parts = source_line.split()
                             src = source_parts[0] if source_parts else None
@@ -84,15 +117,23 @@ def parse_kconfig_system(path):
         i += 1
     return results
 
+# ============================================================================
+# Extract-Modus - Werte aus .mac-Dateien in .config schreiben
+# ============================================================================
+
 def extract_mac_config(mac_path, config_path, param_mappings, loglevel="info"):
-    """
-    Extrahiert Werte aus *.mac und schreibt sie in .config.
-    Für jede Option wird geprüft, ob die Aktiv-Bedingung laut Mapping erfüllt ist.
-    Args:
-        mac_path (str): Pfad zur .mac Datei
-        config_path (str): Pfad zur .config Datei
-        param_mappings (list): Liste der Parametermappings
-        loglevel (str): "info" oder "debug"
+    """Konfigurationswerte aus einer .mac-Datei extrahieren und in .config schreiben.
+
+    Für jeden Parameter wird geprüft, ob die im Mapping definierten Bedingungen
+    in der .mac-Datei erfüllt sind. Es werden drei Parametertypen unterstützt:
+
+    - bool: Prüft ob alle key=value-Paare in EQU-Zeilen übereinstimmen.
+            Bei Übereinstimmung: CONFIG_KEY=y, sonst: # CONFIG_KEY is not set
+    - string: Liest den DB-String-Wert aus der .mac-Datei.
+    - hexstring: Liest den EQU-Hex-Wert aus der .mac-Datei.
+
+    Die bestehende .config wird dabei erhalten - nur die betroffenen
+    Schlüssel werden aktualisiert oder hinzugefügt.
     """
     if not os.path.exists(mac_path):
         print(f"[ERROR] *.mac Datei nicht gefunden: {mac_path}")
@@ -102,6 +143,7 @@ def extract_mac_config(mac_path, config_path, param_mappings, loglevel="info"):
 
         if loglevel == "debug":
             print(f"[DEBUG] Extrahiere aus Datei: {mac_path}")
+    # Bestehende .config-Werte laden (für Merge beim Zurückschreiben)
     config_vals = {}
     if os.path.exists(config_path):
         with open(config_path, encoding="utf-8") as f:
@@ -110,6 +152,7 @@ def extract_mac_config(mac_path, config_path, param_mappings, loglevel="info"):
                 if m:
                     config_vals[m.group(2)] = line.rstrip('\n')
 
+    # Neue Konfigurationswerte für jeden Parameter extrahieren
     new_config = {}
     for entry in param_mappings:
         if loglevel == "debug":
@@ -117,7 +160,7 @@ def extract_mac_config(mac_path, config_path, param_mappings, loglevel="info"):
         key_values = entry["key_values"]
         config_name = entry["config_name"]
         config_key = f"CONFIG_{config_name}"
-        # Hexstring-Optionen erkennen (key=hexstring)
+        # Hexstring-Optionen erkennen und EQU-Wert auslesen
         if any(v == "hexstring" for v in key_values.values()):
             for key, v in key_values.items():
                 if v == "hexstring":
@@ -133,7 +176,7 @@ def extract_mac_config(mac_path, config_path, param_mappings, loglevel="info"):
                         new_config[config_key] = f'{config_key}="{istwert}"'
                     else:
                         new_config[config_key] = f'# {config_key} is not set'
-        # String-Optionen (klassisch, mit und ohne ,0)
+        # String-Optionen: DB-Wert aus der .mac-Datei auslesen
         elif any(v == "string" for v in key_values.values()):
             for key, v in key_values.items():
                 if v == "string":
@@ -156,6 +199,7 @@ def extract_mac_config(mac_path, config_path, param_mappings, loglevel="info"):
                     else:
                         new_config[config_key] = f'# {config_key} is not set'
         else:
+            # Bool-Optionen: Prüfe ob alle key=value-Paare in EQU-Zeilen übereinstimmen
             aktiv_bedingung = True
             for key, sollwert in key_values.items():
                 istwert = None
@@ -173,6 +217,7 @@ def extract_mac_config(mac_path, config_path, param_mappings, loglevel="info"):
             else:
                 new_config[config_key] = f"# {config_key} is not set"
 
+    # .config-Datei aktualisieren: Bestehende Einträge ersetzen, neue anhängen
     out_lines = []
     written = set()
     if os.path.exists(config_path):
@@ -184,6 +229,7 @@ def extract_mac_config(mac_path, config_path, param_mappings, loglevel="info"):
                     written.add(m.group(2))
                 else:
                     out_lines.append(line)
+    # Noch nicht geschriebene neue Einträge anhängen
     for k, v in new_config.items():
         if k not in written:
             out_lines.append(v + "\n")
@@ -191,17 +237,25 @@ def extract_mac_config(mac_path, config_path, param_mappings, loglevel="info"):
         f.writelines(out_lines)
     print(f"[INFO] .config aktualisiert (extract)")
 
+# ============================================================================
+# Patch-Modus - Werte aus .config in .mac-Dateien schreiben
+# ============================================================================
+
 def patch_mac_file(mac_path, config_path, param_mappings, loglevel="info"):
+    """Assembler-Quelldatei (.mac) gemäß .config-Werten patchen.
+
+    Aktualisiert EQU- und DB-Zeilen in der .mac-Datei entsprechend den
+    Konfigurationswerten. Unterstützt drei Parametertypen:
+
+    - bool: Setzt EQU-Werte (bei 'is not set' wird der invertierte Wert geschrieben)
+    - string: Ändert DB-Strings (z.B. db 'neuer text',0)
+    - hexstring: Ändert EQU-Hex-Werte (bei 'is not set' wird 0 geschrieben)
+
+    Die Datei wird mit CRLF-Zeilenenden geschrieben (M80-Assembler-Kompatibilität).
     """
-    Patche *.mac Datei gemäß .config.
-    Args:
-        mac_path (str): Pfad zur .mac Datei
-        config_path (str): Pfad zur .config Datei
-        param_mappings (list): Liste der Parametermappings
-        loglevel (str): "info" oder "debug"
-    """
-    config_set = set()
-    config_not_set = set()
+    # Aktive und deaktivierte Config-Optionen aus .config lesen
+    config_set = set()       # Optionsnamen mit =y
+    config_not_set = set()   # Optionsnamen mit 'is not set'
     if os.path.exists(config_path):
         with open(config_path, encoding="utf-8") as f:
             for line in f:
@@ -218,21 +272,18 @@ def patch_mac_file(mac_path, config_path, param_mappings, loglevel="info"):
     with open(mac_path, encoding="utf-8") as f:
         mac_lines = f.readlines()
 
-    original_lines = list(mac_lines)  # Save original for debug diff
+    original_lines = list(mac_lines)  # Kopie für Debug-Diff
 
     def patch_key_in_line(line, key, value, is_string=False, is_hexstring=False):
-        """
-        Patcht eine Zeile mit dem gegebenen Schlüssel und Wert.
-        Args:
-            line (str): Originalzeile
-            key (str): Schlüssel
-            value (str): Neuer Wert
-            is_string (bool): String-Option
-            is_hexstring (bool): Hexstring-Option
+        """Einzelne Zeile mit dem gegebenen Schlüssel und Wert patchen.
+
+        Erkennt EQU-Zeilen (für bool/hexstring) und DB-Zeilen (für string).
+        Kommentarzeilen (beginnend mit ;) werden übersprungen.
+
         Returns:
-            str|None: Gepatchte Zeile oder None, falls nicht zutreffend
+            str: Gepatchte Zeile oder None falls Zeile nicht zum Schlüssel passt
         """
-        # Kommentare am Zeilenanfang überspringen
+        # Kommentare am Zeilenanfang nicht patchen (Assembler-Kommentar ;)
         if line.lstrip().startswith(';'):
             return None
         if is_string:
@@ -246,17 +297,19 @@ def patch_mac_file(mac_path, config_path, param_mappings, loglevel="info"):
             if m2:
                 return f"{m2.group(1)}'{value}'{m2.group(5)}\n"
             return None
-        # Standardfall: equ-Zeile patchen
+        # Standardfall: EQU-Zeile patchen (für bool und hexstring)
         m = re.match(rf'^({key}\s+equ\s+)([^;\s]+)(.*)$', line.strip())
         if m:
             val = value
-            # Remove quotes for hexstring/textstring values
+            # Anführungszeichen für hexstring/textstring-Werte entfernen
             if (is_hexstring or (val and re.match(r'^".*"$', val))):
                 val = val.strip('"')
             return f"{m.group(1)}{val}{m.group(3)}\n"
         return None
 
-    # 1. Alle "is not set" Optionen patchen (invertiert, falls nötig)
+    # Schritt 1: Alle 'is not set'-Optionen patchen (invertierte Werte einsetzen)
+    # Bei Bool-Optionen wird der invertierte Wert geschrieben (0→1, 1→0)
+    # Bei Hexstring wird 0 geschrieben, bei String ein leerer String
     for entry in param_mappings:
         config_name = entry["config_name"]
         key_values = entry["key_values"]
@@ -282,7 +335,8 @@ def patch_mac_file(mac_path, config_path, param_mappings, loglevel="info"):
                     if patched and mac_lines[idx] != patched:
                         mac_lines[idx] = patched
 
-    # 2. Alle "=y" und String-Optionen patchen (direkt)
+    # Schritt 2: Alle aktiven Optionen ('=y', String, Hexstring) patchen
+    # Hier werden die tatsächlichen Werte aus der .config geschrieben
     for entry in param_mappings:
         config_name = entry["config_name"]
         key_values = entry["key_values"]
@@ -321,21 +375,27 @@ def patch_mac_file(mac_path, config_path, param_mappings, loglevel="info"):
                     if patched and mac_lines[idx] != patched:
                         mac_lines[idx] = patched
 
-    # Debug-Ausgabe: Nur Zeilen, die sich zwischen original und final geändert haben
+    # Debug-Ausgabe: Geänderte Zeilen anzeigen (Vorher/Nachher-Vergleich)
     if loglevel == "debug":
         for idx, (before, after) in enumerate(zip(original_lines, mac_lines)):
             if before != after:
                 print(f"[DEBUG] Zeile {idx+1} vor Patch: {before.rstrip()}")
                 print(f"[DEBUG] Zeile {idx+1} nach Patch: {after.rstrip()}")
 
-    # Schreibe Datei mit CRLF-Zeilenenden (\r\n) für M80-Kompatibilität
+    # Datei mit CRLF-Zeilenenden schreiben (\r\n für M80-Assembler-Kompatibilität)
     with open(mac_path, "w", encoding="utf-8", newline="") as f:
         f.write("".join(line.rstrip("\r\n") + "\r\n" for line in mac_lines))
     print(f"[INFO] *.mac Datei gepatcht (patch, CRLF enforced)")
 
+# ============================================================================
+# Hauptfunktion - Argumente parsen und Modus-Routing
+# ============================================================================
+
 def main():
-    """
-    Hauptfunktion: Argumente parsen, Modus wählen, loglevel setzen und Routing.
+    """Hauptfunktion: Argumente parsen, Parameter auslesen und extract/patch ausführen.
+
+    Gruppiert die Parameter nach Zieldatei (source) und führt den gewählten
+    Modus (extract/patch) für jede Zieldatei separat aus.
     """
     if len(sys.argv) < 4:
         print("Usage: patch_mac.py <extract|patch> <config> <systemvariante> [loglevel=debug|loglevel=info]")
@@ -343,6 +403,7 @@ def main():
     mode = sys.argv[1]
     config_path = sys.argv[2]
     system_variant = sys.argv[3]
+    # Loglevel: Kommandozeile hat Vorrang, sonst Umgebungsvariable, Standard: info
     loglevel = "info"
     # Suche nach loglevel=... in den Argumenten
     for arg in sys.argv[4:]:
@@ -352,10 +413,12 @@ def main():
     if loglevel == "info" and os.environ.get("LOGLEVEL"):
         loglevel = os.environ["LOGLEVEL"].lower()
 
+    # Kconfig.system der gewählten Systemvariante parsen
     kconfig_path = os.path.join("config", system_variant, "Kconfig.system")
     param_mappings = parse_kconfig_system(kconfig_path)
 
-    # Gruppiere param_mappings nach source-Datei
+    # Parameter nach Zieldatei (source) gruppieren, damit jede .mac-Datei
+    # nur einmal gelesen/geschrieben werden muss
     source_map = {}
     for entry in param_mappings:
         src = entry["source"] if entry["source"] else "bios.mac"
@@ -363,9 +426,9 @@ def main():
             source_map[src] = []
         source_map[src].append(entry)
 
-    # Für jede source-Datei extrahiere/patch die zugehörigen Parameter
+    # Für jede Zieldatei den gewählten Modus (extract/patch) ausführen
     for src, mappings in source_map.items():
-        # src kann relativer Pfad sein (z.B. biopcrtc.mac)
+        # Vollständigen Pfad zur .mac-Datei zusammenbauen
         mac_path = os.path.join("src", system_variant, src)
         if mode == "extract":
             extract_mac_config(mac_path, config_path, mappings, loglevel=loglevel)

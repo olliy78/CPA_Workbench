@@ -3,7 +3,7 @@
 
 # Bestimmte Dateien immer mit CRLF auschecken
 *.bat text eol=crlf
-*.py text eol=crlf
+*.py text eol=lf
 *.mac text eol=crlf
 
 # Bestimmte Dateien immer mit LF auschecken

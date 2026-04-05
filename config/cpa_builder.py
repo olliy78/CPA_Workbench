@@ -1,16 +1,28 @@
 #!/usr/bin/env python3
-# Copyright (c) 2025 by olliy78
+# Copyright (c) 2026 Olaf Krieger
 # SPDX-License-Identifier: MIT
 """
-Build-Engine für das CP/A Workbench Projekt.
+cpa_builder.py - Build-Engine für das CP/A Betriebssystem
 
-Ersetzt alle Makefiles durch reines Python. Steuert:
-  - Assemblierung mit M80 (via CPM-Emulator / Wine)
-  - Linken mit LINKMT
-  - Erzeugung von Diskettenimages (IMG, HFE, SCP)
-  - Schreiben auf physikalische Laufwerke
+Dieses Modul bildet den Kern des Build-Systems und ersetzt sämtliche Makefiles
+durch reines Python. Es steuert den gesamten Build-Prozess:
 
-Die Build-Engine arbeitet plattformübergreifend (Linux mit Wine, Windows nativ).
+  - Assemblierung der Z80-Quellen mit M80 (via CPM-Emulator unter Wine/Linux
+    oder nativ unter Windows)
+  - Linken der erzeugten ERL-Module mit LINKMT zu @OS.COM
+  - Erzeugung von Diskettenimages (IMG-Format, gefüllt mit 0xE5)
+  - Konvertierung in HFE- und SCP-Formate (via Greaseweazle)
+  - Schreiben auf physikalische Diskettenlaufwerke (via Greaseweazle)
+
+Die Build-Engine arbeitet plattformübergreifend:
+  - Linux: M80/LINKMT werden über Wine und cpm.exe ausgeführt
+  - Windows: M80/LINKMT laufen nativ über cpm.exe
+
+Die Klasse CPABuilder wird von der GUI (cpa_build.py) instanziiert und
+über einen Log-Callback mit der Oberfläche verbunden.
+
+Autor:   Olaf Krieger
+Lizenz:  MIT (siehe LICENSE)
 """
 
 import os
@@ -18,21 +30,32 @@ import re
 import sys
 import glob
 import shutil
+import venv
 import platform
 import subprocess
 
 
+# ============================================================================
+# CPABuilder - Zentrale Build-Engine
+# ============================================================================
+
 class CPABuilder:
-    """Build-Engine für das CP/A Betriebssystem."""
+    """Build-Engine für das CP/A Betriebssystem.
 
-    # Konstanten
-    BUILD_DIR = 'build'
-    ADDITIONS_DIR = 'additions'
-    TOOLS_DIR = 'tools'
-    GW_CMD = 'gw'
-    CFG_FILE = 'cpaFormates.cfg'
+    Verwaltet den gesamten Build-Prozess von der Assemblierung über
+    das Linken bis zur Image-Erzeugung. Alle Pfade werden relativ zum
+    Projektverzeichnis verwaltet; absolute Pfade werden nur für
+    Datei-I/O-Operationen (open, copy, exists) verwendet.
+    """
 
-    # Default Diskettenformat
+    # Verzeichnis-Konstanten (relativ zum Projektverzeichnis)
+    BUILD_DIR = 'build'               # Ausgabeverzeichnis für Build-Artefakte
+    ADDITIONS_DIR = 'additions'        # Zusätzliche Dateien für die Diskette
+    TOOLS_DIR = 'tools'                # cpmcp, cpmls, m80.com, linkmt.com
+    GW_INSTALL_URL = 'git+https://github.com/keirf/greaseweazle@latest'
+    CFG_FILE = 'cpaFormates.cfg'       # Greaseweazle-Formatdefinitionen
+
+    # Vorgabe-Diskettenformat (780k ohne separaten Bootsektor)
     DEFAULT_FORMAT = 'cpa780'
     DEFAULT_IMAGE_SIZE = 780
     DEFAULT_DISKDEF = 'cpa780_withoutBoot'
@@ -48,25 +71,92 @@ class CPABuilder:
         self._setup_platform()
 
     def _setup_platform(self):
-        """Plattformspezifische Pfade und Kommandos ermitteln."""
+        """Plattformspezifische Pfade und Kommandos ermitteln.
+
+        Linux: M80/LINKMT laufen über Wine + cpm.exe (CP/M-Emulator).
+        Windows: cpm.exe wird direkt aufgerufen.
+        cpmtools (cpmcp/cpmls) befinden sich im tools/-Verzeichnis.
+        """
         is_linux = platform.system() == 'Linux'
-        tools = os.path.join(self.project_dir, self.TOOLS_DIR)
 
         if is_linux:
             self.cpm_cmd = ['wine', 'cpm.exe']
-            self.cpmcp = os.path.join(tools, 'cpmcp')
-            self.cpmls = os.path.join(tools, 'cpmls')
+            self.cpmcp = os.path.join('tools', 'cpmcp')
+            self.cpmls = os.path.join('tools', 'cpmls')
         else:
             self.cpm_cmd = ['cpm.exe']
-            self.cpmcp = os.path.join(tools, 'cpmcp.exe')
-            self.cpmls = os.path.join(tools, 'cpmls.exe')
+            self.cpmcp = os.path.join('tools', 'cpmcp.exe')
+            self.cpmls = os.path.join('tools', 'cpmls.exe')
+
+        self.gw_cmd = None  # Wird bei Bedarf durch _ensure_gw() gesetzt
+
+    def _ensure_gw(self):
+        """Greaseweazle (gw) sicherstellen.
+
+        Prüft in drei Schritten:
+        1. gw im System-PATH vorhanden?
+        2. gw im lokalen .venv bereits installiert?
+        3. Falls nicht: Neue .venv erstellen und Greaseweazle per pip installieren.
+
+        Nach erfolgreicher Prüfung/Installation wird self.gw_cmd gesetzt.
+        """
+        if self.gw_cmd:
+            return
+
+        # 1. System-PATH prüfen (gw global installiert?)
+        if shutil.which('gw'):
+            self.gw_cmd = 'gw'
+            self.log("[INFO] Greaseweazle gefunden: gw (System)")
+            return
+
+        # 2. Bereits vorhandenes virtuelles Environment prüfen
+        venv_dir = os.path.join(self.project_dir, '.venv')
+        if platform.system() == 'Windows':
+            gw_venv = os.path.join(venv_dir, 'Scripts', 'gw.exe')
+        else:
+            gw_venv = os.path.join(venv_dir, 'bin', 'gw')
+
+        if os.path.isfile(gw_venv):
+            self.gw_cmd = gw_venv
+            self.log(f"[INFO] Greaseweazle gefunden: {gw_venv}")
+            return
+
+        # 3. Neues venv erstellen und Greaseweazle installieren
+        self.log("[INFO] Greaseweazle nicht gefunden – wird automatisch installiert ...")
+        self.log(f"[STEP] Erstelle virtuelle Umgebung: {venv_dir}")
+        venv.create(venv_dir, with_pip=True)
+
+        if platform.system() == 'Windows':
+            pip_cmd = os.path.join(venv_dir, 'Scripts', 'pip')
+        else:
+            pip_cmd = os.path.join(venv_dir, 'bin', 'pip')
+
+        self.log("[STEP] Installiere Greaseweazle ...")
+        self._run([pip_cmd, 'install', self.GW_INSTALL_URL])
+
+        if not os.path.isfile(gw_venv):
+            raise RuntimeError(
+                "Greaseweazle-Installation fehlgeschlagen. "
+                "Bitte manuell installieren: pip install greaseweazle"
+            )
+
+        self.gw_cmd = gw_venv
+        self.log(f"[DONE] Greaseweazle installiert: {gw_venv}")
 
     def log(self, msg):
         """Log-Nachricht ausgeben."""
         self.log_callback(msg)
 
     def _run(self, cmd, cwd=None, check=True):
-        """Externen Befehl ausführen und Ausgabe loggen."""
+        """Externen Befehl ausführen, Ausgabe loggen und optional Fehler werfen.
+
+        Args:
+            cmd: Befehl als Liste (z.B. ['wine', 'cpm.exe', 'm80', ...])
+            cwd: Arbeitsverzeichnis (Standard: self.project_dir)
+            check: Bei True wird bei Rückgabewert != 0 ein RuntimeError geworfen
+        Returns:
+            subprocess.CompletedProcess Objekt mit stdout/stderr
+        """
         cwd = cwd or self.project_dir
         self.log(f"  > {' '.join(cmd)}")
         try:
@@ -88,13 +178,17 @@ class CPABuilder:
         except FileNotFoundError:
             raise RuntimeError(f"Programm nicht gefunden: {cmd[0]}")
 
-    # --- Konfigurationsdatei ---
+    # -----------------------------------------------------------------------
+    # Konfigurationsdatei - .config im Kconfig-Format lesen/schreiben
+    # -----------------------------------------------------------------------
 
     @staticmethod
     def load_config(config_path):
-        """
-        .config-Datei lesen und als Dict zurückgeben.
-        Format: CONFIG_KEY=value oder # CONFIG_KEY is not set
+        """Konfigurationsdatei (.config) lesen und als Dict zurückgeben.
+
+        Erkennt zwei Formate:
+        - CONFIG_KEY=value (aktive Option, bei Strings mit Anführungszeichen)
+        - # CONFIG_KEY is not set (deaktivierte Option)
         """
         config = {}
         if not os.path.exists(config_path):
@@ -116,11 +210,12 @@ class CPABuilder:
 
     @staticmethod
     def save_config(config, config_path):
+        """Config-Dict als .config-Datei schreiben.
+
+        Sortierung: VARIANT_ zuerst, dann SYSTEM_, dann BUILD_, dann Rest.
+        Werte None werden als '# CONFIG_KEY is not set' geschrieben.
         """
-        Dict als .config-Datei schreiben.
-        Sortiert nach Präfix: VARIANT_, SYSTEM_, BUILD_
-        """
-        # Sortierung: VARIANT zuerst, dann SYSTEM, dann BUILD, dann Rest
+        # Sortierung: VARIANT zuerst (Variante), dann SYSTEM, dann BUILD, dann Rest
         def sort_key(key):
             if 'VARIANT_' in key:
                 return (0, key)
@@ -140,17 +235,26 @@ class CPABuilder:
                 else:
                     f.write(f'{key}="{val}"\n')
 
-    # --- Systemvariante ---
+    # -----------------------------------------------------------------------
+    # Systemvariante - Erkennung und Auswahl
+    # -----------------------------------------------------------------------
 
     def get_variant(self, config):
-        """Gewählte Systemvariante aus Config-Dict ermitteln."""
+        """Gewählte Systemvariante aus Config-Dict ermitteln (z.B. 'bc_a5120')."""
         for key, val in config.items():
             if key.startswith('CONFIG_VARIANT_') and val == 'y':
                 return key[len('CONFIG_VARIANT_'):]
         return None
 
     def get_available_variants(self):
-        """Alle verfügbaren Systemvarianten aus src/ ermitteln."""
+        """Alle verfügbaren Systemvarianten aus dem src/-Verzeichnis ermitteln.
+
+        Jedes Unterverzeichnis in src/ ist eine Variante. Optional kann
+        eine about.txt-Datei eine kurze Beschreibung enthalten.
+
+        Returns:
+            list: Liste von (name, about_text) Tupeln
+        """
         src_dir = os.path.join(self.project_dir, 'src')
         variants = []
         if not os.path.isdir(src_dir):
@@ -166,14 +270,17 @@ class CPABuilder:
                 variants.append((name, about))
         return variants
 
-    # --- Quell-Erkennung ---
+    # -----------------------------------------------------------------------
+    # Quell-Erkennung - Haupt-Assembler-Datei identifizieren (bios/biop)
+    # -----------------------------------------------------------------------
 
     def detect_main_source(self, variant):
+        """Haupt-Assemblerdatei für eine Variante erkennen (z.B. 'bios' oder 'biop').
+
+        Methode 1: Kconfig.system parsen - die häufigste source=-Datei ist die Hauptdatei.
+        Methode 2: Dateisystem prüfen - biop.mac hat Priorität vor bios.mac.
         """
-        Haupt-Assemblerdatei für eine Variante erkennen (z.B. 'bios' oder 'biop').
-        Prüft zuerst die Kconfig.system auf source= Einträge, dann Dateisystem.
-        """
-        # Methode 1: Kconfig.system parsen für source= Einträge
+        # Methode 1: Kconfig.system parsen und häufigste source=-Datei suchen
         kconfig_path = os.path.join(
             self.project_dir, 'config', variant, 'Kconfig.system'
         )
@@ -190,7 +297,7 @@ class CPABuilder:
                 main_src = max(sources, key=sources.get)
                 return main_src.replace('.mac', '')
 
-        # Methode 2: Dateisystem prüfen (case-insensitive)
+        # Methode 2: Dateisystem durchsuchen (case-insensitive, biop vor bios)
         src_dir = os.path.join(self.project_dir, 'src', variant)
         if os.path.isdir(src_dir):
             files_lower = {f.lower(): f for f in os.listdir(src_dir)}
@@ -200,26 +307,41 @@ class CPABuilder:
                     return target.replace('.mac', '')
         return None
 
-    # --- Build-Pfade ---
+    # -----------------------------------------------------------------------
+    # Build-Pfade und Diskettenformat
+    # -----------------------------------------------------------------------
+
+    def _abs(self, rel_path):
+        """Relativen Pfad in absoluten Pfad umwandeln (für Datei-I/O-Operationen)."""
+        return os.path.join(self.project_dir, rel_path)
 
     def _paths(self, variant):
-        """Alle relevanten Pfade für einen Build ermitteln."""
+        """Alle relevanten Build-Pfade für eine Variante ermitteln.
+
+        Gibt ein Dict mit relativen Pfaden zurück (relativ zum Projektverzeichnis).
+        Für Datei-I/O muss self._abs() verwendet werden.
+        """
         return {
-            'build_dir': os.path.join(self.project_dir, self.BUILD_DIR),
-            'src_dir': os.path.join(self.project_dir, 'src', variant),
-            'src_common': os.path.join(self.project_dir, 'src'),
-            'prebuilt_dir': os.path.join(self.project_dir, 'prebuilt', variant),
-            'config_dir': os.path.join(self.project_dir, 'config', variant),
-            'additions_dir': os.path.join(self.project_dir, self.ADDITIONS_DIR),
-            'tools_dir': os.path.join(self.project_dir, self.TOOLS_DIR),
-            'os_target': os.path.join(self.project_dir, self.BUILD_DIR, '@os.com'),
-            'bootsector': os.path.join(self.project_dir, 'prebuilt', variant, 'bootsec.bin'),
+            'build_dir': self.BUILD_DIR,
+            'src_dir': os.path.join('src', variant),
+            'src_common': 'src',
+            'prebuilt_dir': os.path.join('prebuilt', variant),
+            'config_dir': os.path.join('config', variant),
+            'additions_dir': self.ADDITIONS_DIR,
+            'tools_dir': self.TOOLS_DIR,
+            'os_target': os.path.join(self.BUILD_DIR, '@os.com'),
+            'bootsector': os.path.join('prebuilt', variant, 'bootsec.bin'),
         }
 
     # --- Disk-Format ---
 
     def _get_disk_format(self, config):
-        """Diskettenformat aus Config ermitteln."""
+        """Diskettenformat aus der Konfiguration ermitteln.
+
+        Returns:
+            tuple: (format_name, size_kb, diskdef_name)
+            z.B. ('cpa800', 800, 'cpa800') oder ('cpa780', 780, 'cpa780_withoutBoot')
+        """
         if config.get('CONFIG_BUILD_DISKTYPE_800K') == 'y':
             return 'cpa800', 800, 'cpa800'
         return 'cpa780', 780, 'cpa780_withoutBoot'
@@ -227,7 +349,11 @@ class CPABuilder:
     # --- Patch-Integration ---
 
     def run_patch_mac(self, config_path, variant, mode):
-        """patch_mac.py im Modus 'extract' oder 'patch' ausführen."""
+        """patch_mac.py im Modus 'extract' oder 'patch' als Unterprozess aufrufen.
+
+        'extract': Liest aktuelle Werte aus den .mac-Dateien in die .config.
+        'patch': Schreibt .config-Werte in die .mac-Dateien zurück.
+        """
         script = os.path.join(self.project_dir, 'config', 'patch_mac.py')
         if not os.path.isfile(script):
             self.log(f"[WARNUNG] patch_mac.py nicht gefunden: {script}")
@@ -238,19 +364,29 @@ class CPABuilder:
     # --- Clean ---
 
     def clean(self):
-        """Build-Verzeichnis aufräumen."""
+        """Build-Verzeichnis vollständig löschen und leer neu anlegen."""
         build_dir = os.path.join(self.project_dir, self.BUILD_DIR)
         if os.path.isdir(build_dir):
             shutil.rmtree(build_dir)
         os.makedirs(build_dir, exist_ok=True)
         self.log("[INFO] Aufräumen abgeschlossen.")
 
-    # --- OS bauen ---
+    # -----------------------------------------------------------------------
+    # OS bauen - Z80-Assemblierung und Linken zu @OS.COM
+    # -----------------------------------------------------------------------
 
     def build_os(self, config):
-        """
-        Betriebssystem @OS.COM bauen.
-        Entspricht dem os-Target des Makefiles.
+        """Betriebssystem @OS.COM bauen.
+
+        Entspricht dem 'os'-Target des originalen Makefiles.
+        Ablauf in 7 Schritten:
+        1. .mac-Quelldateien nach build/ kopieren (gemeinsam + variantenspezifisch)
+        2. Vorkompilierte .erl-Module aus prebuilt/ kopieren
+        3. Build-Tools (m80.com, linkmt.com, cpm.exe) nach build/ kopieren
+        4. M80: Listing erzeugen (für /p:-Wert-Extraktion)
+        5. M80: ERL-Datei assemblieren
+        6. /p:-Wert extrahieren und mit LINKMT zu @OS.COM linken
+        7. Temporäre Dateien aufräumen
         """
         variant = self.get_variant(config)
         if not variant:
@@ -264,65 +400,73 @@ class CPABuilder:
 
         paths = self._paths(variant)
         build_dir = paths['build_dir']
-        os.makedirs(build_dir, exist_ok=True)
+        build_abs = self._abs(build_dir)
+        os.makedirs(build_abs, exist_ok=True)
 
-        # STEP 1: .mac-Dateien kopieren (gemeinsame + variantenspezifische)
+        # STEP 1: .mac-Dateien kopieren:
+        # Zuerst gemeinsame Quellen aus src/, dann variantenspezifische aus src/<variante>/
+        # (variantenspezifische überschreiben bei Namensgleichheit die gemeinsamen)
         self.log("[STEP 1] Kopiere .mac-Dateien nach build/")
-        for mac in glob.glob(os.path.join(paths['src_common'], '*.mac')):
-            shutil.copy2(mac, build_dir)
-        for mac in glob.glob(os.path.join(paths['src_dir'], '*.mac')):
-            shutil.copy2(mac, build_dir)
-        # Auch variantenspezifische .mac mit Großbuchstaben kopieren
-        for mac in glob.glob(os.path.join(paths['src_dir'], '*.MAC')):
-            dst = os.path.join(build_dir, os.path.basename(mac).lower())
+        for mac in glob.glob(os.path.join(self._abs(paths['src_common']), '*.mac')):
+            shutil.copy2(mac, build_abs)
+        for mac in glob.glob(os.path.join(self._abs(paths['src_dir']), '*.mac')):
+            shutil.copy2(mac, build_abs)
+        # Auch .MAC (Großbuchstaben) kopieren und in Kleinbuchstaben umbenennen
+        for mac in glob.glob(os.path.join(self._abs(paths['src_dir']), '*.MAC')):
+            dst = os.path.join(build_abs, os.path.basename(mac).lower())
             shutil.copy2(mac, dst)
 
-        # STEP 2: ERL-Dateien aus prebuilt kopieren
+        # STEP 2: Vorkompilierte ERL-Module aus prebuilt/ kopieren
+        # (bdos.erl, ccp.erl, cpabas.erl - diese werden nicht neu assembliert)
         self.log("[STEP 2] Kopiere ERL-Dateien aus prebuilt/")
-        for erl in glob.glob(os.path.join(paths['prebuilt_dir'], '*.erl')):
-            shutil.copy2(erl, build_dir)
-        for erl in glob.glob(os.path.join(paths['prebuilt_dir'], '*.ERL')):
-            dst = os.path.join(build_dir, os.path.basename(erl).lower())
+        for erl in glob.glob(os.path.join(self._abs(paths['prebuilt_dir']), '*.erl')):
+            shutil.copy2(erl, build_abs)
+        for erl in glob.glob(os.path.join(self._abs(paths['prebuilt_dir']), '*.ERL')):
+            dst = os.path.join(build_abs, os.path.basename(erl).lower())
             if not os.path.exists(dst):
                 shutil.copy2(erl, dst)
 
-        # STEP 3: Tools kopieren
+        # STEP 3: Build-Tools (M80 Assembler, LINKMT Linker, CP/M-Emulator) kopieren
         self.log("[STEP 3] Kopiere Build-Tools nach build/")
         for tool in ['m80.com', 'linkmt.com', 'cpm.exe']:
-            src = os.path.join(paths['tools_dir'], tool)
+            src = os.path.join(self._abs(paths['tools_dir']), tool)
             if os.path.isfile(src):
-                shutil.copy2(src, build_dir)
+                shutil.copy2(src, build_abs)
 
-        # STEP 4: Assemblieren mit M80 (Listing erzeugen)
+        # STEP 4: Assemblieren mit M80 - Listing erzeugen (für /p:-Wert-Extraktion)
+        # Das Listing enthält den /p:-Wert, der für den Linker benötigt wird
         self.log("[STEP 4] Assemblieren mit M80")
         result = self._run(
             self.cpm_cmd + ['m80', f'={main_src}/L'],
-            cwd=build_dir, check=False
+            cwd=build_abs, check=False
         )
 
-        # STEP 5: Assemblieren (ERL erzeugen)
+        # STEP 5: M80 Assemblierung - ERL-Datei (relocatable Objektcode) erzeugen
         self.log(f"[STEP 5] Assembliere {main_src}.erl")
         self._run(
             self.cpm_cmd + ['m80', f'{main_src}.erl={main_src}'],
-            cwd=build_dir
+            cwd=build_abs
         )
 
-        # STEP 6: /p:-Wert aus Assembler-Ausgabe extrahieren und Linken
+        # STEP 6: /p:-Wert (Load-Adresse) aus der M80-Ausgabe extrahieren
+        # und alle Module mit LINKMT zu @OS.COM zusammenlinken
         asm_output = (result.stdout or '') + (result.stderr or '')
         p_value = self._extract_p_value(asm_output)
         if not p_value:
             raise RuntimeError("Kein /p:-Wert in der M80-Ausgabe gefunden!")
         self.log(f"[STEP 6] Linken mit /p:{p_value}")
+        # Reihenfolge: cpabas (BIOS-Basis), ccp (Console Command Processor),
+        # bdos (Basic Disk Operating System), bios/biop (BIOS der Variante)
         self._run(
             self.cpm_cmd + ['linkmt', f'@OS=cpabas,ccp,bdos,{main_src}/p:{p_value}'],
-            cwd=build_dir
+            cwd=build_abs
         )
 
-        # STEP 7: Temporäre Dateien aufräumen
+        # STEP 7: Temporäre Dateien aufräumen (alles außer @os.com entfernen)
         self.log("[STEP 7] Aufräumen temporärer Dateien")
         for pattern in ['*.syp', '*.rel', '*.mac', '*.MAC', '*.erl',
                         'cpm.exe', 'm80.com', 'linkmt.com']:
-            for f in glob.glob(os.path.join(build_dir, pattern)):
+            for f in glob.glob(os.path.join(build_abs, pattern)):
                 basename = os.path.basename(f).lower()
                 if basename != '@os.com':
                     os.remove(f)
@@ -331,22 +475,34 @@ class CPABuilder:
 
     @staticmethod
     def _extract_p_value(asm_output):
-        """
-        /p:-Linkwert direkt aus der M80-Assembler-Ausgabe extrahieren.
-        Sucht nach '/p:' gefolgt vom Hex-Wert.
-        Steuerzeichen (z.B. Backspace \x08) zwischen /p: und dem Wert werden toleriert.
+        """/p:-Linkwert (Load-Adresse) aus der M80-Assembler-Ausgabe extrahieren.
+
+        Der M80-Assembler gibt am Ende der Assemblierung eine Zeile wie
+        '/p:E800' aus. Steuerzeichen (z.B. Backspace \x08) zwischen /p: und
+        dem Hex-Wert werden toleriert und vorher entfernt.
+
+        Returns:
+            str: Hex-Wert (z.B. 'E800') oder None wenn nicht gefunden
         """
         # Steuerzeichen (0x00-0x1F außer \n\r\t) entfernen
         cleaned = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', asm_output)
         m = re.search(r'/p:\s*([0-9A-Fa-f]{4,})', cleaned)
         return m.group(1) if m else None
 
-    # --- Diskettenimage ---
+    # -----------------------------------------------------------------------
+    # Diskettenimage - IMG-Format mit Bootsektor und Dateien
+    # -----------------------------------------------------------------------
 
     def build_diskimage(self, config):
-        """
-        Diskettenimage erstellen (IMG-Format).
-        Entspricht dem diskimage-Target des Makefiles.
+        """Diskettenimage im IMG-Format erstellen.
+
+        Entspricht dem 'diskimage'-Target des originalen Makefiles.
+        Ablauf in 5 Schritten:
+        1. Leeres Image erzeugen (mit 0xE5 gefüllt, CP/M-Standard)
+        2. @os.com ins Image kopieren (mit cpmcp)
+        3. Dateien aus additions/ (variantenspezifisch + allgemein) hinzufügen
+        4. Disketteninhalt zur Kontrolle anzeigen (cpmls)
+        5. Bootsektor einfügen (je nach Format am Anfang oder als Präfix)
         """
         variant = self.get_variant(config)
         if not variant:
@@ -360,145 +516,156 @@ class CPABuilder:
         bootsector = paths['bootsector']
         os_target = paths['os_target']
 
-        if not os.path.isfile(os_target):
+        if not os.path.isfile(self._abs(os_target)):
             raise RuntimeError("@OS.COM nicht gefunden! Zuerst 'os' bauen.")
 
         # STEP 1: Leeres Image erzeugen (mit 0xE5 gefüllt)
         self.log(f"[STEP 1] Erzeuge leeres Image ({size}k, Format: {fmt})")
         data = bytes([0xE5]) * (size * 1024)
-        with open(tmp_image, 'wb') as f:
+        with open(self._abs(tmp_image), 'wb') as f:
             f.write(data)
 
-        if fmt == 'cpa800' and os.path.isfile(bootsector):
-            # Pseudo-Bootblock am Anfang der Dateizuordnungstabelle
+        if fmt == 'cpa800' and os.path.isfile(self._abs(bootsector)):
+            # Bootblock am Anfang der Dateizuordnungstabelle einfügen (cpa800)
             self.log("[STEP 1b] Erzeuge pseudo-Bootblock")
-            with open(bootsector, 'rb') as bs:
+            with open(self._abs(bootsector), 'rb') as bs:
                 boot_data = bs.read(32)
-            with open(tmp_image, 'r+b') as f:
+            with open(self._abs(tmp_image), 'r+b') as f:
                 f.write(boot_data)
 
         # STEP 2: @os.com ins Image kopieren
         self.log(f"[STEP 2] Kopiere @os.com ins Image (Format: {fmt})")
         self._run([self.cpmcp, '-f', diskdef, tmp_image, os_target, '0:@os.com'])
 
-        if fmt == 'cpa800' and os.path.isfile(bootsector):
-            # Spur 0 bootfähig machen
+        if fmt == 'cpa800' and os.path.isfile(self._abs(bootsector)):
+            # Spur 0 bootfähig machen: vollständigen Bootsektor am Image-Anfang einfügen
             self.log("[STEP 2b] Fixe Spur 0 für Bootfähigkeit")
-            with open(bootsector, 'rb') as bs:
+            with open(self._abs(bootsector), 'rb') as bs:
                 boot_data = bs.read(128)  # 4 × 32 bytes
-            with open(tmp_image, 'r+b') as f:
+            with open(self._abs(tmp_image), 'r+b') as f:
                 f.write(boot_data)
 
-        # STEP 3: Dateien aus additions/ kopieren
+        # STEP 3: Dateien aus additions/ hinzufügen
+        # Zuerst variantenspezifische (z.B. additions/bc_a5120/), dann allgemeine
         additions_sys = os.path.join(paths['additions_dir'], variant)
-        if os.path.isdir(additions_sys):
-            self.log(f"[STEP 3a] Kopiere Dateien aus 'additions/{variant}'")
-            for fname in sorted(os.listdir(additions_sys)):
+        if os.path.isdir(self._abs(additions_sys)):
+            self.log(f"[STEP 3a] Kopiere variantenspezifische Dateien aus 'additions/{variant}'")
+            for fname in sorted(os.listdir(self._abs(additions_sys))):
                 fpath = os.path.join(additions_sys, fname)
-                if os.path.isfile(fpath):
-                    self.log(f"  [ADD] {fname} (system-specifisch)")
+                if os.path.isfile(self._abs(fpath)):
+                    self.log(f"  [ADD] {fname} (variantenspezifisch)")
                     self._run([self.cpmcp, '-f', diskdef, tmp_image, fpath, f'0:{fname}'])
 
-        self.log(f"[STEP 3b] Kopiere Dateien aus 'additions/'")
-        for fname in sorted(os.listdir(paths['additions_dir'])):
+        self.log(f"[STEP 3b] Kopiere allgemeine Dateien aus 'additions/'")
+        for fname in sorted(os.listdir(self._abs(paths['additions_dir']))):
             fpath = os.path.join(paths['additions_dir'], fname)
-            if os.path.isfile(fpath):
+            if os.path.isfile(self._abs(fpath)):
                 self.log(f"  [ADD] {fname}")
                 self._run([self.cpmcp, '-f', diskdef, tmp_image, fpath, f'0:{fname}'])
 
-        # STEP 4: Dateien im Image anzeigen
+        # STEP 4: Disketteninhalt zur Kontrolle anzeigen
         self.log("[STEP 4] Dateien im Image:")
         self._run([self.cpmls, '-Ff', diskdef, tmp_image])
 
-        # STEP 5: Bootsektor behandeln
-        if fmt == 'cpa780' and os.path.isfile(bootsector):
-            self.log(f"[STEP 5] Füge Bootsektor aus {os.path.basename(bootsector)} hinzu")
-            with open(bootsector, 'rb') as bs:
+        # STEP 5: Bootsektor einfügen
+        # cpa780: Bootsektor wird als Präfix vorangestellt (separate Spur 0)
+        # cpa800: Bootsektor ist bereits im Image enthalten
+        if fmt == 'cpa780' and os.path.isfile(self._abs(bootsector)):
+            self.log(f"[STEP 5] Füge Bootsektor als Präfix hinzu ({os.path.basename(bootsector)})")
+            with open(self._abs(bootsector), 'rb') as bs:
                 boot_data = bs.read()
-            with open(tmp_image, 'rb') as tmp:
+            with open(self._abs(tmp_image), 'rb') as tmp:
                 image_data = tmp.read()
-            with open(final_image, 'wb') as out:
+            with open(self._abs(final_image), 'wb') as out:
                 out.write(boot_data)
                 out.write(image_data)
         elif fmt == 'cpa780':
             self.log("[WARNUNG] Bootsektor nicht gefunden!")
-            shutil.copy2(tmp_image, final_image)
+            shutil.copy2(self._abs(tmp_image), self._abs(final_image))
         else:
             self.log("[STEP 5] Bootsektor nicht nötig (im Image enthalten)")
-            shutil.copy2(tmp_image, final_image)
+            shutil.copy2(self._abs(tmp_image), self._abs(final_image))
 
-        # Aufräumen
-        if os.path.isfile(tmp_image):
-            os.remove(tmp_image)
+        # Aufräumen: Temporäres Image löschen
+        tmp_abs = self._abs(tmp_image)
+        if os.path.isfile(tmp_abs):
+            os.remove(tmp_abs)
         self.log(f"[DONE] Diskettenimage erstellt: {final_image}")
 
-    # --- HFE/SCP-Image ---
+    # -----------------------------------------------------------------------
+    # HFE/SCP-Konvertierung und Diskette schreiben
+    # -----------------------------------------------------------------------
 
     def build_hfe_image(self, config):
-        """Diskettenimage in HFE-Format konvertieren."""
-        build_dir = os.path.join(self.project_dir, self.BUILD_DIR)
-        final_image = os.path.join(build_dir, 'cpadisk.img')
-        hfe_image = os.path.join(build_dir, 'cpadisk.hfe')
-        cfg_file = os.path.join(self.project_dir, self.CFG_FILE)
+        """Diskettenimage in HFE-Format konvertieren (für HxC Floppy-Emulator)."""
+        self._ensure_gw()
+        final_image = os.path.join(self.BUILD_DIR, 'cpadisk.img')
+        hfe_image = os.path.join(self.BUILD_DIR, 'cpadisk.hfe')
         fmt, _, _ = self._get_disk_format(config)
 
-        if not os.path.isfile(final_image):
+        if not os.path.isfile(os.path.join(self.project_dir, final_image)):
             raise RuntimeError("cpadisk.img nicht gefunden! Zuerst Diskettenimage erstellen.")
 
         self.log(f"[STEP] Konvertiere nach HFE (Format: {fmt})")
         self._run([
-            self.GW_CMD, 'convert',
-            f'--diskdefs={cfg_file}', f'--format={fmt}',
+            self.gw_cmd, 'convert',
+            f'--diskdefs={self.CFG_FILE}', f'--format={fmt}',
             final_image, hfe_image
         ])
         self.log(f"[DONE] HFE-Image erstellt: {hfe_image}")
 
     def build_scp_image(self, config):
-        """Diskettenimage in SCP-Format konvertieren."""
-        build_dir = os.path.join(self.project_dir, self.BUILD_DIR)
-        final_image = os.path.join(build_dir, 'cpadisk.img')
-        scp_image = os.path.join(build_dir, 'cpadisk.scp')
-        cfg_file = os.path.join(self.project_dir, self.CFG_FILE)
+        """Diskettenimage in SCP-Format konvertieren (SuperCard Pro)."""
+        self._ensure_gw()
+        final_image = os.path.join(self.BUILD_DIR, 'cpadisk.img')
+        scp_image = os.path.join(self.BUILD_DIR, 'cpadisk.scp')
         fmt, _, _ = self._get_disk_format(config)
 
-        if not os.path.isfile(final_image):
+        if not os.path.isfile(os.path.join(self.project_dir, final_image)):
             raise RuntimeError("cpadisk.img nicht gefunden! Zuerst Diskettenimage erstellen.")
 
         self.log(f"[STEP] Konvertiere nach SCP (Format: {fmt})")
         self._run([
-            self.GW_CMD, 'convert',
-            f'--diskdefs={cfg_file}', f'--format={fmt}',
+            self.gw_cmd, 'convert',
+            f'--diskdefs={self.CFG_FILE}', f'--format={fmt}',
             final_image, scp_image
         ])
         self.log(f"[DONE] SCP-Image erstellt: {scp_image}")
 
     def write_image(self, config):
-        """Diskettenimage auf physikalisches Laufwerk schreiben."""
-        build_dir = os.path.join(self.project_dir, self.BUILD_DIR)
-        final_image = os.path.join(build_dir, 'cpadisk.img')
-        cfg_file = os.path.join(self.project_dir, self.CFG_FILE)
+        """Diskettenimage auf physikalisches Diskettenlaufwerk schreiben (via Greaseweazle)."""
+        self._ensure_gw()
+        final_image = os.path.join(self.BUILD_DIR, 'cpadisk.img')
         fmt, _, _ = self._get_disk_format(config)
 
-        if not os.path.isfile(final_image):
+        if not os.path.isfile(os.path.join(self.project_dir, final_image)):
             raise RuntimeError("cpadisk.img nicht gefunden! Zuerst Diskettenimage erstellen.")
 
         self.log("[STEP] Schreibe Diskettenimage auf Laufwerk")
         self._run([
-            self.GW_CMD, 'write',
-            f'--diskdefs={cfg_file}', f'--format={fmt}',
+            self.gw_cmd, 'write',
+            f'--diskdefs={self.CFG_FILE}', f'--format={fmt}',
             final_image
         ])
         self.log("[DONE] Diskettenimage auf Laufwerk geschrieben.")
 
-    # --- Gesamt-Build ---
+    # -----------------------------------------------------------------------
+    # Gesamt-Build - Orchestriert alle Build-Schritte für ein Target
+    # -----------------------------------------------------------------------
 
     def build(self, target, config):
-        """
-        Vollständigen Build für ein bestimmtes Target ausführen.
+        """Vollständigen Build für ein bestimmtes Target ausführen.
+
+        Die Targets sind kaskadierend aufgebaut:
+        - 'os': Nur @OS.COM assemblieren und linken
+        - 'diskimage': OS + Diskettenimage (IMG)
+        - 'diskimagehfe': OS + IMG + HFE-Konvertierung
+        - 'diskimagescp': OS + IMG + SCP-Konvertierung
+        - 'writeimage': OS + IMG + auf Diskette schreiben
 
         Args:
-            target: 'os', 'diskimage', 'diskimagehfe', 'diskimagescp', 'writeimage'
-            config: Config-Dict
+            target: Build-Ziel (einer der oben genannten Strings)
+            config: Config-Dict mit allen Konfigurationsoptionen
         """
         self.log(f"[START] Build-Target: {target}")
 
