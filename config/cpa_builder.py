@@ -59,6 +59,13 @@ class CPABuilder:
     DEFAULT_IMAGE_SIZE = 780
     DEFAULT_DISKDEF = 'cpa780_withoutBoot'
 
+    # Bootsektor Build-Konstanten (SYL-Mixed-Geometry-Format)
+    BOOTSEC_SRC_DIR = os.path.join('bootsec', 'src')
+    BOOTSEC_TRACK_SYS = 3328      # Systemspur: 26 Sektoren x 128 Bytes
+    BOOTSEC_TRACK_DATA = 5120     # Datenspur: 5 Sektoren x 1024 Bytes
+    BOOTSEC_FILL = 0x53           # 'S' -- SYL-Fuellbyte
+    BOOTSEC_TOTAL = 15104         # 3 x 3328 + 1 x 5120
+
     def __init__(self, project_dir, log_callback=None):
         """
         Args:
@@ -354,7 +361,8 @@ class CPABuilder:
             'additions_dir': self.ADDITIONS_DIR,
             'tools_dir': self.TOOLS_DIR,
             'os_target': os.path.join(self.BUILD_DIR, '@os.com'),
-            'bootsector': os.path.join('prebuilt', variant, 'bootsec.bin'),
+            'bootsector': os.path.join(self.BUILD_DIR, 'bootsec.bin'),
+            'bootsector_prebuilt': os.path.join('prebuilt', variant, 'bootsec.bin'),
         }
 
     # --- Disk-Format ---
@@ -369,6 +377,165 @@ class CPABuilder:
         if config.get('CONFIG_BUILD_DISKTYPE_800K') == 'y':
             return 'cpa800', 800, 'cpa800'
         return 'cpa780', 780, 'cpa780_withoutBoot'
+
+    # -----------------------------------------------------------------------
+    # Bootsektor bauen - bootsec.bin aus Assembler-Quelle erzeugen
+    # -----------------------------------------------------------------------
+
+    @staticmethod
+    def _convert_to_crlf(src_path, dst_path):
+        """Quelldatei mit CRLF-Zeilenenden kopieren (M80-Anforderung)."""
+        with open(src_path, 'r', encoding='utf-8', newline='') as f:
+            content = f.read()
+        content = content.replace('\r\n', '\n').replace('\r', '\n')
+        content = content.replace('\n', '\r\n')
+        with open(dst_path, 'wb') as f:
+            f.write(content.encode('ascii', errors='replace'))
+
+    @staticmethod
+    def _parse_bootsec_prn(prn_path):
+        """M80-PRN-Listing parsen und Binaerdaten als Dict {Adresse: Byte} extrahieren.
+
+        Das PRN-Format von M80 (MACRO-80 V3.50) hat pro Zeile:
+          __AAAA'  BB BB BB BB  <tab><quellentext>
+        Hex-Daten werden aus den Spalten 8-23 extrahiert.
+        4-stellige Hex-Werte werden als Little-Endian (Z80) gespeichert.
+        """
+        memory = {}
+        addr_re = re.compile(r'^\s{2}([0-9A-Fa-f]{4})[\'` ]?')
+        with open(prn_path, 'r', errors='replace') as f:
+            for line in f:
+                m = addr_re.match(line)
+                if m:
+                    addr = int(m.group(1), 16)
+                    hex_area = line[8:24] if len(line) > 8 else ''
+                    byte_vals = re.findall(r'[0-9A-Fa-f]{4}|[0-9A-Fa-f]{2}', hex_area)
+                    for bv in byte_vals:
+                        v = int(bv, 16)
+                        if len(bv) <= 2:
+                            memory[addr] = v
+                            addr += 1
+                        else:
+                            memory[addr] = v & 0xFF
+                            memory[addr + 1] = (v >> 8) & 0xFF
+                            addr += 2
+        return memory
+
+    def build_bootsec(self, config):
+        """Bootsektor (bootsec.bin) aus Assembler-Quelle bauen.
+
+        Wenn die Quelldatei bootsec/src/bootsec.mac vorhanden ist, wird sie
+        mit M80 assembliert und das PRN-Listing in eine 4-Track-Binaerdatei
+        (SYL-Mixed-Geometry-Format, 15104 Bytes) umgewandelt.
+
+        Ist keine Quelle vorhanden, wird die vorkompilierte bootsec.bin
+        aus prebuilt/<variante>/ kopiert.
+
+        Ergebnis: build/bootsec.bin
+        """
+        variant = self.get_variant(config)
+        if not variant:
+            raise RuntimeError("Keine Systemvariante gewaehlt!")
+
+        paths = self._paths(variant)
+        build_abs = self._abs(paths['build_dir'])
+        os.makedirs(build_abs, exist_ok=True)
+
+        bootsec_out = os.path.join(paths['build_dir'], 'bootsec.bin')
+        bootsec_src = os.path.join(self.BOOTSEC_SRC_DIR, 'bootsec.mac')
+
+        # --- Fallback: vorkompilierte Datei verwenden ---
+        if not os.path.isfile(self._abs(bootsec_src)):
+            prebuilt = paths['bootsector_prebuilt']
+            if os.path.isfile(self._abs(prebuilt)):
+                shutil.copy2(self._abs(prebuilt), self._abs(bootsec_out))
+                self.log(f"[INFO] Bootsektor aus prebuilt/{variant}/ kopiert (keine Quelle vorhanden)")
+            else:
+                self.log("[WARNUNG] Kein Bootsektor verfuegbar (weder Quelle noch prebuilt)")
+            return
+
+        # --- Aus Quelle bauen ---
+        self.log("[STEP] Bootsektor aus Quelle assemblieren")
+
+        # 1. Quelldatei nach build/ kopieren (CRLF, Grossbuchstaben)
+        dst_mac = os.path.join(build_abs, 'BOOTSEC.MAC')
+        self._convert_to_crlf(self._abs(bootsec_src), dst_mac)
+        self.log(f"    Quelle: {bootsec_src}")
+
+        # 2. M80 nach build/ kopieren
+        m80_src = os.path.join(self._abs(self.TOOLS_DIR), 'm80.com')
+        if not os.path.isfile(m80_src):
+            raise RuntimeError(f"M80 nicht gefunden: {m80_src}")
+        m80_dst = os.path.join(build_abs, 'm80.com')
+        if not os.path.isfile(m80_dst):
+            shutil.copy2(m80_src, build_abs)
+
+        # 3. Assemblieren mit M80 (PRN + REL erzeugen)
+        cparun_abs = os.path.abspath(self._abs(self.cparun))
+        self._run(
+            [cparun_abs, '-dir', build_abs, 'm80', 'BOOTSEC,BOOTSEC=BOOTSEC'],
+            cwd=build_abs, check=False
+        )
+
+        # 4. PRN-Listing finden
+        prn_path = None
+        for name in ['BOOTSEC.PRN', 'bootsec.prn']:
+            p = os.path.join(build_abs, name)
+            if os.path.isfile(p):
+                prn_path = p
+                break
+        if not prn_path:
+            raise RuntimeError(
+                "M80 hat kein PRN-Listing fuer bootsec erzeugt. "
+                f"Dateien in build/: {os.listdir(build_abs)}"
+            )
+
+        # 5. PRN-Listing parsen
+        memory = self._parse_bootsec_prn(prn_path)
+        if not memory:
+            raise RuntimeError("Keine Binaerdaten im bootsec PRN-Listing gefunden!")
+        self.log(f"    Adressbereich: {min(memory):04X}H - {max(memory):04X}H ({len(memory)} Bytes)")
+
+        # 6. 4-Track-Binaerdatei zusammensetzen
+        def mem_to_bytes(start, end):
+            result = bytearray(end - start)
+            for a in range(start, end):
+                if a in memory:
+                    result[a - start] = memory[a]
+            return bytes(result)
+
+        track0 = mem_to_bytes(0x0000, 0x0D00)   # RAM 0000H-0CFFH
+        track2 = mem_to_bytes(0x0D00, 0x1A00)   # RAM 0D00H-19FFH
+        fill_sys = bytes([self.BOOTSEC_FILL] * self.BOOTSEC_TRACK_SYS)
+        fill_data = bytes([self.BOOTSEC_FILL] * self.BOOTSEC_TRACK_DATA)
+
+        bootsec = track0 + fill_sys + track2 + fill_data
+        if len(bootsec) != self.BOOTSEC_TOTAL:
+            raise RuntimeError(
+                f"Bootsektor-Groesse falsch: {len(bootsec)} != {self.BOOTSEC_TOTAL}"
+            )
+
+        with open(self._abs(bootsec_out), 'wb') as f:
+            f.write(bootsec)
+        self.log(f"    Bootsektor erzeugt: {bootsec_out} ({len(bootsec)} Bytes)")
+
+        # 7. Temporaere Dateien aufraeumen
+        for fname in ['BOOTSEC.MAC', 'bootsec.mac', 'BOOTSEC.PRN', 'bootsec.prn',
+                      'BOOTSEC.REL', 'bootsec.rel', 'BOOTSEC.SYM', 'bootsec.sym',
+                      'm80.com', 'M80.COM']:
+            p = os.path.join(build_abs, fname)
+            if os.path.isfile(p):
+                os.remove(p)
+
+        # 8. Vergleich mit prebuilt (informativ)
+        prebuilt = paths['bootsector_prebuilt']
+        if os.path.isfile(self._abs(prebuilt)):
+            with open(self._abs(prebuilt), 'rb') as f:
+                original = f.read()
+            if bootsec == original:
+                self.log("    Vergleich mit prebuilt: IDENTISCH")
+            else:
+                self.log("    Vergleich mit prebuilt: ABWEICHEND (Quelle wurde modifiziert)")
 
     # --- Patch-Integration ---
 
@@ -699,6 +866,7 @@ class CPABuilder:
             self.build_os(config)
 
         if target in ('diskimage', 'diskimagehfe', 'diskimagescp', 'writeimage'):
+            self.build_bootsec(config)
             self.build_diskimage(config)
 
         if target == 'diskimagehfe':
