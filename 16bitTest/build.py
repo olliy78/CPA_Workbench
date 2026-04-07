@@ -47,6 +47,7 @@ import sys
 # ---------------------------------------------------------------------------
 SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(SCRIPT_DIR)          # CPA_Workbench/
+ADDITIONS_DIR = os.path.join(PROJECT_DIR, 'additions', 'bc_a5120')  # Ziel fuer .COM
 SRC_DIR     = os.path.join(SCRIPT_DIR, 'src')      # 16bitTest/src/
 BUILD_DIR   = os.path.join(SCRIPT_DIR, 'build')    # 16bitTest/build/
 TOOLS_DIR   = os.path.join(PROJECT_DIR, 'tools')   # tools/
@@ -227,8 +228,15 @@ def main():
     log(f"FERTIG: {TARGET_COM} ({com_size} Bytes)")
     log(f"Pfad:   {com_path}")
     log("=" * 50)
-    log("\nKopiere em256test.com auf eine CP/A-Diskette und starte es")
-    log("mit dem Befehl:  em256test")
+
+    # --- Schritt 7: Nach additions/bc_a5120/ kopieren ---
+    log(f"\n[STEP 7] Kopiere nach additions/bc_a5120/")
+    os.makedirs(ADDITIONS_DIR, exist_ok=True)
+    dest = os.path.join(ADDITIONS_DIR, TARGET_COM)
+    shutil.copy2(com_path, dest)
+    log(f"    {dest}")
+    log("\nDiskette schreiben: make (oder Makefile-Ziel fuer bc_a5120)")
+    log(f"Starten mit:        em256tst")
 
 
 if __name__ == '__main__':

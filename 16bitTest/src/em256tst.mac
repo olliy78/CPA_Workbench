@@ -7,137 +7,307 @@
 ; Zweck:
 ;   1. Z8000-Maschinencode in den EM256-Speicher laden
 ;      (einfache Addition: 0x1234 + 0x5678 = 0x68AC, Ergebnis im Shared-RAM)
-;   2. U8000 starten (Reset aufheben)
-;   3. Auf Fertigmeldung des U8000 warten (Transfer Enable / Timeout)
+;   2. U8000 starten (Reset aufheben, TRQ8 inaktiv)
+;   3. Auf Fertigmeldung warten (TRQ8 -> µI -> TREN Handshake / Timeout)
 ;   4. Ergebnis aus Shared-RAM lesen und pruefen
 ;   5. Alle Schritte als CP/M-Konsolenausgabe protokollieren
 ;
+; WICHTIG - I/O-Zugriffe:
+;   Alle PIO-Datenzugriffe (Port A Lesen, Port B Lesen/Schreiben)
+;   muessen via OUT (C),A / IN A,(C) mit B=0 erfolgen!
+;   OUT (n),A legt den Akkumulator auf A8-A15 des Adressbusses.
+;   Die EM256-Karte dekodiert A8-A15 fuer das 16*4-RAM-Register.
+;   Unpassende obere Adressbytes verhindern den Zugriff auf die PIO.
+;   OUT (C),A mit B=0,C=port erzeugt saubere Adressen 0x00nn.
+;
 ; Assemblierung:
-;   m80  em256test.erl=em256test
-;   linkmt em256test=em256test/p:100
-;   (erzeugt em256test.com fuer CP/M / CP/A)
+;   m80  em256tst.erl=em256tst
+;   linkmt em256tst=em256tst/p:100
 ;
 ; Autor:  (c) 2026 Olaf Krieger
 ; Lizenz: MIT
-; Datum:  2026-04-06
+; Datum:  2026-04-07
 ;
 
 ; =============================================================================
 ; CP/M BDOS-Konstanten
 ; =============================================================================
-BDOS	EQU	0005H		; BDOS-Einsprungadresse (CP/M-Standard)
-CONOUT	EQU	2		; BDOS-Funktion: Zeichen auf Konsole ausgeben (C=Zeichen)
-PRINT	EQU	9		; BDOS-Funktion: String ausgeben (DE=Adresse, '$'-terminiert)
-STACK	EQU	0100H		; Stapel ganz oben im TPA (wir nutzen CP/M-Standard-Stack)
+BDOS	EQU	0005H		; BDOS-Einsprungadresse
+CONIN	EQU	1		; BDOS: Zeichen lesen (wartet, Echo)
+CONOUT	EQU	2		; BDOS: Zeichen ausgeben (E=Zeichen)
+DCIO	EQU	6		; BDOS: Direct Console I/O (E=FF: lesen ohne Echo)
+PRINT	EQU	9		; BDOS: String ausgeben (DE=Adresse, '$'-terminiert)
+PAGELEN	EQU	23		; Zeilen pro Bildschirmseite (24. = Prompt)
 
 ; =============================================================================
 ; EM256-Hardware-Konstanten
-; (aus src/bc_a5120/bios.mac und src/bc_a5120/biosremc.mac)
 ; =============================================================================
-MODADR	EQU	0A8H		; PIO Port B Datenadresse (Steuerregister U8000 + RAM)
-PIOA	EQU	0A8H		; PIO Port A Datenadresse (Status U8000, alle Eingabe)
-PIOB	EQU	0A9H		; PIO Port B Datenadresse (Steuer, Ausgabe)
+MODADR	EQU	0A8H		; Basisadresse EM256 (PIO + 16*4-RAM)
+PIOA	EQU	0A8H		; PIO Port A Daten (alle Eingabe)
+PIOB	EQU	0A9H		; PIO Port B Daten (b0-6 Ausgabe, b7 Eingabe)
 PIOACTRL EQU	0AAH		; PIO Port A Steuerregister
 PIOBCTRL EQU	0ABH		; PIO Port B Steuerregister
-RAM16	EQU	0AFH		; 16*4-RAM Page/Write-Register (Subadresse in Portadr.-Bits 7:4)
-EM256ADR EQU	4000H		; Z80-Fensteradresse des eingeblendeten 256K-RAM
+RAM16	EQU	0AFH		; 16*4-RAM Page/Write-Register
+EM256ADR EQU	4000H		; Z80-Fensteradresse fuer eingeblendetes EM256-RAM
 
-; PIO Port B Bit-Positionen (Ausgabe)
-SG0P	EQU	0		; Segment-Bit 0 fuer U880-Zugriff
-SG1B	EQU	1		; Segment-Bit 1 fuer U880-Zugriff
+; PIO Port B Bit-Positionen (Ausgabe, active high sofern nicht negiert)
+SG0P	EQU	0		; Segment-Bit 0
+SG1B	EQU	1		; Segment-Bit 1
 N_RAMEN	EQU	2		; RAM-Enable (negiert: 0=ein)
-N_STOP	EQU	3		; U8000-Stop (negiert: 0=gestoppt, 1=laeuft)
-RESET16	EQU	4		; U8000-Reset (1=in Reset gehalten)
-N_TRQ8	EQU	5		; Transfer-Request U880->U8000 (negiert: 0=aktiv)
-PRRESET	EQU	6		; Paritaetsfehler-Latch-Reset
+N_STOP	EQU	3		; U8000-Stop (negiert: 0=gestoppt)
+RESET16	EQU	4		; U8000-Reset (1=Reset aktiv)
+N_TRQ8	EQU	5		; Transfer-Request U880->U8000 (negiert)
+PRRESET	EQU	6		; Reset Paritaetsfehler-Latch
 
 ; PIO Port A Bit-Positionen (Eingabe)
-INT16	EQU	4		; Interrupt U8000->U880 (1=Interrupt angemeldet)
-TREN	EQU	7		; Transfer Enable (1=U8000 bereit)
+INT16	EQU	4		; Interrupt U8000->U880
+TREN	EQU	7		; Transfer Enable U8000
 
-; 16*4-RAM Register Bits (MODADR+7, Bits im Datenbyte)
-N_PAGEN	EQU	0		; Page enable (negiert: 0=eingeblendet)
-N_WRITE	EQU	1		; Write enable (negiert: 0=schreibbar)
+; 16*4-RAM Register Bits
+N_PAGEN	EQU	0		; Page enable (negiert)
+N_WRITE	EQU	1		; Write enable (negiert)
+
+; Hilfs-Konstanten fuer PIO Port B Zustaende
+PIOB_IDLE EQU	(1 SHL RESET16) OR (1 SHL N_RAMEN)	; 0x14: U8000 Reset, RAM aus
+PIOB_RAMON EQU	(1 SHL RESET16)				; 0x10: U8000 Reset, RAM ein
+PIOB_RUN  EQU	(1 SHL N_STOP) OR (1 SHL N_RAMEN) OR (1 SHL N_TRQ8) ; 0x2C: U8000 laeuft, kein TRQ
+PIOB_TRQ  EQU	(1 SHL N_STOP) OR (1 SHL N_RAMEN)	; 0x0C: Bus anfordern (TRQ8 aktiv)
+RAM16_P0  EQU	0CH		; Seite 0 aktiv: /A15=1,/A14=1,Write=0,Page=0
+RAM16_OFF EQU	0FH		; Seite aus: /A15=1,/A14=1,Page=1,Write=1
+
+; Ergebnis-Offset im EM256-Speicher (muss HINTER dem Z8001-Code liegen!)
+RES_OFS	EQU	020H		; Offset fuer Ergebniswort (0x0020)
 
 ; Erwartetes Ergebnis der Z8000-Addition
-EXPECTED_LO	EQU	0ACH	; Low-Byte von 0x68AC (0x1234 + 0x5678)
+EXPECTED_LO	EQU	0ACH	; Low-Byte  von 0x68AC
 EXPECTED_HI	EQU	068H	; High-Byte von 0x68AC
 
-; Timeout-Zaehler (Schleifeniteratoren, ca. 2 Sekunden auf ~4 MHz Z80)
-TIMEOUT_HI	EQU	020H	; ~8192 aeussere Schleifendurchlaeufe
-TIMEOUT_LO	EQU	000H	; 256 innere Durchlaeufe
+; Timeout (ca. 2 Sek. bei ~4 MHz)
+TIMEOUT_HI	EQU	020H
 
-; =============================================================================
-; Programmstart - CP/M .COM-Format: Ausfuehrung beginnt bei 0x100
 ; =============================================================================
 	ORG	100H
+; =============================================================================
 
 START:
-	; CP/M-Stack sichern, eigenen Stack aufsetzen
 	LD	(SAVED_SP), SP
 	LD	SP, STACK_TOP
 
-	; === Schritt 1: Gruss ===
 	LD	DE, MSG_BANNER
 	CALL	PUTS
 
-	; === Schritt 2: PIO initialisieren ===
-	LD	DE, MSG_INIT
+; =====================================================================
+; PHASE 1: PIO-DIAGNOSE VOR JEDER AENDERUNG (BIOS-Zustand)
+; =====================================================================
+	LD	DE, MSG_P1
+	CALL	PUTS
+
+	; PIO-B vom BIOS-Zustand lesen (OUT(C)/IN(C) mit B=0)
+	LD	B, 0
+	LD	C, PIOB
+	IN	A, (C)
+	LD	(DBG_PB_BIOS), A
+
+	; PIO-A vom BIOS-Zustand lesen
+	LD	C, PIOA
+	IN	A, (C)
+	LD	(DBG_PA_BIOS), A
+
+	; Ergebnis anzeigen
+	LD	DE, MSG_PB_BIOS
+	CALL	PUTS
+	LD	A, (DBG_PB_BIOS)
+	CALL	PUTHEX
+	LD	DE, MSG_CRLF
+	CALL	PUTS
+
+	LD	DE, MSG_PA_BIOS
+	CALL	PUTS
+	LD	A, (DBG_PA_BIOS)
+	CALL	PUTHEX
+	LD	DE, MSG_CRLF
+	CALL	PUTS
+
+; =====================================================================
+; PHASE 2: PIO-B SCHREIBTEST OHNE REINIT (nutzt BIOS-Konfiguration)
+;   Testet ob OUT(C),A die PIO-Ausgaenge aendert.
+;   Falls ja: BIOS-Konfiguration ist intakt, PIO reagiert.
+; =====================================================================
+	LD	DE, MSG_P2
+	CALL	PUTS
+
+	; Test A: Schreibe 0x14 (Idle), lese zurueck (erwartet 0x94)
+	LD	A, PIOB_IDLE	; 0x14
+	LD	B, 0
+	LD	C, PIOB
+	OUT	(C), A
+	IN	A, (C)		; B ist noch 0
+	LD	(DBG_PB_T1), A
+
+	; Test B: Schreibe 0x10 (RAMON), lese zurueck (erwartet 0x90)
+	LD	A, PIOB_RAMON	; 0x10
+	OUT	(C), A
+	IN	A, (C)
+	LD	(DBG_PB_T2), A
+
+	; Test C: Zurueck auf Idle 0x14 (erwartet 0x94)
+	LD	A, PIOB_IDLE	; 0x14
+	OUT	(C), A
+	IN	A, (C)
+	LD	(DBG_PB_T3), A
+
+	; Ergebnisse anzeigen
+	LD	DE, MSG_TB_W14
+	CALL	PUTS
+	LD	A, (DBG_PB_T1)
+	CALL	PUTHEX
+	LD	DE, MSG_TB_EXP94
+	CALL	PUTS
+
+	LD	DE, MSG_TB_W10
+	CALL	PUTS
+	LD	A, (DBG_PB_T2)
+	CALL	PUTHEX
+	LD	DE, MSG_TB_EXP90
+	CALL	PUTS
+
+	LD	DE, MSG_TB_W14B
+	CALL	PUTS
+	LD	A, (DBG_PB_T3)
+	CALL	PUTHEX
+	LD	DE, MSG_TB_EXP94
+	CALL	PUTS
+
+; =====================================================================
+; PHASE 3: PIO INITIALISIEREN (OTIR, wie BIOS biosremc.mac emina)
+; =====================================================================
+	LD	DE, MSG_P3
 	CALL	PUTS
 	CALL	INIT_PIO
 
-	; === Schritt 3: EM256 vorhanden? ===
-	LD	DE, MSG_DETECT
+	; PIO-B danach lesen
+	LD	B, 0
+	LD	C, PIOB
+	IN	A, (C)
+	LD	(DBG_PB_INIT), A
+
+	LD	DE, MSG_PB_INIT
+	CALL	PUTS
+	LD	A, (DBG_PB_INIT)
+	CALL	PUTHEX
+	LD	DE, MSG_TB_EXP94
+	CALL	PUTS
+
+; =====================================================================
+; PHASE 4: PIO-B SCHREIBTEST NACH REINIT
+;   Falls Phase 2 OK aber Phase 4 NICHT: OTIR hat PIO kaputt gemacht.
+; =====================================================================
+	LD	DE, MSG_P4
+	CALL	PUTS
+
+	; Schreibe 0x10 (RAMON), lese zurueck (erwartet 0x90)
+	LD	A, PIOB_RAMON
+	LD	B, 0
+	LD	C, PIOB
+	OUT	(C), A
+	IN	A, (C)
+	LD	(DBG_PB_T4), A
+
+	; Zurueck auf Idle
+	LD	A, PIOB_IDLE
+	OUT	(C), A
+	IN	A, (C)
+	LD	(DBG_PB_T5), A
+
+	LD	DE, MSG_TB_W10
+	CALL	PUTS
+	LD	A, (DBG_PB_T4)
+	CALL	PUTHEX
+	LD	DE, MSG_TB_EXP90
+	CALL	PUTS
+
+	LD	DE, MSG_TB_W14B
+	CALL	PUTS
+	LD	A, (DBG_PB_T5)
+	CALL	PUTHEX
+	LD	DE, MSG_TB_EXP94
+	CALL	PUTS
+
+; =====================================================================
+; PHASE 5: EM256 ERKENNUNG (BIOS-Methode, atomar)
+; =====================================================================
+	LD	DE, MSG_P5
 	CALL	PUTS
 	CALL	DETECT_EM256
-	JR	NC, STEP4		; Carry clear = gefunden
+	JR	NC, STEP6
 	LD	DE, MSG_NOT_FOUND
 	CALL	PUTS
 	JP	EXIT
 
-STEP4:
+STEP6:
 	LD	DE, MSG_FOUND
 	CALL	PUTS
 
-	; === Schritt 4: Z8000-Code in Shared-RAM laden ===
-	LD	DE, MSG_LOAD
+; =====================================================================
+; PHASE 6: Z8000-CODE LADEN
+; =====================================================================
+	LD	DE, MSG_P6
 	CALL	PUTS
 	CALL	LOAD_Z8000_CODE
 
-	; === Schritt 5: U8000 starten ===
-	LD	DE, MSG_START
+; =====================================================================
+; PHASE 7: U8000 STARTEN UND WARTEN
+; =====================================================================
+	LD	DE, MSG_P7
 	CALL	PUTS
 	CALL	START_U8000
 
-	; === Schritt 6: Auf Fertigmeldung warten ===
-	LD	DE, MSG_WAIT
+	LD	DE, MSG_P7W
 	CALL	PUTS
 	CALL	WAIT_READY
-	JR	NC, STEP7		; Carry clear = bereit
+	JR	NC, STEP8
+
+	; Timeout
 	LD	DE, MSG_TIMEOUT
 	CALL	PUTS
-	CALL	STOP_U8000
-	JP	EXIT
+	; PIO-A Status ausgeben (hilft bei Diagnose)
+	LD	B, 0
+	LD	C, PIOA
+	IN	A, (C)
+	LD	(DBG_PA_BIOS), A
+	LD	DE, MSG_PA_STAT
+	CALL	PUTS
+	LD	A, (DBG_PA_BIOS)
+	CALL	PUTHEX
+	LD	DE, MSG_CRLF
+	CALL	PUTS
+	JR	STEP8_STOP	; Trotzdem Ergebnis pruefen!
 
-STEP7:
+STEP8:
 	LD	DE, MSG_READY
 	CALL	PUTS
 
-	; === Schritt 7: U8000 anhalten ===
+STEP8_STOP:
 	CALL	STOP_U8000
 
-	; === Schritt 8: Ergebnis aus Shared-RAM lesen ===
-	LD	DE, MSG_READ
+; =====================================================================
+; PHASE 8: ERGEBNIS PRUEFEN
+; =====================================================================
+	LD	DE, MSG_P8
 	CALL	PUTS
 	CALL	READ_RESULT
 
-	; === Schritt 9: Ergebnis pruefen ===
-	LD	DE, MSG_CHECK
+	LD	DE, MSG_GOT
 	CALL	PUTS
+	LD	A, (RESULT_HI)
+	CALL	PUTHEX
+	LD	A, (RESULT_LO)
+	CALL	PUTHEX
+	LD	DE, MSG_CRLF
+	CALL	PUTS
+
 	CALL	CHECK_RESULT
 	JR	NC, PASS
-
-	; Fehler
 	LD	DE, MSG_FAIL
 	CALL	PUTS
 	JP	EXIT
@@ -150,260 +320,336 @@ EXIT:
 	LD	DE, MSG_DONE
 	CALL	PUTS
 	LD	SP, (SAVED_SP)
-	RET			; Rueckkehr zu CP/M
-
-; =============================================================================
-; INIT_PIO - PIO der EM256 initialisieren
-;
-; Setzt PIO Port A (alle Eingabe) und PIO Port B (b7 Eingabe, Rest Ausgabe).
-; U8000 wird in Reset gehalten, RAM deaktiviert.
-; Paritaetsfehler-Latch wird zurueckgesetzt.
-;
-; Aendert: A, BC
-; =============================================================================
-INIT_PIO:
-	; --- PIO Port A initialisieren ---
-	; Byte 1: 0CFh = Bit-E/A-Modus (Mode 3)
-	LD	A, 0CFH
-	OUT	(PIOACTRL), A
-	; Byte 2: 0FFh = alle 8 Bits=Eingabe
-	LD	A, 0FFH
-	OUT	(PIOACTRL), A
-	; Byte 3: 07h = Interrupt verboten, keine Maske
-	LD	A, 07H
-	OUT	(PIOACTRL), A
-
-	; --- PIO Port B initialisieren ---
-	; Byte 1: 0CFh = Bit-E/A-Modus (Mode 3)
-	LD	A, 0CFH
-	OUT	(PIOBCTRL), A
-	; Byte 2: 80h = Bit 7 Eingabe (n_pe), Bits 0-6 Ausgabe
-	LD	A, 080H
-	OUT	(PIOBCTRL), A
-	; Byte 3: 07h = Interrupt verboten, keine Maske (kein Paritaets-INT fuer diesen Test)
-	LD	A, 07H
-	OUT	(PIOBCTRL), A
-
-	; --- Ruhezustand: U8000 in Reset, RAM deaktiviert ---
-	; Paritaetsfehler-Latch zuruecksetzen (Flanke auf prreset erzeugen)
-	LD	A, (1 SHL PRRESET) OR (1 SHL RESET16) OR (1 SHL N_RAMEN)
-	OUT	(PIOB), A
-	; Latch freigeben
-	LD	A, (1 SHL RESET16) OR (1 SHL N_RAMEN)
-	OUT	(PIOB), A
-	; Alle RAM-Pages deaktivieren (Schleife ueber alle 16 Subadressierung)
-	LD	B, 16		; 16 Pages (Subadresse 0x0F..0xF0 in Portadresse-Nibble)
-	LD	A, 0FH		; Startportadresse-Highbyte: 0x0F = Page 0
-INIT_LOOP:
-	OUT	(RAM16), A	; OUT mit (A als Port  und) Datenbyte = n_pagen|n_write|Adr
-	; hier: Portadresse ist statisch 0AFH -> alle gehen auf RAM16
-	; Fuer verschiedene Pages muss die Portadresse variiert werden -> via OUT (C),A
-	LD	C, RAM16
-	LD	A, (1 SHL N_PAGEN) OR (1 SHL N_WRITE)
-	OUT	(C), A		; Page N disable, Write disable
-	LD	A, C
-	ADD	A, 10H		; Subadresse erhoehen (Portadresse)
-	LD	C, A
-	DJNZ	INIT_LOOP
-
-	; Finale Sicherung: U8000 in Reset, RAM aus
-	LD	A, (1 SHL RESET16) OR (1 SHL N_RAMEN)
-	OUT	(PIOB), A
 	RET
 
 ; =============================================================================
-; DETECT_EM256 - Prueft ob eine EM256-Karte vorhanden ist
+; INIT_PIO - PIO der EM256 initialisieren (OTIR, wie BIOS)
 ;
-; Methode: Page 0 einblenden, Testmuster schreiben, zuruecklesen, pruefen.
-;          Dann pruefen, dass das Muster NICHT im normalen RAM erscheint.
+; Konfiguriert PIO Port A (alle Eingabe) und Port B (b7 Eingabe, Rest Ausgabe).
+; Anschliessend Parity-Latch reset und Idle-Zustand herstellen.
+; Alle Daten-Schreibzugriffe via OUT (C),A mit B=0.
 ;
-; Rueckgabe: Carry clear = gefunden, Carry set = nicht vorhanden
-; Aendert:   A, BC, DE, HL
+; Aendert: A, BC, HL
+; =============================================================================
+INIT_PIO:
+	; --- Port A: Mode 3, alle Eingabe, keine Interrupts ---
+	LD	B, 3
+	LD	HL, PA_INIT
+	LD	C, PIOACTRL
+	OTIR			; B=0 danach
+
+	; --- Port B: Mode 3, b7 Eingabe, Rest Ausgabe, keine Interrupts ---
+	LD	B, 3
+	LD	HL, PB_INIT
+	LD	C, PIOBCTRL
+	OTIR			; B=0 danach
+
+	; --- Parity-Latch Reset (Flanke auf prreset) ---
+	LD	C, PIOB		; B ist noch 0 von OTIR!
+	LD	A, (1 SHL PRRESET) OR PIOB_IDLE		; 0x54
+	OUT	(C), A
+	LD	A, PIOB_IDLE	; 0x14: Flanke abschliessen
+	OUT	(C), A
+
+	; --- 16*4-RAM: alle 16 Positionen deaktivieren ---
+	; Datenbyte 0x07: n_pagen=1, n_write=1, /A14=1 (wie BIOS: hbemadr shr 12 = 4)
+	LD	B, 0
+	LD	C, RAM16
+INIT_LOOP:
+	LD	A, 07H
+	OUT	(C), A
+	LD	A, B
+	ADD	A, 010H
+	LD	B, A
+	JR	NZ, INIT_LOOP
+
+	; --- Idle: U8000 in Reset, RAM aus ---
+	LD	B, 0
+	LD	C, PIOB
+	LD	A, PIOB_IDLE
+	OUT	(C), A
+	RET
+
+; PIO-Steuerworte (identisch mit BIOS painit/pbinit, ohne Interrupt-Vektor)
+PA_INIT:
+	DB	0CFH		; Mode 3 (Bit-I/O)
+	DB	0FFH		; Alle Bits Eingabe
+	DB	07H		; Interrupts aus
+PB_INIT:
+	DB	0CFH		; Mode 3 (Bit-I/O)
+	DB	80H		; Bit 7 Eingabe, Rest Ausgabe
+	DB	07H		; Interrupts aus
+
+; =============================================================================
+; DETECT_EM256 - EM256 erkennen (BIOS-Methode, vollstaendig atomar)
+;
+; Zwischen RAMON_S0 und RAMOFF: KEINE BDOS-Aufrufe!
+; Alle Messwerte in Variablen, Ausgabe erst nach RAMOFF.
+;
+; Rueckgabe: CF=0 gefunden, CF=1 nicht gefunden
+; Aendert:   alle
 ; =============================================================================
 DETECT_EM256:
-	; Normalen RAM-Inhalt retten
+	; ===== ATOMARER ABSCHNITT START =====
+
+	; Schritt 1: Z80-RAM-Inhalt sichern
 	LD	HL, (EM256ADR)
 	LD	(SAVE_WORD), HL
 
-	; Page 0, Segment 0 einblenden (schreiben+lesen)
-	XOR	A		; Track 0 = Page 0, Segment 0
-	CALL	RAMON
+	; Schritt 2: Z80-RAM mit 0x0000 ueberschreiben
+	LD	HL, 0
+	LD	(EM256ADR), HL
 
-	; Testmuster schreiben
+	; Schritt 3: EM256 Seite 0 einblenden
+	CALL	RAMON_S0
+
+	; Schritt 4: PIO-B nach RAMON lesen
+	LD	B, 0
+	LD	C, PIOB
+	IN	A, (C)
+	LD	(DBG_PB_DET1), A
+
+	; Schritt 5: EM256-Inhalt vor Schreiben merken
+	LD	HL, (EM256ADR)
+	LD	(DBG_EM_BEFORE), HL
+
+	; Schritt 6: Muster 0xA55A schreiben
 	LD	HL, 0A55AH
 	LD	(EM256ADR), HL
 
-	; Pruefen ob Muster lesbar
+	; Schritt 7: Muster zuruecklesen
 	LD	HL, (EM256ADR)
-	LD	DE, 0A55AH
-	OR	A
-	SBC	HL, DE
-	JR	Z, DET_OK	; Muster kam an -> EM256 vorhanden oder normaler RAM
-	CALL	RAMOFF
-	LD	HL, (SAVE_WORD)
-	LD	(EM256ADR), HL
-	SCF			; Fehler: Karte nicht vorhanden
-	RET
+	LD	(DBG_READBACK), HL
 
-DET_OK:
-	; Sicherstellen: Muster darf im normalen RAM NICHT erscheinen.
-	; Dazu: RAM deaktivieren, dann nochmal lesen.
+	; Schritt 8: EM256 ausblenden
 	CALL	RAMOFF
+
+	; Schritt 9: PIO-B nach RAMOFF lesen
+	LD	B, 0
+	LD	C, PIOB
+	IN	A, (C)
+	LD	(DBG_PB_DET2), A
+
+	; Schritt 10: Z80-RAM lesen (der entscheidende Test!)
 	LD	HL, (EM256ADR)
+	LD	(DBG_Z80_AFTER), HL
+
+	; Schritt 11: Z80-RAM wiederherstellen
+	LD	HL, (SAVE_WORD)
+	LD	(EM256ADR), HL
+
+	; ===== ATOMARER ABSCHNITT ENDE =====
+
+	; --- Diagnose ausgeben ---
+	LD	DE, MSG_DET_RAMON
+	CALL	PUTS
+	LD	A, (DBG_PB_DET1)
+	CALL	PUTHEX
+	LD	DE, MSG_CRLF
+	CALL	PUTS
+
+	LD	DE, MSG_DET_EMB
+	CALL	PUTS
+	LD	A, (DBG_EM_BEFORE+1)
+	CALL	PUTHEX
+	LD	A, (DBG_EM_BEFORE)
+	CALL	PUTHEX
+	LD	DE, MSG_CRLF
+	CALL	PUTS
+
+	LD	DE, MSG_DET_RB
+	CALL	PUTS
+	LD	A, (DBG_READBACK+1)
+	CALL	PUTHEX
+	LD	A, (DBG_READBACK)
+	CALL	PUTHEX
+	LD	DE, MSG_CRLF
+	CALL	PUTS
+
+	LD	DE, MSG_DET_RAMOFF
+	CALL	PUTS
+	LD	A, (DBG_PB_DET2)
+	CALL	PUTHEX
+	LD	DE, MSG_CRLF
+	CALL	PUTS
+
+	LD	DE, MSG_DET_Z80
+	CALL	PUTS
+	LD	A, (DBG_Z80_AFTER+1)
+	CALL	PUTHEX
+	LD	A, (DBG_Z80_AFTER)
+	CALL	PUTHEX
+	LD	DE, MSG_CRLF
+	CALL	PUTS
+
+	; Schreib-Test: 0xA55A zurueckgelesen?
+	LD	HL, (DBG_READBACK)
 	LD	DE, 0A55AH
 	OR	A
 	SBC	HL, DE
-	JR	NZ, DET_FOUND	; Kein Muster im normalen RAM -> echte EM256!
-	; Muster auch im normalen RAM -> kein EM256
-	LD	HL, (SAVE_WORD)
-	LD	(EM256ADR), HL
+	JR	Z, DET_WR_OK
+	LD	DE, MSG_D_ERR1
+	CALL	PUTS
 	SCF
 	RET
 
-DET_FOUND:
-	; Originaldaten wiederherstellen
-	XOR	A
-	CALL	RAMON
-	LD	HL, (SAVE_WORD)
-	LD	(EM256ADR), HL
-	CALL	RAMOFF
-	; Originalen normalen RAM-Inhalt wiederherstellen
-	LD	HL, (SAVE_WORD)
-	LD	(EM256ADR), HL
-	OR	A		; Carry loeschen = OK
+DET_WR_OK:
+	; BIOS-Check: Z80-RAM muss 0x0000 sein
+	LD	HL, (DBG_Z80_AFTER)
+	LD	DE, 0
+	OR	A
+	SBC	HL, DE
+	JR	Z, DET_OK
+
+	; Fehlschlag: Z80-RAM hat Muster -> EM256 nicht aktiv
+	LD	DE, MSG_D_WARN
+	CALL	PUTS
+	SCF
+	RET
+
+DET_OK:
+	LD	DE, MSG_D_GOOD
+	CALL	PUTS
+	OR	A		; CF=0
 	RET
 
 ; =============================================================================
-; LOAD_Z8000_CODE - Z8000-Maschinencode in den EM256-Speicher laden
+; RAMON_S0 - EM256 Seite 0 einblenden
 ;
-; Laedt Z8K_CODE (laenge Z8K_CODE_LEN) nach Page 0 des EM256.
-; Der Z8000 startet seinen Reset-Vektor von Adresse 0x0000 (= U8000-seitig
-; Page 0). Der Reset-Vektor hat im Z8000-Format:
-;   Word 0: FCW (Flag and Control Word, 0x0000 = Normal Sequential Mode)
-;   Word 1: PC-Startadresse = 0x0004 (direkt hinter dem Vektor)
+; 16*4-RAM: B=0x4C,C=0xAF -> Fenster 0x4000 auf EM256 Seite 0
+; PIO-B:    reset16=1 (U8000 Reset), n_ramen=0 (RAM ein)
 ;
-; Aufbau des in den RAM geladenen Codes:
-;   0x0000: FCW  = 0x0000  (Normal Mode)
-;   0x0002: PC   = 0x0004  (Code startet bei Byte 4)
-;   0x0004: Additionsbefehl  ADD RR0, #0x5678 (0x1234 bereits in RR0 geladen)
-;   ...     Ergebnis in [0x0010] ablegen und U8000 signalisieren (HALT/STOP)
+; Aendert: A, BC
+; =============================================================================
+RAMON_S0:
+	LD	B, 04CH
+	LD	C, RAM16
+	LD	A, RAM16_P0	; 0x0C
+	OUT	(C), A
+
+	LD	A, PIOB_RAMON	; 0x10
+	LD	B, 0
+	LD	C, PIOB
+	OUT	(C), A
+	RET
+
+; =============================================================================
+; RAMOFF - EM256-RAM auskoppeln
 ;
-; Aendert: A, BC, DE, HL
+; 16*4-RAM: Page sperren
+; PIO-B:    Idle (reset16=1, n_ramen=1)
+;
+; Aendert: A, BC
+; =============================================================================
+RAMOFF:
+	LD	B, 04CH
+	LD	C, RAM16
+	LD	A, RAM16_OFF	; 0x0F
+	OUT	(C), A
+
+	LD	A, PIOB_IDLE	; 0x14
+	LD	B, 0
+	LD	C, PIOB
+	OUT	(C), A
+	RET
+
+; =============================================================================
+; LOAD_Z8000_CODE - Z8000-Code in EM256-Speicher laden
 ; =============================================================================
 LOAD_Z8000_CODE:
-	; Page 0, Segment 0 einblenden (schreiben)
-	XOR	A		; Track 0
-	CALL	RAMON
+	CALL	RAMON_S0
 
-	; Z8000-Code per LDIR nach EM256ADR kopieren
 	LD	HL, Z8K_CODE
 	LD	DE, EM256ADR
 	LD	BC, Z8K_CODE_LEN
 	LDIR
 
-	; Ergebniszellen vorher auf 0 setzen (Offset 0x10..0x11)
+	; Ergebnis-Adresse nullen (HINTER dem Code, nicht mitten drin!)
 	XOR	A
-	LD	(EM256ADR + 010H), A
-	LD	(EM256ADR + 011H), A
+	LD	(EM256ADR + RES_OFS), A
+	LD	(EM256ADR + RES_OFS + 1), A
 
 	CALL	RAMOFF
 	RET
 
 ; =============================================================================
-; START_U8000 - U8000 aus dem Reset freigeben
+; START_U8000 - U8000 aus Reset freigeben
 ;
-; Setzt reset16=0, n_stop=1 (nicht gestoppt), n_ramen=1 (RAM fuer U880 aus).
-; Der U8000 wird daraufhin seinen Reset-Vektor holen und Code ausfuehren.
-;
-; Aendert: A
+; reset16=0, n_stop=1, n_ramen=1, n_trq8=1 (inaktiv!)
+; n_trq8 MUSS inaktiv sein, sonst fordert der U880 sofort den Bus
+; zurueck und der U8001 kommt nie zur Ausfuehrung.
 ; =============================================================================
 START_U8000:
-	; U8000 freigeben: reset16=0, n_stop=1, RAM fuer U880 deaktiviert
-	LD	A, (1 SHL N_STOP) OR (1 SHL N_RAMEN)
-	OUT	(PIOB), A
+	LD	A, PIOB_RUN	; 0x2C
+	LD	B, 0
+	LD	C, PIOB
+	OUT	(C), A
 	RET
 
 ; =============================================================================
-; WAIT_READY - Wartet bis U8000 Transfer Enable setzt oder Timeout
+; STOP_U8000 - U8000 anhalten und in Reset
+; =============================================================================
+STOP_U8000:
+	LD	A, PIOB_IDLE	; 0x14
+	LD	B, 0
+	LD	C, PIOB
+	OUT	(C), A
+	RET
+
+; =============================================================================
+; WAIT_READY - Busuebernahme vom U8001 anfordern und warten
 ;
-; Prueft PIO Port A Bit 7 (tren=1) oder Bit 4 (int16=1) als Fertigsignal.
-; Timeout nach ca. TIMEOUT_HI * 256 Schleifendurchlaeufen.
+; 1. TRQ8 aktivieren (n_trq8=0) -> µI am U8001 -> µ0=0 -> TREN=1
+; 2. TREN (PIO-A Bit 7) pollen bis gesetzt oder Timeout
 ;
-; Rueckgabe: Carry clear = bereit, Carry set = Timeout
-; Aendert:   A, BC
+; Voraussetzung: U8001 laeuft (nicht HALT!), damit µI verarbeitet wird.
+; Rueckgabe: CF=0 bereit, CF=1 Timeout
+; Aendert: A, BC, DE
 ; =============================================================================
 WAIT_READY:
-	LD	B, TIMEOUT_HI
+	; TRQ8 aktivieren: Bus vom U8001 anfordern
+	LD	A, PIOB_TRQ	; 0x0C: n_trq8=0 (aktiv)
+	LD	B, 0
+	LD	C, PIOB
+	OUT	(C), A
+	; Jetzt TREN pollen
+	LD	D, TIMEOUT_HI
 WAIT_OUTER:
-	LD	C, 0		; Innerer Zaehler 256..1
+	LD	E, 0
 WAIT_INNER:
-	IN	A, (PIOA)	; PIO Port A lesen
-	BIT	TREN, A		; Bit 7: Transfer Enable?
-	JR	NZ, WAIT_OK	; Gesetzt -> U8000 ist fertig
-	BIT	INT16, A	; Bit 4: Interrupt vom U8000?
+	LD	B, 0
+	LD	C, PIOA
+	IN	A, (C)		; PIO-A lesen (0x00A8)
+	BIT	TREN, A		; µ0=0 -> TREN=1?
 	JR	NZ, WAIT_OK
-	DEC	C
+	BIT	INT16, A	; INT-16 als Fallback
+	JR	NZ, WAIT_OK
+	DEC	E
 	JR	NZ, WAIT_INNER
-	DJNZ	WAIT_OUTER
-	; Timeout
+	DEC	D
+	JR	NZ, WAIT_OUTER
 	SCF
 	RET
 WAIT_OK:
-	OR	A		; Carry loeschen
+	OR	A
 	RET
 
 ; =============================================================================
-; STOP_U8000 - U8000 anhalten und in Reset versetzen
-;
-; Setzt reset16=1, n_ramen=1 (RAM aus). U8000 ist danach sicher inaktiv.
-; Aendert: A
-; =============================================================================
-STOP_U8000:
-	LD	A, (1 SHL RESET16) OR (1 SHL N_RAMEN)
-	OUT	(PIOB), A
-	RET
-
-; =============================================================================
-; READ_RESULT - Ergebnis aus Shared-RAM lesen
-;
-; Liest das Berechnungsergebnis des U8000:
-;   - Low-Byte  aus EM256ADR + 0x10
-;   - High-Byte aus EM256ADR + 0x11
-; Ablage in RESULT_LO / RESULT_HI.
-;
-; Aendert: A, HL, (RESULT_LO), (RESULT_HI)
+; READ_RESULT - Ergebnis aus Shared-RAM lesen (Offset RES_OFS)
 ; =============================================================================
 READ_RESULT:
-	; Page 0, Segment 0 lesend einblenden
-	XOR	A
-	CALL	RAMON
-
-	LD	A, (EM256ADR + 010H)
-	LD	(RESULT_LO), A
-	LD	A, (EM256ADR + 011H)
+	CALL	RAMON_S0
+	; Z8001 ist Big-Endian: RES_OFS = MSB, RES_OFS+1 = LSB
+	LD	A, (EM256ADR + RES_OFS)
 	LD	(RESULT_HI), A
-
+	LD	A, (EM256ADR + RES_OFS + 1)
+	LD	(RESULT_LO), A
 	CALL	RAMOFF
-
-	; Gelesene Werte auf Konsole ausgeben
-	LD	DE, MSG_GOT
-	CALL	PUTS
-	LD	A, (RESULT_HI)
-	CALL	PUTHEX
-	LD	A, (RESULT_LO)
-	CALL	PUTHEX
-	LD	E, 0DH
-	CALL	PUTC
-	LD	E, 0AH
-	CALL	PUTC
 	RET
 
 ; =============================================================================
-; CHECK_RESULT - Pruefroutine: stimmt Ergebnis mit Erwartungswert ueberein?
-;
-; Vergleicht RESULT_LO/RESULT_HI mit EXPECTED_LO/EXPECTED_HI.
-;
-; Rueckgabe: Carry clear = OK, Carry set = Fehler
+; CHECK_RESULT - Ergebnis mit Erwartungswert vergleichen
+; CF=0 OK, CF=1 Fehler
 ; =============================================================================
 CHECK_RESULT:
 	LD	A, (RESULT_LO)
@@ -412,56 +658,70 @@ CHECK_RESULT:
 	LD	A, (RESULT_HI)
 	CP	EXPECTED_HI
 	JR	NZ, CHK_FAIL
-	OR	A		; Carry loeschen = OK
+	OR	A
 	RET
 CHK_FAIL:
-	SCF			; Carry setzen = Fehler
+	SCF
 	RET
 
 ; =============================================================================
-; RAMON - Seite 0 des EM256-RAM im Z80-Adressraum einblenden (lesend+schreibend)
+; PUTS - String zeichenweise ausgeben mit Seitenpause
 ;
-; Vereinfachung: laedt immer Page 0, Segment 0.
-; Fuer allgemeine Nutzung muesste A die Track-Nummer enthalten.
-;
-; Aendert: A
-; =============================================================================
-RAMON:
-	; Page 0 einblenden: n_pagen=0, n_write=0, Adressbits passend fuer 0x4000
-	; Portadresse 0x0F (Subadresse 0 = Page 0) mit Datenbyte 0
-	LD	C, RAM16		; 0xAF
-	XOR	A			; n_pagen=0, n_write=0, /A15-8=0, /A14-8=0
-	OUT	(C), A			; Page 0 eingeschaltet, schreibbar
-	; Segment 0 im PIO Port B aktivieren, RAM-Enable, U8000 in Reset
-	LD	A, (1 SHL RESET16)	; reset16=1, sg0p=0, sg1b=0, n_ramen=0
-	OUT	(PIOB), A
-	RET
-
-; =============================================================================
-; RAMOFF - EM256-RAM wieder auskoppeln
-;
-; Aendert: A
-; =============================================================================
-RAMOFF:
-	; Page deaktivieren
-	LD	C, RAM16
-	LD	A, (1 SHL N_PAGEN) OR (1 SHL N_WRITE)
-	OUT	(C), A
-	; RAM deaktivieren, U8000 in Reset
-	LD	A, (1 SHL RESET16) OR (1 SHL N_RAMEN)
-	OUT	(PIOB), A
-	RET
-
-; =============================================================================
-; PUTS - String ausgeben (DE = Adresse, '$'-terminiert, via BDOS Fn. 9)
+; Gibt String bei (DE) aus ('$'-terminiert).
+; Zaehlt LF-Zeichen. Nach PAGELEN Zeilen wird pausiert.
+; Aendert: A, BC, DE, HL
 ; =============================================================================
 PUTS:
+	LD	A, (DE)
+	CP	'$'
+	RET	Z
+	PUSH	DE
+	PUSH	AF		; Zeichen merken fuer LF-Test
+	LD	E, A
+	LD	C, CONOUT
+	CALL	BDOS
+	POP	AF
+	POP	DE
+	INC	DE
+	CP	0AH		; War es LF?
+	JR	NZ, PUTS
+	; LF ausgegeben - Zeile zaehlen
+	LD	HL, LINECNT
+	INC	(HL)
+	LD	A, (HL)
+	CP	PAGELEN		; Seite voll?
+	JR	C, PUTS
+	CALL	PAGE_PAUSE
+	JR	PUTS
+
+; =============================================================================
+; PAGE_PAUSE - Seitenpause: auf Tastendruck warten, Promptzeile loeschen
+;
+; Nutzt BDOS 9 (PRINT) direkt fuer MSG_PAUSE/MSG_CLRPAUSE (kein Rekursion).
+; Nutzt BDOS 6 (DCIO) mit E=FFH zum Lesen ohne Echo.
+; Aendert: A, BC, DE
+; =============================================================================
+PAGE_PAUSE:
+	PUSH	DE
+	LD	DE, MSG_PAUSE
 	LD	C, PRINT
 	CALL	BDOS
+PAUS_WAIT:
+	LD	C, DCIO
+	LD	E, 0FFH		; Zeichen lesen ohne Echo
+	CALL	BDOS
+	OR	A
+	JR	Z, PAUS_WAIT
+	LD	DE, MSG_CLRPAUSE
+	LD	C, PRINT
+	CALL	BDOS
+	XOR	A
+	LD	(LINECNT), A	; Zaehler zuruecksetzen
+	POP	DE
 	RET
 
 ; =============================================================================
-; PUTC - Einzelzeichen ausgeben (E = Zeichen, via BDOS Fn. 2)
+; PUTC - Zeichen ausgeben (E=Zeichen)
 ; =============================================================================
 PUTC:
 	LD	C, CONOUT
@@ -469,7 +729,7 @@ PUTC:
 	RET
 
 ; =============================================================================
-; PUTHEX - Byte als 2-stellige Hex-Zahl ausgeben (A = Wert)
+; PUTHEX - Byte als Hex ausgeben (A=Wert)
 ; =============================================================================
 PUTHEX:
 	PUSH	AF
@@ -479,7 +739,6 @@ PUTHEX:
 	RRCA
 	CALL	PUTHEXDIG
 	POP	AF
-	; Fallthrough: niederes Nibble ausgeben
 PUTHEXDIG:
 	AND	0FH
 	CP	10
@@ -493,134 +752,167 @@ PUTHEX_OUT:
 	JP	PUTC
 
 ; =============================================================================
-; Z8000-Maschinencode
-; -------------------
-; Dieser Code wird auf dem U8000 ausgefuehrt.
+; Z8000-Maschinencode (wird auf dem U8001 ausgefuehrt)
 ;
-; Z8000 Normal Sequential Mode Reset-Vektor (ab Adresse 0x0000):
-;   Wort 0 (0x0000): FCW  = 0x0000  (Normal Mode, keine Interrupts)
-;   Wort 1 (0x0002): PC   = 0x0008  (Code beginnt nach dem Deskriptor-Bereich)
+; Z8001 Reset-Vektor (segmentierter Modus, 8 Bytes):
+;   0x0000: Reserviert (vom U8001 beim Reset nicht verwendet)
+;   0x0002: FCW = 0x0000 (Normal Mode, keine Interrupts)
+;   0x0004: PC Segment = 0x0000 (Segment 0)
+;   0x0006: PC Offset  = 0x0008 (Code ab Byte 8)
 ;
-; Ab 0x0008: Programmcode
-;   LDRL  RR0, #0x00001234     ; 32-Bit-Wert laden (hohe 16 Bit in R0, niedere in R1)
-;   ADDL  RR0, #0x00005678     ; 32-Bit-Addition (Ergebnis in RR0 = 0x000068AC)
+; Code ab 0x0008:
+;   LD  R1, #0x1234      -> 21 01 12 34
+;   LD  R2, #0x0020      -> 21 02 00 20   (Zieladresse, HINTER dem Code!)
+;   ADD R1, #0x5678      -> 01 01 56 78
+;   LD  @R2, R1          -> 2F 21         (Mem[0x0020] = 0x68AC)
+;   JR  T,$              -> E8 FE         (Endlosschleife, reagiert auf µI)
 ;
-; Alternativ nur 16-Bit:
-;   LD    R1, #0x1234          ; R1 = 0x1234
-;   ADD   R1, #0x5678          ; R1 = 0x68AC
-;   LD    @R6, R1              ; R6 zeigt auf Ergebnisadresse im Shared-RAM
-;
-; Da der U8000 erst bei Adresse 0 startet und wir keinen vollstaendigen
-; Z8000-Assembler haben, werden hier direkte Maschinencode-Bytes angegeben.
-;
-; Z8000-Befehlscodierung (Subset):
-;   LD rn, #word    = 0x21 nn ii ii  (nn=Register 1-Byte, ii ii = Immediate 16bit MSB first)
-;   ADD rn, #word   = 0x01 nn ii ii
-;   LD @rPtr, rSrc  = 0x2F xx       (indirekt ueber Registerinhalt)
-;   HALT            = 0x7A00
-;
-; R0..R15 = 16-Bit-Universalregister
-; RR0=R0:R1, RR2=R2:R3, ... (32-Bit-Paare)
-;
-; Konkrete Codierung:
-;   LD  R1, #0x1234   -> 21 01 12 34
-;   LD  R2, #0x0010   -> 21 02 00 10   (R2 = Zieladresse 0x0010 fuer Ergebnis)
-;   ADD R1, #0x5678   -> 01 01 56 78
-;   LD  @R2, R1       -> 2F 21           (Mem[R2] = R1, d.h. Mem[0x0010] = 0x68AC)
-;   HALT              -> 7A 00
-;
+; WICHTIG: Kein HALT verwenden! HALT stoppt die CPU, aber µ0 bleibt
+; HIGH -> TREN bleibt LOW -> U880 sieht keine Fertigmeldung.
+; Die Endlosschleife laesst den U8001 aktiv, sodass er auf µI
+; (ausgeloest durch TRQ8 vom U880) mit µ0=0 -> TREN=1 antwortet.
 ; =============================================================================
 Z8K_CODE:
-	; Reset-Vektor (Z8000 Normal Sequential Mode, 4 Bytes):
-	DB	000H, 000H	; FCW = 0x0000 (Normal Mode)
-	DB	000H, 008H	; PC  = 0x0008 (Startadresse Code)
-	DB	000H, 000H	; Padding (Bytes 4-5, nicht genutzt)
-	DB	000H, 000H	; Padding (Bytes 6-7)
+	; Z8001 Reset-Vektor (segmentiert)
+	DB	000H, 000H	; 0x0000: Reserviert
+	DB	000H, 000H	; 0x0002: FCW = 0x0000
+	DB	000H, 000H	; 0x0004: PC Segment = 0
+	DB	000H, 008H	; 0x0006: PC Offset = 0x0008
 
-	; Programmcode ab Offset 0x0008:
-	; LD R1, #0x1234
-	DB	021H, 001H, 012H, 034H
-
-	; LD R2, #0x0010  (Zieladresse im Shared-RAM: U8000-seitig Offset 0x0010 in Page 0)
-	DB	021H, 002H, 000H, 010H
-
-	; ADD R1, #0x5678
-	DB	001H, 001H, 056H, 078H
-
-	; LD @R2, R1  (Ergebnis [0x0010] = R1 = 0x68AC)
-	DB	02FH, 021H
-
-	; HALT (U8000 haelt an, setzt TREN implizit durch Busfreigabe)
-	DB	07AH, 000H
+	; Programmcode ab Offset 0x0008
+	DB	021H, 001H, 012H, 034H		; LD R1, #0x1234
+	DB	021H, 002H, 000H, 020H		; LD R2, #0x0020 (Ergebnis HINTER Code)
+	DB	001H, 001H, 056H, 078H		; ADD R1, #0x5678
+	DB	02FH, 021H			; LD @R2, R1
+	DB	0E8H, 0FEH			; JR T,$ (Endlosschleife)
 
 Z8K_CODE_LEN	EQU	$ - Z8K_CODE
 
 ; =============================================================================
-; Texte und Daten
+; Meldungstexte
 ; =============================================================================
-
 MSG_BANNER:
 	DB	0DH, 0AH
-	DB	'EM256 U8000 Test  (c) 2026 Olaf Krieger', 0DH, 0AH
-	DB	'----------------------------------------------', 0DH, 0AH, '$'
+	DB	'EM256 U8000 Test v3  (c) 2026 Olaf Krieger', 0DH, 0AH
+	DB	'============================================', 0DH, 0AH, '$'
 
-MSG_INIT:
-	DB	'[1] PIO initialisieren...', 0DH, 0AH, '$'
+MSG_P1:
+	DB	'[1] PIO-Zustand vom BIOS (vor Aenderung):', 0DH, 0AH, '$'
+MSG_PB_BIOS:
+	DB	'  PIO-B (BIOS):       0x', '$'
+MSG_PA_BIOS:
+	DB	'  PIO-A (BIOS):       0x', '$'
 
-MSG_DETECT:
-	DB	'[2] EM256 suchen...', 0DH, 0AH, '$'
+MSG_P2:
+	DB	'[2] PIO-B Schreibtest OHNE Reinit (BIOS-Konfig):', 0DH, 0AH, '$'
+MSG_TB_W14:
+	DB	'  Write 0x14, Read:   0x', '$'
+MSG_TB_W10:
+	DB	'  Write 0x10, Read:   0x', '$'
+MSG_TB_W14B:
+	DB	'  Write 0x14, Read:   0x', '$'
+MSG_TB_EXP94:
+	DB	'  (erw. 0x94)', 0DH, 0AH, '$'
+MSG_TB_EXP90:
+	DB	'  (erw. 0x90)', 0DH, 0AH, '$'
+
+MSG_P3:
+	DB	'[3] PIO initialisieren (OTIR)...', 0DH, 0AH, '$'
+
+MSG_PB_INIT:
+	DB	'  PIO-B nach Init:    0x', '$'
+
+MSG_P4:
+	DB	'[4] PIO-B Schreibtest NACH Reinit:', 0DH, 0AH, '$'
+
+MSG_P5:
+	DB	'[5] EM256 Erkennung (BIOS-Methode, atomar):', 0DH, 0AH, '$'
+
+MSG_DET_RAMON:
+	DB	'  PIO-B nach RAMON:   0x', '$'
+MSG_DET_EMB:
+	DB	'  EM256 vor Write:    0x', '$'
+MSG_DET_RB:
+	DB	'  Ruecklesen:         0x', '$'
+MSG_DET_RAMOFF:
+	DB	'  PIO-B nach RAMOFF:  0x', '$'
+MSG_DET_Z80:
+	DB	'  Z80-RAM nachher:    0x', '$'
+
+MSG_D_ERR1:
+	DB	'  FEHLER: Schreiben/Lesen fehlgeschlagen!', 0DH, 0AH, '$'
+MSG_D_WARN:
+	DB	'  FEHLER: Z80-RAM != 0x0000 -> EM256 nicht aktiv!', 0DH, 0AH
+	DB	'  Pruefe PIO-B-Werte: RAMON sollte 0x90,', 0DH, 0AH
+	DB	'  RAMOFF 0x94 sein.', 0DH, 0AH, '$'
+MSG_D_GOOD:
+	DB	'  OK: Z80-RAM=0x0000 -> EM256 bestaetigt!', 0DH, 0AH, '$'
 
 MSG_NOT_FOUND:
-	DB	'    FEHLER: EM256 nicht gefunden!', 0DH, 0AH
-	DB	'    Bitte sicherstellen, dass die 16-Bit-Karte installiert', 0DH, 0AH
-	DB	'    und em256adr (0x4000) frei ist.', 0DH, 0AH, '$'
-
+	DB	'  >>> EM256 NICHT GEFUNDEN <<<', 0DH, 0AH, '$'
 MSG_FOUND:
-	DB	'    OK: EM256 gefunden.', 0DH, 0AH, '$'
+	DB	'  >>> EM256 OK <<<', 0DH, 0AH, '$'
 
-MSG_LOAD:
-	DB	'[3] Z8000-Code in Shared-RAM laden...', 0DH, 0AH
-	DB	'    (0x1234 + 0x5678 = 0x68AC soll berechnet werden)', 0DH, 0AH, '$'
+MSG_P6:
+	DB	'[6] Z8000-Code laden (0x1234+0x5678=0x68AC)...', 0DH, 0AH, '$'
 
-MSG_START:
-	DB	'[4] U8000 starten (Reset aufheben)...', 0DH, 0AH, '$'
-
-MSG_WAIT:
-	DB	'[5] Warte auf Fertigmeldung des U8000 (TREN/INT16)...', 0DH, 0AH, '$'
+MSG_P7:
+	DB	'[7] U8000 starten...', 0DH, 0AH, '$'
+MSG_P7W:
+	DB	'    TRQ8 -> Warte auf TREN...', '$'
 
 MSG_TIMEOUT:
-	DB	'    FEHLER: Timeout - U8000 hat nicht reagiert.', 0DH, 0AH
-	DB	'    Moegliche Ursachen: Karte defekt, falscher Code, kein HALT.', 0DH, 0AH, '$'
-
+	DB	' TIMEOUT!', 0DH, 0AH, '$'
+MSG_PA_STAT:
+	DB	'  PIO-A Status:       0x', '$'
 MSG_READY:
-	DB	'    OK: U8000 hat TREN oder INT16 gesetzt.', 0DH, 0AH, '$'
+	DB	' OK', 0DH, 0AH, '$'
 
-MSG_READ:
-	DB	'[6] Ergebnis aus Shared-RAM lesen...', 0DH, 0AH
-	DB	'    Gelesen (Big-Endian 16-Bit): 0x$'
-
+MSG_P8:
+	DB	'[8] Ergebnis pruefen...', 0DH, 0AH, '$'
 MSG_GOT:
-	DB	'    Gelesen: 0x$'
-
-MSG_CHECK:
-	DB	'[7] Pruefen Ergebnis (erwartet 0x68AC)...', 0DH, 0AH, '$'
-
+	DB	'  Ergebnis:           0x', '$'
 MSG_FAIL:
-	DB	'    FEHLER: Ergebnis stimmt nicht!', 0DH, 0AH, '$'
-
+	DB	'  FEHLER: Ergebnis falsch!', 0DH, 0AH, '$'
 MSG_OK:
-	DB	'    OK: U8000 hat korrekt 0x68AC berechnet!', 0DH, 0AH
-	DB	'    Die 16-Bit-CPU funktioniert.', 0DH, 0AH, '$'
+	DB	'  OK: U8000 hat 0x68AC berechnet!', 0DH, 0AH
+	DB	'  Die 16-Bit-CPU funktioniert.', 0DH, 0AH, '$'
 
 MSG_DONE:
-	DB	'--- Test beendet ---', 0DH, 0AH, '$'
+	DB	0DH, 0AH, '--- Test beendet ---', 0DH, 0AH, '$'
+MSG_CRLF:
+	DB	0DH, 0AH, '$'
 
+MSG_PAUSE:
+	DB	'Beliebige Taste druecken um fortzufahren ...', '$'
+MSG_CLRPAUSE:
+	DB	0DH, '                                            ', 0DH, '$'
+
+; =============================================================================
+; Variablen
+; =============================================================================
 SAVED_SP:	DW	0
 SAVE_WORD:	DW	0
 RESULT_LO:	DB	0
 RESULT_HI:	DB	0
 
-; Stack (64 Bytes, waechst abwaerts)
+; Diagnosedaten
+DBG_PB_BIOS:	DB	0	; PIO-B Zustand beim Start (vom BIOS)
+DBG_PA_BIOS:	DB	0	; PIO-A Zustand beim Start
+DBG_PB_T1:	DB	0	; Phase 2: nach Write 0x14
+DBG_PB_T2:	DB	0	; Phase 2: nach Write 0x10
+DBG_PB_T3:	DB	0	; Phase 2: nach Write 0x14 (zurueck)
+DBG_PB_INIT:	DB	0	; Phase 3: nach INIT_PIO
+DBG_PB_T4:	DB	0	; Phase 4: nach Write 0x10
+DBG_PB_T5:	DB	0	; Phase 4: nach Write 0x14
+DBG_PB_DET1:	DB	0	; Phase 5: PIO-B nach RAMON
+DBG_PB_DET2:	DB	0	; Phase 5: PIO-B nach RAMOFF
+DBG_EM_BEFORE:	DW	0	; Phase 5: EM256-Inhalt vor Write
+DBG_READBACK:	DW	0	; Phase 5: Muster-Ruecklesen
+DBG_Z80_AFTER:	DW	0	; Phase 5: Z80-RAM nach RAMOFF
+LINECNT:	DB	0	; Zeilenzaehler fuer Seitenpause
+
+; Stack (64 Bytes)
 	DS	64
 STACK_TOP	EQU	$
 

@@ -1,0 +1,109 @@
+﻿Leistungsfähige 16-bit-ZRE-Karte für K 1520.
+Dipl.-Ing. WOLFGANG REH M und Prof. Dr. sc. techn.	P E T E R F E Y 
+Mitteilung aus der Sektion Informationstechnik der TH Karl-Marx-Stadt
+
+Zur Unterstützung des sich gegenwärtig vollziehenden Übergangs vom 8-bit- zum 16-bit­Mikroprozessor wird eine 16-bit-ZRE-Karte mit der CPU Z 8001 vorgestellt, die direkt mit Speicher- und E-A-Baugruppen des K1520-Mikrorechnersystems zusammenarbeiten kann. Trotz der dadurch bedingten Beschränkungen werden wesentliche neue Leistungspara­meter des 16-bit-Prozessors nutzbar.
+
+Entwicklungstendenzen der Mikro­prozessoren
+Die Leistungsfähigkeit eines Mikrorechner­systems wird außer vom Ausbaugrad der Hardware und der Leistungsfähigkeit der Systemsoftware entscheidend von dem in der zentralen Recheneinheit zum Einsatz gelangenden Prozessor (CPU) bestimmt:
+Ein Schritt zur Erhöhung der Leistungs­fähigkeit von Mikroprozessoren ist die Er­höhung der Arbeitsgeschwindigkeit, ausge­drückt durch die von Taktfrequenz und Taktzyklenzahl abhängige Zeit für die Durchführung einer bestimmten Operation (Befehlsabarbeitungszeit), wobei ohne Strukturänderung die Erhöhung der Takt­frequenz durch Skalieren der Chipabmes­sungen bei verbesserter Technologie -und damit angemessener Ausbeute der am häufigsten beschrittene Weg ist. Vorausset­zung ist allerdings dabei, dass die zum Sy­stem gehörigen Peripherieschaltkreise und Speicherbauelemente ebenfalls für die hö­here Taktfrequenz ausgelegt sind (Spei­cherbauelemente bedingt ausgenommen, da durch Auslösung von Wait-Zyklen der CPU eine Taktanpassung erfolgen kann).
+Fast alle bekannten 8-bit- (und auch 16­bit-)CPU-Typen gibt es inzwischen als A ­oder B-Typen mit etwa 1,5- oder zweifacher Taktfrequenz, wobei die langsameren An­falltypen für weniger anspruchsvolle An­wendungen entsprechend billiger gehan­delt werden.
+Der nächste größere Schritt, der gegen­wärtig in der Mikroprozessorentwicklung gemacht wird, vorbereitet durch die mit der Erhöhung der Taktfrequenz einhergehende höhere Integrationsdichte, ist der mit hö­heren Integrationsgraden mögliche Über­gang zur doppelten Datenwortverarbei­tungsbreite von 16 Bit und zu größerem, direkt adressierbarem Speicherraum. Damit verbunden ist auch eine Strukturänderung mit leistungsfähigerem neuem Befehlssatz bei Verlust der Kompatibilität zu 8-bit-Pro­zessoren. Ausgenommen davon sind die Programme, die in einer prozessorunab­hängigen höheren Sprache geschrieben sind, für die ein zweischrittiger Compiler existiert, der erst im zweiten Schritt mit Hilfe eines Kodegenerators den jeweiligen prozessorspezifischen Maschinenkode für seinen Befehlssatz erzeugt [1].
+
+Entwicklung der 16-bit-Prozessoren
+Einer der ersten 16-bit-nMOS-Prozessoren war der 1978 von der Firma Intel herausge­brachte Typ 8086 mit 5 MHz Taktfrequenz und 1 MByte adressierbarem Speicherraum mit der beachtenswerten Integrationsdichte von 29 000 Transistoren auf etwa 30 mm2 Chipfläche. Knapp zwei Jahre später ge­sellte sich der leistungsfähigere 16-bit-Pro­zessor Z8001 der Firma Zilog mit nur 4 MHz Taktfrequenz in der Standardva­riante bei trotzdem etwas kürzerer Befehls­abarbeitungszeit (Grundzyklusfolge 3 mal 250 ns gegenüber 4 X 200 ns beim 8086), bei niedrigerer Integrationsdichte von nur 17 500 Transistoren auf etwa 40 mm2 Chip­fläche und 8 MByte Adressraum hinzu. Das konnte durch ein effektiveres Layout insbesondere beim Befehlsdekoder bei einer voll den Minirechnern entsprechenden Ge­samtarchitektur erreicht werden. Kurz dar­auf erschien noch der etwas leistungsfähi­gere 16-bit-Prozessor MC 68000 von Mo­torola mit noch höherem Integrationsgrad und höherer Integrationsdichte (70000 Transistoren auf etwa 45 mm2 Chipfläche) mit 4 MHz Taktfrequenz in der Standard­variante und 16 MByte Adressraum. Alle drei Prozessorentypen gibt es inzwischen auch mit höheren Taktfrequenzen bis maxi­mal 10 MHz. Mit den in der schnelleren bipolaren Technologie zwischenzeitlich ebenfalls erreichten Integrationsgraden, z. B. bei dem 16-bit-Prozessor F 9445 der Firma Fairchild mit maximal 24 MHz Takt­frequenz und 64 KByte Adressraum, liefern sich Technologen und Bauelementeherstel­ler Kämpfe um Spitzenerzeugnisse und Marktanteile [2].
+
+16-bit-ZRE-Karte
+Unter Abwägung vorstehender vergleichen­der Betrachtungen bezüglich der großen Leistungsfähigkeit bei relativ niedrigem, technologisch besser beherrschbarem Inte­grationsgrad (die 8-bit-CPU U 880 hat etwa 8 000 Transistoren), ihrer Verfügbarkeit und, als wichtiger, oft vom Anwender un­terschätzter Aspekt, der vorhandenen Soft­ware-Unterstützung in Form von Assembler, Compiler, Monitor und generierbarem Echtzeit-Betriebssystemkern wurde für Un­tersuchungen an einer 16-bit-ZRE-Karte als Prozessor die CPU Z 8001 mit 4 MHz Takt­frequenz ausgewählt.
+
+Nachfolgend einige signifikante Merkmale der CPU:
+-	Programmierbare Betriebsweise für seg­mentierten (128 X 64 KByte) und nicht segmentierten (64 KByte) Modus
+-	16 16-Bit-Universalregister, alle als Ak­kumulator, Zeiger-, Index- oder Stock­register verwendbar (Zweiadressmaschine), aufteilbar in Byteregister und zusammenfassbar zu Doppelwort ­(32 Bit) und Vierfachwort- (64 Bit) Regi­stern
+-	programmierbare Betriebsweise in Sy­stem- und Normalmodus mit getrennten Stapelzeigerregistern und einigen nur für den Systemmodus privilegierten Be­fehlen	
+-	bis zu acht verschiedene Operanden­adressierungsarten
+-	leistungsfähiger Befehlssatz mit 110 Be­fehlstypen für Byte, Wort und Doppelwort, einschließlich Bitmanipulations-, Blocktransfer-, Stringmanipulations-, 16 x 16-bit- und 
+32 x 32-bit-Multipli­kations- und Divisionsbefehlen (16 x 16-bit-MULT benötigt 70 Takt­zyklen - 17,5,us bei 4 MHz Takt) 
+-	16-bit-Adreß- und Datenbus (AD0 bis AD15) im Zeitmultiplex, zuzüglich 7 Bit Segmentadresse (SN0 bis SN6).
+
+Speicher- und E-A-Adressen sind grund­sätzlich Byteadressen. Worte und Doppel­worte werden durch die geradzahlige (A0 = 0) Adresse ihres höchstwertigen Bytes adressiert, so dass beide Bytes eines Wortes gleichzeitig adressiert werden können (nie­derwertiges Byte besitzt darauf folgende ungerade Adresse (A0= 1).
+Ergänzend sei bemerkt, dass parallel zu den CPU-Leitungen anschließbare Zusatz­bausteine existieren, wie der
+-	Speicherverwaltungsbaustein	Z 8010 MMU, der u. a. die Daten- und Adreßbus-demultiplexierung für das höherwer­tige Adressbyte und die Segmentdeko­dierung und Adressrechnung mit 64 Segmentbasisregistern in physische Adressen durchführt
+-	Gleitkomma-Arithmetikkoprozessor Z 8070 APU, der den dafür vorbereite­ten Befehlssatz der CPU um extrem schnelle, hochgenaue Gleitkommarech­nungen und Standardfunktionen erwei­tert.
+
+Adress- und Datenbussystem
+Die im Zeitmultiplex betriebenen Adress- ­und Datenbusleitungen und auch die Steuer- und Statusbusleitungen der CPU Z 8001unterscheiden sich sowohl in der Wirkungsweise als auch im zeitlichen Ab­lauf von denen des K1520-Busses. Da aber sowohl Zusatzbaugruppen für den 
+Z-8001 ­Prozessor als auch K1520-Baugruppen ge­meinsam betreibbar sein sollten und die 
+K1520-8-bit-Speicherbaugruppen durch Aufteilen in Speicher für niederwertige und
+höherwertige Bytes zu Wortspeichern ge­macht werden, müssen auf der 16-bit-ZRE-­Karte unter Mitbenutzung des K1520-Kop­pelbusses und teilweiser Auftrennung des K1520-Systembusses die erforderlichen Adress- und Datenleitungen bereitgestellt und fehlende K1520-Signale zusätzlich er­zeugt werden.
+
+
+Bild 1: Baugruppen­anordnungen im K1520-Rahmen, Adress- ­und Datenbusleitungs- Aufteilung
+
+Im Bild 1 ist diese Aufteilung der Baugrup­pen und Adress- und Datenbusleitungen dargestellt. Die „gelatchten" Adressleitungen LA1 bis LA15 liefern gemeinsame Adressen für die höherwertigen Bytes der oberen und die niederwertigen der unteren Speicherbank und werden auf die Adressbusleitungen ABO bis AB14 des K1520-Sy­stembusses gelegt. Sie gestatten somit, 32 KWorte mit zeitlich paralleler Verfügbar­keit beider Bytes auf dem Datenbus zu adressieren. Verarbeitet die CPU Bytebe­fehle, so ist das an der B/W-Statusleitung ersichtlich, und dann muß in Verbindung mit der Adressleitung LA0 die obere oder die untere Speicherbank speziell beim Byteschreiben gesperrt werden. Eine Aus­wahllogik nach Bild 2 liefert dazu für K1520-Speicherbaugruppen. die Signale /MEMDI 1 und /MEMD12.
+
+
+Bild 2: Auswahllogik
+
+
+Die freie Leitung AB15 des K1520-Ädreß­busses kann, über eine Lötbrücke auf der ZRE-Karte wählbar, zur Adressierung wei­terer 32 KWorte entweder selektiert durch die Statusleitung N/S für getrennte Spei­cherbereiche im Normal- und Systemmodus oder beim Betrieb im segmentierten Modus mit SN0 zur Adressierung eines zweiten Segments verwendet werden (Bild 3). Bei Verwendung von 64-Kbyte-Speicherkarten nach [5] erweist sich eine solche Nutzung der AB15-Leitung als notwendig und zweckmäßig.
+
+
+Bild 3: Einfache Speichererweiterung mit AB 15
+
+
+
+
+  Bild 4: Prinzipschaltung der ZRE-Karte mit Z 8001
+Technische Daten der ZRE-Karte
+Die ZRE-Karte im K1520-Format 170 mm mal 230 mm besitzt folgende Elemente (Bild 4):
+• Z 8001 CPU
+• 4-Kbyte-EPROM
+• 2-Kbyte-CMOS-RAM
+• Taktgenerator, umschaltbar auf 4 MHz und 2,5 MHz
+• vier Zähler-Zeitgeber-Kanäle (U 857)
+• zwei serielle asynchrone E-A-Kanäle (U 856)
+• CMOS-Schalterport
+• Steuersignalerzeugung für K1520-Bus 
+• System- und Koppelbussteckerleiste für K 1520
+• Frontbuchsen für E-A-Kommunikation. Mit dieser Bestückung ist die ZRE-Karte sowohl als autonomer, kleiner Einkarten­rechner als auch als Mikrorechnersystem in Verbindung mit K1520-Speicher- und E-A-Baugruppen einsetzbar. Der A-D-Bus und die Steuerbusleitungen sind über Trei­ber gepuffert. Zur Demultiplexierung des Adressbusses und Zwischenspeicherung der Adressen und Segmentadressen sind wie üblich Oktal-RS-Flip-Flops (Latches) ein­gesetzt. Ein WAIT-Generator erzeugt bei Zugriff auf den Festwertspeicher eine WAIT-Zyklus-Anforderung an die CPU. Eine Einschalt- und Rücksetzlogik aktiviert gleichzeitig die Signalleitungen /RESET, /AS und /DS. Zwei 1-aus-8-Dekoder dekodieren die Statusleitungen STO bis ST3. Treiber­freigabe und Richtungslogik, RAM- und ROM-Dekoder und K1520-Signalgenerie­rungslogik verwenden an zeitkritischen Stellen Schottky-Logik. In den anderen Schaltungen wurde bis auf den CMOS­Schalterport Low-Power-.Schottky-Logik ein­gesetzt. Die internen Speicher können wahlweise über Lötbrücken dauernd oder von außen in Abhängigkeit vom Speicher-­Disable-Signal /MEMDI abgeschaltet wer­den.
+Insgesamt nimmt die 16-bit-ZRE-Karte etwa 1,3 A bei 5 V als einzige Versorgungsspan­nung auf und. liegt in dieser Hinsicht unter der 8-bit-ZRE-Karte K 2521 (mit 1,8 A bei 5 V und weiteren Versorgungsspannungen).
+
+Steuersignalerzeugung für K1520-Bus 
+Wie schon bemerkt, müssen einige K1520­Steuersignale, insbesondere bei Verwen­dung von an die 8-bit-CPU U 880 angepassten Peripheriebausteinen U 855, U 856 und U 857, zusätzlich erzeugt werden. Es sind dies die Signale /M1, /IORO, /RD, die beim U 880 fehlende, durch /IORQ und /M1 nachgebildete Unterbrechungsanerken­nung aus dem beim Z-8000-Bus vorhande­nen dekodierten Statussignal /VIACK sowie die Nachbildung der für die U-880-Peri­pheriebausteine in Verbindung mit dem U-880-CPU-Befehl RETI auf den Datenbus gegebene Folge ED4D zur Rücksetzung des „Interrupt-Under-Service"-Bits. Eine Schal­tung zur Generierung der zusätzlichen K­1520-Steuersignale aus den Steuer- und dekodierten Statussignalen der 16-bit-CPU zeigt Bild 5. 
+  
+Bild 5: K1520-Steuersignalgenerierung
+
+Bei reinen Z-8000-Bausteinen sind diese zusätzlichen Signale nicht erfor­derlich. Die Bytefolge ED4D wird in Anleh­nung an [4] durch folgende Ausgabeope­ration auf einen Pseudoport mit der Adresse RETI auf dem Datenbus nachge­bildet, die nichtunterbrechbar am Ende je­der Interruptserviceroutine angefügt wer­den muß:
+
+DI
+LD	R 0, #% ED4D 
+OUTB	RETI, RH 0 
+OUTB	RETI, RL 0 
+EI
+IRET
+
+Beim zum Z-8000-System gehörenden se­riellen Interface-Baustein Z8030 SCC er­folgt das Rücksetzen des IUS-Bits gezielt durch einen Ausgabebefehl an das Statusregister WR 0 des zurücksetzenden Bau­steins.
+
+Programm-Unterstützung
+Für die Nutzung, des 16-bit-Mikrorechner­systems zur Programmentwicklung und
+Echtzeittestung ist eine umfangreiche, zum Teil im Wissenschaftsbereich selbst erstellte oder ergänzte Software verfügbar.
+Der im 4-Kbyte-EPROM residente Monitor gestattet im Monitormodus von einem über die asynchrone serielle Schnittstelle extern angeschlossenen Bildschirmgerät aus im Dialog das Lesen und Ändern von Spei­cher- und Registerinhalten, Setzen von Un­terbrechungspunkten, schrittweise und Echtzeitausführung von Programmen und weitere über Kommandos ausgelöste Funk­tionen. An der anderen seriellen Schnitt­stelle läßt sich ein Mikrorechnerentwick­lungssystem als Hostsystem über den sonst für das Bildschirmgerät vorgesehenen Anschluss des Entwicklungssystems anschlie­ßen, auf dem Cross-Software für die 16-bit­CPU lauffähig ist. Über entsprechende Mo­nitor-Kommandos können ausführbare Pro­grammmodule in dos 16-bit-Mikrorechnersy­stem geladen werden und von ihm z. B. zur weiteren Bearbeitung im Entwicklungssy­stem an dieses gesendet werden. Im Trans­parentmodus des Monitors erfolgt eine di­rekte Kopplung des Bildschirmgerätes mit dem Entwicklungssystem, so dass nur über Monitor-Kommandos alle drei Kopplungs­möglichkeiten realisiert werden können.
+An Cross-Software ist außer dem As­sembler mit Editor, Verbinder und Lader ein Compiler für die höhere Mikrorechner­sprache PLZ [1], erweitert um einen Kode­generator für den 16-bit-Prozessor, verfüg­bar. Ein entwickelter leistungsfähiger Re­assembler gestattet, z. B. in höherer Spra­che geschriebene zeitkritische Programm­teile aus dem vom Kodegenerator geliefer­ten Maschinenkode rückzuübersetzen und auf Assemblerniveau mit Hilfe des Editors zu optimieren. Ferner wurde für Echtzeit­steuerungsaufgaben ein generierbarer Be­triebssystemkern RTC [6] entwickelt, für den inzwischen auch die 16-bit-Variante exi­stiert. Ebenfalls neu ist eine höhere Echt­zeitsteuersprache PLZ RTC [7], die beson­ders für Mikrorechner geeignet ist, aber trotzdem Elemente enthält, wie sie sonst entsprechenden größeren Sprachen wie CHILL und ADA vorbehalten sind. Durch einen Vorübersetzer werden die neuen Sprachelemente für Echtzeitprozesse aus­gefiltert und in PLZ übersetzt, wobei gleich­zeitig die für die automatische Kernerzeu­gung notwendigen Vorgaben, dem konkre­ten Anwendungsfall entsprechend, gewon­nen werden.
+
+Schlussbemerkungen
+Mit der vorgestellten 16-bit-Hard- und 16­bit-Software sind wesentliche Vorausset­zungen zum Übergang auf die nächste Mikrorechnergeneration geschaffen wor­den, die gestatten, ohne Zeitverzug an kon­kreten Anwendungsfällen Erfahrungen zu sammeln und sachkundig entsprechende Einsatzentscheidungen zu treffen. Einem größeren Kreis wird so ermöglicht, sich ent­sprechende Spezialkenntnisse durch eigene Weiterbildung zu erwerben.
+
+Literatur
+[1] 	Conway, R.: Introduction to Microprocessor Programming Using PLZ. 
+Cambridge: Winthrop 1979
+[2] 	Stuhlmüller, P.: 16-bit-Generation Z8000. Auf­bau und Anwendung. 
+München: te-wi-Verlag 1980
+[3] 	Klein, R.-D: Einplatinen-Computer mit Z8000. Elektronik, München 29 (1980) 16, 5.44-50
+(4) 	Korody, R.: leom to opply the power of the. Z8002 by studying a small 16-bit-computer. 
+Electronic Design, New York 27 (1979) 22, 5. 90 bis 96
+[S] 	Kriesten, St.; Markert, F.: Dynamische 64­KByte-RAM-Steckeinheit für K1520. 
+radio fern­sehen elektronik, Berlin 31 (1982) 4, 5. 248 und 249 
+[6] 	Antonov, A.: Echtzeitbetriebssystemkern für Mikrorechner. Nachrichtentechnik Elektronik,  Berlin 32 (1982) 11, 5. 447
+[7] 	Antonov, A.: Einsatz der höheren Echtzeit­sprache PLZ; 
+RTC zur Erstellung moderner Mikro­rechnersteuersoftware. 
+Nachrichtentechnik Elektronik, Berlin 33 (1983) 2, 5. 55-60 
