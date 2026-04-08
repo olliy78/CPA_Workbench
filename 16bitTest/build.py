@@ -2,36 +2,41 @@
 # Copyright (c) 2026 Olaf Krieger
 # SPDX-License-Identifier: MIT
 """
-build.py  –  Build-Skript fuer em256test.com
-=============================================
+build.py  –  Build-Skript fuer EM256-Testprogramme
+===================================================
 
-Baut das EM256 U8000-Testprogramm (em256test.com) aus dem Assembler-Quellcode
-in src/em256test.mac mithilfe des CP/M-Assemblers M80 und des Linkers LINKMT,
-die beide ueber den CP/M-Emulator cparun ausgefuehrt werden.
+Baut EM256-Testprogramme aus dem Assembler-Quellcode in src/ mithilfe des
+CP/M-Assemblers M80 und des Linkers LINKMT, die beide ueber den CP/M-Emulator
+cparun ausgefuehrt werden.
+
+Unterstuetzte Quelldateien:
+  - em256tst.mac  (Original-Test, direkt assemblierbar)
+  - em256full.mac (Volltest, enthaelt ;%INCLUDE-Direktiven fuer Z8001-Firmware)
 
 Arbeitsweise
 ------------
 1. Ergebnisverzeichnis 16bitTest/build/ anlegen (falls noetig)
-2. Quelldatei src/em256test.mac nach build/ kopieren (mit CRLF-Konvertierung)
-3. M80-Tools (m80.com, linkmt.com) aus tools/ nach build/ kopieren
-4. M80 assemblieren: em256test.erl=em256test
-5. LINKMT linken:    em256test=em256test/p:100
-   (Ladeadresse 0x100 = Standard fuer CP/M .COM-Programme)
-6. Temporaere Dateien aufraeumen, em256test.com bleibt
+2. Z8001-Firmware assemblieren (nur fuer em256full)
+3. Quelldatei vorverarbeiten: ;%INCLUDE-Direktiven durch .inc-Dateien ersetzen
+4. Vorverarbeitete Datei nach build/ kopieren (mit CRLF-Konvertierung)
+5. M80-Tools (m80.com, linkmt.com) aus tools/ nach build/ kopieren
+6. M80 assemblieren
+7. LINKMT linken (Ladeadresse 0x100)
+8. Temporaere Dateien aufraeumen
+9. .COM nach additions/bc_a5120/ kopieren
 
 Voraussetzungen
 ---------------
 - tools/cparun (Linux) oder tools/cparun.exe (Windows)
-- tools/m80.com
-- tools/linkmt.com
+- tools/m80.com, tools/linkmt.com
 - Python 3.6+
 
 Aufruf
 ------
   cd /pfad/zu/CPA_Workbench
-  python3 16bitTest/build.py
-
-Das fertige em256test.com liegt danach in 16bitTest/build/em256test.com.
+  python3 16bitTest/build.py                    # em256full (Standard)
+  python3 16bitTest/build.py em256tst            # Original-Test
+  python3 16bitTest/build.py em256full           # Volltest (explizit)
 """
 
 import glob
@@ -51,14 +56,10 @@ ADDITIONS_DIR = os.path.join(PROJECT_DIR, 'additions', 'bc_a5120')  # Ziel fuer 
 SRC_DIR     = os.path.join(SCRIPT_DIR, 'src')      # 16bitTest/src/
 BUILD_DIR   = os.path.join(SCRIPT_DIR, 'build')    # 16bitTest/build/
 TOOLS_DIR   = os.path.join(PROJECT_DIR, 'tools')   # tools/
+Z8001_DIR   = os.path.join(SCRIPT_DIR, 'z8001')    # 16bitTest/z8001/
 
-# CP/M-Dateinamen: max. 8 Zeichen (8.3-Format!)  em256tst = 8 Zeichen
-SOURCE_NAME    = 'em256tst'                         # ohne Endung (Kleinbuchstaben, max. 8!)
-SOURCE_NAME_UP = SOURCE_NAME.upper()               # M80 sucht Dateinamen in Grossbuchstaben
-SOURCE_MAC     = SOURCE_NAME + '.mac'              # Quelldatei (Kleinbuchstaben)
-SOURCE_MAC_UP  = SOURCE_NAME_UP + '.MAC'           # Zieldatei fuer M80 (Grossbuchstaben)
-SOURCE_ERL     = SOURCE_NAME_UP + '.ERL'           # M80 erzeugt ERL in Grossbuchstaben
-TARGET_COM     = SOURCE_NAME + '.com'              # Endprodukt
+# Standard-Quelle (ueber Kommandozeile aenderbar)
+DEFAULT_SOURCE = 'em256ful'
 
 # Ladeadresse fuer CP/M .COM-Programme (immer 0x100)
 LOAD_ADDR   = '100'
@@ -103,21 +104,6 @@ def run(cmd, cwd=None, check=True, timeout=60):
         raise RuntimeError(f"Timeout nach {timeout}s: {' '.join(cmd)}")
 
 
-def convert_to_crlf(src_path, dst_path):
-    """Quelldatei nach dst_path kopieren und Zeilenenden zu CRLF konvertieren.
-
-    Der M80-Assembler erwartet Windows-Zeilenenden (CRLF = \\r\\n).
-    """
-    with open(src_path, 'r', encoding='utf-8', newline='') as f:
-        content = f.read()
-    # Einheitliche Normalisierung: alle Varianten -> LF, dann LF -> CRLF
-    content = content.replace('\r\n', '\n').replace('\r', '\n')
-    content = content.replace('\n', '\r\n')
-    with open(dst_path, 'wb') as f:
-        f.write(content.encode('ascii', errors='replace'))
-    log(f"    Kopiert (CRLF): {os.path.basename(src_path)} -> {dst_path}")
-
-
 def find_cparun():
     """cparun-Pfad plattformabhaengig ermitteln."""
     if platform.system() == 'Windows':
@@ -133,9 +119,76 @@ def find_cparun():
     return path
 
 
+def preprocess_includes(src_content, inc_dir):
+    """Ersetzt ;%INCLUDE-Direktiven durch den Inhalt der referenzierten .inc-Dateien.
+
+    Args:
+        src_content: Quelltext als String
+        inc_dir:     Verzeichnis mit .inc-Dateien
+
+    Returns:
+        Vorverarbeiteter Quelltext
+    """
+    include_re = re.compile(r'^;\s*%INCLUDE\s+(\S+)', re.IGNORECASE | re.MULTILINE)
+
+    def replace_include(match):
+        filename = match.group(1)
+        inc_path = os.path.join(inc_dir, filename)
+        if not os.path.isfile(inc_path):
+            raise RuntimeError(
+                f"Include-Datei nicht gefunden: {inc_path}\n"
+                "Bitte zuerst Z8001-Firmware assemblieren."
+            )
+        with open(inc_path, 'r', encoding='utf-8') as f:
+            content = f.read().rstrip('\n')
+        log(f"    Eingefuegt: {filename} ({len(content)} Zeichen)")
+        return content
+
+    return include_re.sub(replace_include, src_content)
+
+
+def assemble_z8001_firmware():
+    """Z8001-Firmware-Quelldateien assemblieren (alle .s-Dateien in z8001/)."""
+    asm_path = os.path.join(Z8001_DIR, 'z8001asm.py')
+    if not os.path.isfile(asm_path):
+        raise RuntimeError(f"Z8001-Assembler nicht gefunden: {asm_path}")
+
+    s_files = sorted(glob.glob(os.path.join(Z8001_DIR, '*.s')))
+    if not s_files:
+        raise RuntimeError(f"Keine .s-Dateien in {Z8001_DIR} gefunden.")
+
+    log(f"    {len(s_files)} Firmware-Dateien gefunden")
+    for s_file in s_files:
+        basename = os.path.basename(s_file)
+        result = run(
+            [sys.executable, asm_path, s_file],
+            cwd=Z8001_DIR, check=True
+        )
+        log(f"    Assembliert: {basename}")
+
+
 def main():
+    # --- Quellname aus Kommandozeile oder Standard ---
+    if len(sys.argv) > 1:
+        source_name = sys.argv[1].lower().replace('.mac', '')
+    else:
+        source_name = DEFAULT_SOURCE
+
+    # CP/M 8.3-Format pruefen
+    if len(source_name) > 8:
+        raise RuntimeError(
+            f"Dateiname '{source_name}' zu lang (max. 8 Zeichen fuer CP/M 8.3)"
+        )
+
+    source_name_up = source_name.upper()
+    source_mac     = source_name + '.mac'
+    source_mac_up  = source_name_up + '.MAC'
+    source_erl     = source_name_up + '.ERL'
+    target_com     = source_name + '.com'
+    needs_preprocessing = (source_name != 'em256tst')
+
     log("=" * 50)
-    log("EM256 U8000 Test  –  Build-Skript")
+    log(f"EM256 Test Build  –  {source_name}")
     log("=" * 50)
 
     # --- Schritt 1: Build-Verzeichnis anlegen ---
@@ -143,16 +196,36 @@ def main():
     os.makedirs(BUILD_DIR, exist_ok=True)
     log(f"    {BUILD_DIR}")
 
-    # --- Schritt 2: Quellcode kopieren (CRLF, Grossbuchstaben-Name fuer M80) ---
-    log("\n[STEP 2] Quelldatei nach build/ kopieren (CRLF, Grossbuchstaben fuer M80)")
-    src_mac = os.path.join(SRC_DIR, SOURCE_MAC)
-    dst_mac = os.path.join(BUILD_DIR, SOURCE_MAC_UP)  # M80 sucht EM256TEST.MAC
+    # --- Schritt 2: Z8001-Firmware assemblieren (nur fuer em256full) ---
+    if needs_preprocessing:
+        log("\n[STEP 2] Z8001-Firmware assemblieren")
+        assemble_z8001_firmware()
+    else:
+        log("\n[STEP 2] Z8001-Firmware (uebersprungen)")
+
+    # --- Schritt 3: Quellcode vorverarbeiten und kopieren ---
+    log(f"\n[STEP 3] Quelldatei vorverarbeiten und nach build/ kopieren")
+    src_mac = os.path.join(SRC_DIR, source_mac)
+    dst_mac = os.path.join(BUILD_DIR, source_mac_up)
     if not os.path.isfile(src_mac):
         raise RuntimeError(f"Quelldatei nicht gefunden: {src_mac}")
-    convert_to_crlf(src_mac, dst_mac)
 
-    # --- Schritt 3: Tools kopieren ---
-    log("\n[STEP 3] Build-Tools nach build/ kopieren")
+    with open(src_mac, 'r', encoding='utf-8', newline='') as f:
+        content = f.read()
+
+    if needs_preprocessing:
+        log("    Include-Direktiven verarbeiten...")
+        content = preprocess_includes(content, Z8001_DIR)
+
+    # CRLF-Konvertierung
+    content = content.replace('\r\n', '\n').replace('\r', '\n')
+    content = content.replace('\n', '\r\n')
+    with open(dst_mac, 'wb') as f:
+        f.write(content.encode('ascii', errors='replace'))
+    log(f"    Geschrieben: {source_mac_up} ({os.path.getsize(dst_mac)} Bytes)")
+
+    # --- Schritt 4: Tools kopieren ---
+    log("\n[STEP 4] Build-Tools nach build/ kopieren")
     for tool in ['m80.com', 'linkmt.com']:
         src_tool = os.path.join(TOOLS_DIR, tool)
         if not os.path.isfile(src_tool):
@@ -160,83 +233,76 @@ def main():
         shutil.copy2(src_tool, BUILD_DIR)
         log(f"    Kopiert: {tool}")
 
-    # --- Schritt 4: Assemblieren mit M80 ---
-    # M80 sucht die Quelldatei im aktuellen Verzeichnis unter GROSSEM Namen.
-    # Aufruf: m80 EM256TEST.ERL=EM256TEST
+    # --- Schritt 5: Assemblieren mit M80 ---
     cparun = find_cparun()
-    log(f"\n[STEP 4] Assemblieren mit M80 ({SOURCE_MAC_UP} -> {SOURCE_ERL})")
+    log(f"\n[STEP 5] Assemblieren mit M80 ({source_mac_up} -> {source_erl})")
     result = run(
-        [cparun, '-dir', BUILD_DIR, 'm80', f'{SOURCE_ERL}={SOURCE_NAME_UP}'],
+        [cparun, '-dir', BUILD_DIR, 'm80', f'{source_erl}={source_name_up}'],
         cwd=BUILD_DIR, check=True
     )
 
     # ERL erzeugt? (cparun erstellt auf Linux lowercase Dateinamen)
-    erl_upper = os.path.join(BUILD_DIR, SOURCE_ERL)           # EM256TST.ERL
-    erl_lower = os.path.join(BUILD_DIR, SOURCE_ERL.lower())   # em256tst.erl
+    erl_upper = os.path.join(BUILD_DIR, source_erl)
+    erl_lower = os.path.join(BUILD_DIR, source_erl.lower())
     if os.path.isfile(erl_lower) and not os.path.isfile(erl_upper):
-        os.rename(erl_lower, erl_upper)  # Fuer LINKMT auf Uppercase umbenennen
+        os.rename(erl_lower, erl_upper)
     if not os.path.isfile(erl_upper):
         raise RuntimeError(
-            f"M80 hat keine {SOURCE_ERL} erzeugt. Bitte Assembler-Ausgabe pruefen."
+            f"M80 hat keine {source_erl} erzeugt. Bitte Assembler-Ausgabe pruefen."
         )
 
-    # --- Schritt 5: Linken mit LINKMT ---
-    # LINKMT: Ausgabedatei=Eingabemodul/p:Ladeadresse
-    # Ausgabe: EM256TEST.COM (Grossbuchstaben), dann umbenennen
-    TARGET_COM_UP = SOURCE_NAME_UP + '.COM'
-    log(f"\n[STEP 5] Linken mit LINKMT ({SOURCE_ERL} -> {TARGET_COM_UP})")
+    # --- Schritt 6: Linken mit LINKMT ---
+    target_com_up = source_name_up + '.COM'
+    log(f"\n[STEP 6] Linken mit LINKMT ({source_erl} -> {target_com_up})")
     log(f"    Ladeadresse: 0x{LOAD_ADDR} (CP/M .COM-Standard)")
     run(
         [cparun, '-dir', BUILD_DIR, 'linkmt',
-         f'{SOURCE_NAME_UP}={SOURCE_NAME_UP}/p:{LOAD_ADDR}'],
+         f'{source_name_up}={source_name_up}/p:{LOAD_ADDR}'],
         cwd=BUILD_DIR, check=True
     )
-    # Ggf. Gross->Klein umbenennen fuer Uebersichtlichkeit
-    # cparun erstellt auf Linux lowercase Dateinamen
-    com_upper = os.path.join(BUILD_DIR, TARGET_COM_UP)
-    com_lower = os.path.join(BUILD_DIR, TARGET_COM)
-    com_lowercase_from_cparun = os.path.join(BUILD_DIR, TARGET_COM_UP.lower())
+    # Ggf. Gross->Klein umbenennen
+    com_upper = os.path.join(BUILD_DIR, target_com_up)
+    com_lower = os.path.join(BUILD_DIR, target_com)
+    com_lowercase_from_cparun = os.path.join(BUILD_DIR, target_com_up.lower())
     if os.path.isfile(com_lowercase_from_cparun) and not os.path.isfile(com_lower):
         os.rename(com_lowercase_from_cparun, com_lower)
     elif os.path.isfile(com_upper) and not os.path.isfile(com_lower):
         os.rename(com_upper, com_lower)
 
-    # COM erzeugt? (Klein- oder Grossbuchstaben akzeptieren)
-    com_path = os.path.join(BUILD_DIR, TARGET_COM)
-    com_path_up = os.path.join(BUILD_DIR, SOURCE_NAME_UP + '.COM')
+    com_path = os.path.join(BUILD_DIR, target_com)
+    com_path_up = os.path.join(BUILD_DIR, target_com_up)
     if not os.path.isfile(com_path) and not os.path.isfile(com_path_up):
         raise RuntimeError(
-            f"LINKMT hat keine {TARGET_COM} erzeugt. Ausgabe pruefen."
+            f"LINKMT hat keine {target_com} erzeugt. Ausgabe pruefen."
         )
     if not os.path.isfile(com_path):
         com_path = com_path_up
 
-    # --- Schritt 6: Aufraeuemen ---
-    log("\n[STEP 6] Temporaere Dateien loeschen")
+    # --- Schritt 7: Aufraeuemen ---
+    log("\n[STEP 7] Temporaere Dateien loeschen")
     for pattern in ['*.mac', '*.MAC', '*.erl', '*.ERL', '*.prn', '*.PRN',
                     '*.rel', '*.REL', '*.syp', '*.SYP',
                     'm80.com', 'linkmt.com']:
         for f in glob.glob(os.path.join(BUILD_DIR, pattern)):
             basename = os.path.basename(f).lower()
-            if basename != TARGET_COM.lower():
+            if basename != target_com.lower():
                 os.remove(f)
                 log(f"    Geloescht: {os.path.basename(f)}")
 
     # --- Fertig ---
     com_size = os.path.getsize(com_path)
     log("\n" + "=" * 50)
-    log(f"FERTIG: {TARGET_COM} ({com_size} Bytes)")
+    log(f"FERTIG: {target_com} ({com_size} Bytes)")
     log(f"Pfad:   {com_path}")
     log("=" * 50)
 
-    # --- Schritt 7: Nach additions/bc_a5120/ kopieren ---
-    log(f"\n[STEP 7] Kopiere nach additions/bc_a5120/")
+    # --- Schritt 8: Nach additions/bc_a5120/ kopieren ---
+    log(f"\n[STEP 8] Kopiere nach additions/bc_a5120/")
     os.makedirs(ADDITIONS_DIR, exist_ok=True)
-    dest = os.path.join(ADDITIONS_DIR, TARGET_COM)
+    dest = os.path.join(ADDITIONS_DIR, target_com)
     shutil.copy2(com_path, dest)
     log(f"    {dest}")
-    log("\nDiskette schreiben: make (oder Makefile-Ziel fuer bc_a5120)")
-    log(f"Starten mit:        em256tst")
+    log(f"\nStarten mit:        {source_name}")
 
 
 if __name__ == '__main__':
