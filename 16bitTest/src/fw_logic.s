@@ -23,10 +23,10 @@
     XOR  R1, #0x0FF0        ; -> 0x0000
     XOR  R1, #0x1234        ; -> 0x1234
     ; Ergebnis -> Mailbox
-    LD   R2, #0x0012
-    LD   @R2, R1
+    LD   R3, #0x0012
+    LD   @R3, R1
     ; STATUS = OK
     LD   R1, #0x0001
-    LD   R2, #0x0010
-    LD   @R2, R1
+    LD   R3, #0x0010
+    LD   @R3, R1
     JR   T, $

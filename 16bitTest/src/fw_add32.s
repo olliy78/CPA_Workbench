@@ -22,12 +22,12 @@
     ; RR2 = 0x0001FFFF -> R2=0x0001, R3=0xFFFF
 
     ; Ergebnis -> Mailbox
-    LD   R6, #0x0012
-    LD   @R6, R2            ; RESULT1 = High (0x0001)
-    INC  R6, #2
-    LD   @R6, R3            ; RESULT2 = Low (0xFFFF)
+    LD   R7, #0x0012
+    LD   @R7, R2            ; RESULT1 = High (0x0001)
+    INC  R7, #2
+    LD   @R7, R3            ; RESULT2 = Low (0xFFFF)
     ; STATUS = OK
     LD   R1, #0x0001
-    LD   R6, #0x0010
-    LD   @R6, R1
+    LD   R7, #0x0010
+    LD   @R7, R1
     JR   T, $

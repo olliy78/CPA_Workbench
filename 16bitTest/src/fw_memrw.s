@@ -56,11 +56,11 @@
     JR   NZ, FAIL
 
     ; Alle OK -> Ergebnis
-    LD   R2, #0x0012        ; RESULT1
-    LD   @R2, R4            ; letzter gelesener Wert (0xA55A)
+    LD   R5, #0x0012        ; RESULT1
+    LD   @R5, R4            ; letzter gelesener Wert (0xA55A)
     LD   R1, #0x0001
-    LD   R2, #0x0010
-    LD   @R2, R1
+    LD   R5, #0x0010
+    LD   @R5, R1
     JR   T, $
 
 FAIL:

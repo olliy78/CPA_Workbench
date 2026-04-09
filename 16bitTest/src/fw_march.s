@@ -26,7 +26,7 @@ START:
 
     ; Register-Konventionen:
     ; R1  = Testmuster (Soll-Wert)
-    ; R2  = aktuelle Adresse
+    ; R9  = aktuelle Adresse (ungerade fuer Segmented Mode!)
     ; R3  = Anfangsadresse (0x0100)
     ; R4  = Endadresse (0xFFFE)
     ; R5  = gelesener Wert
@@ -39,49 +39,49 @@ START:
 ; Phase 1: Aufwaerts mit 0x0000 fuellen
 ; ---------------------------------------------------------------
     LD   R1, #0x0000
-    LD   R2, R3
+    LD   R9, R3
 P1_LOOP:
-    LD   @R2, R1
-    INC  R2, #2
-    CP   R2, R4
+    LD   @R9, R1
+    INC  R9, #2
+    CP   R9, R4
     JR   ULE, P1_LOOP
     ; Auch letzte Adresse
-    LD   @R2, R1
+    LD   @R9, R1
 
 ; ---------------------------------------------------------------
 ; Phase 2: Aufwaerts lesen 0x0000, schreiben 0xFFFF
 ; ---------------------------------------------------------------
     LD   R1, #0x0000        ; Erwartung
     LD   R6, #0xFFFF        ; neues Muster
-    LD   R2, R3
+    LD   R9, R3
 P2_LOOP:
-    LD   R5, @R2
+    LD   R5, @R9
     CP   R5, R1
     JR   NZ, FAIL
-    LD   @R2, R6
-    INC  R2, #2
-    CP   R2, R4
+    LD   @R9, R6
+    INC  R9, #2
+    CP   R9, R4
     JR   ULE, P2_LOOP
     ; letzte Adresse
-    LD   R5, @R2
+    LD   R5, @R9
     CP   R5, R1
     JR   NZ, FAIL
-    LD   @R2, R6
+    LD   @R9, R6
 
 ; ---------------------------------------------------------------
 ; Phase 3: Aufwaerts lesen 0xFFFF
 ; ---------------------------------------------------------------
     LD   R1, #0xFFFF
-    LD   R2, R3
+    LD   R9, R3
 P3_LOOP:
-    LD   R5, @R2
+    LD   R5, @R9
     CP   R5, R1
     JR   NZ, FAIL
-    INC  R2, #2
-    CP   R2, R4
+    INC  R9, #2
+    CP   R9, R4
     JR   ULE, P3_LOOP
     ; letzte Adresse
-    LD   R5, @R2
+    LD   R5, @R9
     CP   R5, R1
     JR   NZ, FAIL
 
@@ -90,35 +90,35 @@ P3_LOOP:
 ; ---------------------------------------------------------------
     LD   R1, #0xFFFF
     LD   R6, #0x0000
-    LD   R2, R4             ; von Ende
+    LD   R9, R4             ; von Ende
 P4_LOOP:
-    LD   R5, @R2
+    LD   R5, @R9
     CP   R5, R1
     JR   NZ, FAIL
-    LD   @R2, R6
-    DEC  R2, #2
-    CP   R2, R3
+    LD   @R9, R6
+    DEC  R9, #2
+    CP   R9, R3
     JR   UGE, P4_LOOP
 
 ; ---------------------------------------------------------------
 ; Phase 5: Abwaerts lesen 0x0000
 ; ---------------------------------------------------------------
     LD   R1, #0x0000
-    LD   R2, R4
+    LD   R9, R4
 P5_LOOP:
-    LD   R5, @R2
+    LD   R5, @R9
     CP   R5, R1
     JR   NZ, FAIL
-    DEC  R2, #2
-    CP   R2, R3
+    DEC  R9, #2
+    CP   R9, R3
     JR   UGE, P5_LOOP
 
 ; ---------------------------------------------------------------
 ; Erfolg
 ; ---------------------------------------------------------------
     LD   R1, #0x0001
-    LD   R2, #0x0010
-    LD   @R2, R1
+    LD   R7, #0x0010
+    LD   @R7, R1
     JR   T, $
 
 ; ---------------------------------------------------------------
@@ -133,5 +133,5 @@ FAIL:
     INC  R7, #2
     LD   @R7, R5            ; RESULT2 = Ist
     INC  R7, #2
-    LD   @R7, R2            ; RESULT3 = Fehleradresse
+    LD   @R7, R9            ; RESULT3 = Adresse
     JR   T, $

@@ -15,10 +15,10 @@
     LD   R1, #0x1234
     ADD  R1, #0x5678
     ; R1 = 0x68AC -> Mailbox
-    LD   R2, #0x0012        ; RESULT1 offset
-    LD   @R2, R1
+    LD   R3, #0x0012        ; RESULT1 offset
+    LD   @R3, R1
     ; STATUS = OK
     LD   R1, #0x0001
-    LD   R2, #0x0010
-    LD   @R2, R1
+    LD   R3, #0x0010
+    LD   @R3, R1
     JR   T, $

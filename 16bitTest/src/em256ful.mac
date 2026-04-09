@@ -1,4 +1,4 @@
-	TITLE	'EM256 Full Test v1.2'
+	TITLE	'EM256 Full Test v1.5'
 	.Z80
 ;
 ; em256ful.mac - Umfassendes Testprogramm fuer die EM256 16-Bit-Erweiterung
@@ -128,7 +128,7 @@ MAIN:
 	CALL	PRINT_INFO
 	CALL	COUNT_INFO
 
-; --- A3: PIO-B Write 0x14, Read (erw. 0x94) ---
+; --- A3: PIO-B Write 0x14, Read [INFO] ---
 	LD	DE, MSG_A3
 	CALL	PUTS
 	LD	A, PIOB_IDLE
@@ -136,20 +136,12 @@ MAIN:
 	LD	C, PIOB
 	OUT	(C), A
 	IN	A, (C)
-	LD	(TMP_BYTE), A
-	CP	094H
-	JP	NZ, A3_FAIL
-	CALL	PRINT_OK
-	CALL	COUNT_PASS
-	JR	A4_START
-A3_FAIL:
-	CALL	PRINT_FAIL
-	CALL	COUNT_FAIL_A3
-	LD	A, (TMP_BYTE)
-	LD	B, 094H
-	CALL	PRINT_DETAIL_HEX
+	CALL	PRINT_COLON
+	CALL	PUTHEX
+	CALL	PRINT_INFO
+	CALL	COUNT_INFO
 
-; --- A4: PIO-B Write 0x10, Read (erw. 0x90) ---
+; --- A4: PIO-B Write 0x10, Read [INFO] ---
 A4_START:
 	LD	DE, MSG_A4
 	CALL	PUTS
@@ -160,22 +152,17 @@ A4_START:
 	IN	A, (C)
 	LD	(TMP_BYTE), A
 	; Zurueck auf Idle
+	PUSH	AF
 	LD	A, PIOB_IDLE
 	OUT	(C), A
+	POP	AF
+	CALL	PRINT_COLON
 	LD	A, (TMP_BYTE)
-	CP	090H
-	JP	NZ, A4_FAIL
-	CALL	PRINT_OK
-	CALL	COUNT_PASS
-	JR	A5_START
-A4_FAIL:
-	CALL	PRINT_FAIL
-	CALL	COUNT_FAIL_A4
-	LD	A, (TMP_BYTE)
-	LD	B, 090H
-	CALL	PRINT_DETAIL_HEX
+	CALL	PUTHEX
+	CALL	PRINT_INFO
+	CALL	COUNT_INFO
 
-; --- A5: PIO-B Write 0x14 erneut (erw. 0x94) ---
+; --- A5: PIO-B Write 0x14 erneut [INFO] ---
 A5_START:
 	LD	DE, MSG_A5
 	CALL	PUTS
@@ -184,18 +171,10 @@ A5_START:
 	LD	C, PIOB
 	OUT	(C), A
 	IN	A, (C)
-	CP	094H
-	JP	NZ, A5_FAIL
-	CALL	PRINT_OK
-	CALL	COUNT_PASS
-	JR	A6_START
-A5_FAIL:
-	LD	(TMP_BYTE), A
-	CALL	PRINT_FAIL
-	CALL	COUNT_FAIL_A5
-	LD	A, (TMP_BYTE)
-	LD	B, 094H
-	CALL	PRINT_DETAIL_HEX
+	CALL	PRINT_COLON
+	CALL	PUTHEX
+	CALL	PRINT_INFO
+	CALL	COUNT_INFO
 
 ; --- A6: PIO Reinit (OTIR) ---
 A6_START:
@@ -251,7 +230,7 @@ A8_FAIL:
 	CALL	PRINT_FAIL
 	CALL	COUNT_FAIL_A8
 
-; --- A9: Parity-Latch Reset ---
+; --- A9: Parity-Latch Reset [INFO] ---
 A9_START:
 	LD	DE, MSG_A9
 	CALL	PUTS
@@ -262,17 +241,13 @@ A9_START:
 	OUT	(C), A
 	LD	A, PIOB_IDLE		; 0x14
 	OUT	(C), A
-	; PIO-B lesen: Bit 7 = n_pe (Paritaet, via PIO-A)
+	; PIO-A lesen: Bit 7 = n_pe (Paritaet)
 	LD	C, PIOA
 	IN	A, (C)
-	BIT	7, A			; n_pe: 1=kein Fehler
-	JR	Z, A9_FAIL
-	CALL	PRINT_OK
-	CALL	COUNT_PASS
-	JR	A_DONE
-A9_FAIL:
-	CALL	PRINT_FAIL
-	CALL	COUNT_FAIL_A9
+	CALL	PRINT_COLON
+	CALL	PUTHEX
+	CALL	PRINT_INFO
+	CALL	COUNT_INFO
 
 A_DONE:
 	CALL	PRINT_GRP_SUMMARY
@@ -608,68 +583,14 @@ B_DONE:
 	LD	(GRP_FAIL), A
 	LD	(GRP_TOTAL), A
 
-; --- C1: Addition 0x1234+0x5678=0x68AC (mit Debug-Trace) ---
+; --- C1: Addition 0x1234+0x5678=0x68AC ---
 	LD	DE, MSG_C1
 	CALL	PUTS
-	LD	DE, DBG_1	; "[1]"
-	CALL	PUTS
-	; -- Schritt 1: RAMON --
-	CALL	RAMON_S0
-	LD	DE, DBG_2	; "[2]"
-	CALL	PUTS
-	; -- Schritt 2: Code kopieren --
 	LD	HL, FW_ADD_CODE
 	LD	BC, FW_ADD_CODE_LEN
-	LD	DE, EM256ADR
-	LDIR
-	LD	DE, DBG_3	; "[3]"
-	CALL	PUTS
-	; -- Schritt 3: Mailbox nullen --
-	XOR	A
-	LD	(EM256ADR + MB_STATUS), A
-	LD	(EM256ADR + MB_STATUS + 1), A
-	LD	DE, DBG_4	; "[4]"
-	CALL	PUTS
-	; -- Schritt 4: RAMOFF --
-	CALL	RAMOFF
-	LD	DE, DBG_5	; "[5]"
-	CALL	PUTS
-	; -- Schritt 5: U8001 starten --
-	CALL	START_U8000
-	LD	DE, DBG_6	; "[6]"
-	CALL	PUTS
-	; -- Schritt 6: Warten --
-	LD	D, 20
-C1_DL1:	LD	E, 0
-C1_DL2:	DEC	E
-	JR	NZ, C1_DL2
-	DEC	D
-	JR	NZ, C1_DL1
-	LD	DE, DBG_7	; "[7]"
-	CALL	PUTS
-	; -- Schritt 7: U8001 stoppen --
-	CALL	STOP_U8000
-	LD	DE, DBG_8	; "[8]"
-	CALL	PUTS
-	; -- Schritt 8: Ergebnis lesen --
-	CALL	RAMON_S0
-	CALL	READ_MAILBOX
-	CALL	RAMOFF
-	LD	DE, DBG_9	; "[9]"
-	CALL	PUTS
-	; -- STATUS pruefen --
-	LD	A, (MB_STATUS_HI)
-	OR	A
-	JR	NZ, C1_GOT
-	LD	A, (MB_STATUS_LO)
-	OR	A
-	JR	NZ, C1_GOT
-	JR	C1_TOUT
-C1_GOT:
-	; CF=0, weiter mit Ergebnisprüfung
+	CALL	RUN_FW_TEST
+	JR	C, C1_TOUT
 	; Erwarte RESULT1 = 0x68AC
-	LD	DE, DBG_OK	; "[OK]\n"
-	CALL	PUTS
 	LD	DE, 068ACH
 	CALL	CHECK_RESULT1
 	JR	NZ, C1_FAIL
@@ -998,16 +919,24 @@ SKIP_ALL:
 	OR	A
 	JR	Z, FLIST_DONE
 FLIST_LOOP:
+	PUSH	HL
+	PUSH	BC
 	LD	A, (HL)
 	LD	E, A
 	CALL	PUTC
+	POP	BC
+	POP	HL
 	INC	HL
+	PUSH	HL
+	PUSH	BC
 	LD	A, (HL)
 	LD	E, A
 	CALL	PUTC
-	INC	HL
 	LD	E, ' '
 	CALL	PUTC
+	POP	BC
+	POP	HL
+	INC	HL
 	DEC	B
 	DEC	B
 	JR	NZ, FLIST_LOOP
@@ -1301,48 +1230,95 @@ STOP_U8000:
 ; =============================================================================
 ; RUN_FW_TEST - Z8001-Firmware laden, starten, Ergebnis lesen
 ;
-; Strategie: Kein TRQ8-Handshake! Stattdessen:
-;   1. Code laden, U8001 starten
-;   2. Feste Wartezeit (~50ms, mehr als genug fuer C-Tests)
-;   3. U8001 per reset16 zwangsstoppen
-;   4. Ergebnis aus DRAM lesen, STATUS pruefen
+; Mit Debug-Trace: [1] RAMON [2] LDIR [3] CLR [4] RAMOFF [5] START
+;                  [6] TRQ8 [7] POLL [8] STOP [9] READ
 ;
 ; Eingabe:  HL = Adresse des Firmware-Blobs
 ;           BC = Laenge des Firmware-Blobs
 ; Rueckgabe: CF=0 OK (Ergebnis in MB_STATUS_xx/MB_RESx_xx)
-;            CF=1 Nicht fertig (STATUS=0)
+;            CF=1 Timeout (STATUS=0)
 ; =============================================================================
 RUN_FW_TEST:
 	PUSH	HL
 	PUSH	BC
-	; RAM einblenden
+	; [1] RAM einblenden
+	LD	DE, DBG_1
+	CALL	PUTS
 	CALL	RAMON_S0
 	POP	BC
 	POP	HL
-	; Code laden
+	; [2] Code laden (HL/BC vor PUTS sichern!)
+	PUSH	HL
+	PUSH	BC
+	LD	DE, DBG_2
+	CALL	PUTS
+	POP	BC
+	POP	HL
 	LD	DE, EM256ADR
 	LDIR
-	; Mailbox-Status nullen
+	; [3] Mailbox-Status nullen
+	LD	DE, DBG_3
+	CALL	PUTS
 	XOR	A
 	LD	(EM256ADR + MB_STATUS), A
 	LD	(EM256ADR + MB_STATUS + 1), A
+	; [4] RAMOFF
+	LD	DE, DBG_4
+	CALL	PUTS
 	CALL	RAMOFF
-	; U8001 starten
+	; [5] U8001 starten
+	LD	DE, DBG_5
+	CALL	PUTS
 	CALL	START_U8000
-	; Wartezeit: ~50ms bei 2 MHz Z80
-	; C-Tests brauchen <1ms bei 4 MHz U8001
-	LD	D, 20
-FW_DL1:	LD	E, 0
-FW_DL2:	DEC	E
-	JR	NZ, FW_DL2
+	; Kurze Pause (~2ms)
+	LD	B, 0
+FW_DLY:	DJNZ	FW_DLY
+	; [6] TRQ8 aktivieren
+	LD	DE, DBG_6
+	CALL	PUTS
+	LD	A, PIOB_TRQ
+	LD	B, 0
+	LD	C, PIOB
+	OUT	(C), A
+	; [7] TREN/INT16 pollen
+	LD	DE, DBG_7
+	CALL	PUTS
+	LD	D, TIMEOUT_HI
+FW_POLL_O:
+	LD	E, 0
+FW_POLL_I:
+	LD	B, 0
+	LD	C, PIOA
+	IN	A, (C)
+	BIT	TREN, A
+	JR	NZ, FW_READY
+	BIT	INT16, A
+	JR	NZ, FW_READY
+	DEC	E
+	JR	NZ, FW_POLL_I
 	DEC	D
-	JR	NZ, FW_DL1
-	; U8001 zwangsstoppen (reset16=1 -> 8-Bit-Mode erzwungen)
+	JR	NZ, FW_POLL_O
+	; Timeout
+FW_READY:
+	; PIO-A Zustand merken fuer Debug
+	LD	(DBG_PA), A
+	; [8] STOP
+	LD	DE, DBG_8
+	CALL	PUTS
 	CALL	STOP_U8000
-	; Ergebnis aus DRAM lesen
+	; [9] Ergebnis lesen
+	LD	DE, DBG_9
+	CALL	PUTS
 	CALL	RAMON_S0
 	CALL	READ_MAILBOX
 	CALL	RAMOFF
+	; PIO-A Zustand mit ausgeben
+	LD	DE, DBG_PA_MSG
+	CALL	PUTS
+	LD	A, (DBG_PA)
+	CALL	PUTHEX
+	LD	DE, MSG_CRLF
+	CALL	PUTS
 	; STATUS pruefen (0=nicht fertig)
 	LD	A, (MB_STATUS_HI)
 	OR	A
@@ -1358,23 +1334,37 @@ FW_DONE:
 	RET
 
 ; =============================================================================
-; RUN_FW_TEST_LONG - Wie RUN_FW_TEST, aber mit langer Wartezeit (~10s)
+; RUN_FW_TEST_LONG - Wie RUN_FW_TEST, aber mit langem Timeout fuer March-C
 ; =============================================================================
 RUN_FW_TEST_LONG:
 	PUSH	HL
 	PUSH	BC
+	LD	DE, DBG_1
+	CALL	PUTS
 	CALL	RAMON_S0
+	POP	BC
+	POP	HL
+	; HL/BC vor PUTS sichern!
+	PUSH	HL
+	PUSH	BC
+	LD	DE, DBG_2
+	CALL	PUTS
 	POP	BC
 	POP	HL
 	LD	DE, EM256ADR
 	LDIR
+	LD	DE, DBG_3
+	CALL	PUTS
 	XOR	A
 	LD	(EM256ADR + MB_STATUS), A
 	LD	(EM256ADR + MB_STATUS + 1), A
+	LD	DE, DBG_4
+	CALL	PUTS
 	CALL	RAMOFF
+	LD	DE, DBG_5
+	CALL	PUTS
 	CALL	START_U8000
-	; Lange Wartezeit fuer March-C (~10s bei 2 MHz Z80)
-	; 3-Ebenen-Schleife: 20 * 256 * 256 * 13T = ~17M T = ~8.5s
+	; Lange Pause damit March-C Firmware laeuft (~8s)
 	LD	D, 20
 FDL_O:	LD	E, 0
 FDL_M:	LD	B, 0
@@ -1383,12 +1373,45 @@ FDL_I:	DJNZ	FDL_I
 	JR	NZ, FDL_M
 	DEC	D
 	JR	NZ, FDL_O
-	; U8001 zwangsstoppen
+	; TRQ8 aktivieren
+	LD	DE, DBG_6
+	CALL	PUTS
+	LD	A, PIOB_TRQ
+	LD	B, 0
+	LD	C, PIOB
+	OUT	(C), A
+	; Langer Timeout fuer TREN/INT16
+	LD	DE, DBG_7
+	CALL	PUTS
+	LD	D, TIMEOUT_LONG
+FWL_PO:	LD	E, 0
+FWL_PI:	LD	B, 0
+	LD	C, PIOA
+	IN	A, (C)
+	BIT	TREN, A
+	JR	NZ, FWL_RDY
+	BIT	INT16, A
+	JR	NZ, FWL_RDY
+	DEC	E
+	JR	NZ, FWL_PI
+	DEC	D
+	JR	NZ, FWL_PO
+FWL_RDY:
+	LD	(DBG_PA), A
+	LD	DE, DBG_8
+	CALL	PUTS
 	CALL	STOP_U8000
-	; Ergebnis lesen
+	LD	DE, DBG_9
+	CALL	PUTS
 	CALL	RAMON_S0
 	CALL	READ_MAILBOX
 	CALL	RAMOFF
+	LD	DE, DBG_PA_MSG
+	CALL	PUTS
+	LD	A, (DBG_PA)
+	CALL	PUTHEX
+	LD	DE, MSG_CRLF
+	CALL	PUTS
 	; STATUS pruefen
 	LD	A, (MB_STATUS_HI)
 	OR	A
@@ -1812,7 +1835,7 @@ GS_NOFAIL:
 ; =============================================================================
 MSG_BANNER:
 	DB	0DH, 0AH
-	DB	'EM256 Full Test v1.2', 0DH, 0AH
+	DB	'EM256 Full Test v1.5', 0DH, 0AH
 	DB	'(c) 2026 Olaf Krieger', 0DH, 0AH
 	DB	'============================', 0DH, 0AH, '$'
 
@@ -1829,13 +1852,13 @@ MSG_GRP_E:
 
 MSG_A1:	DB	'A1 PIO-A BIOS-Zustand', '$'
 MSG_A2:	DB	'A2 PIO-B BIOS-Zustand', '$'
-MSG_A3:	DB	'A3 PIO-B Write 0x14 Read', '$'
-MSG_A4:	DB	'A4 PIO-B Write 0x10 Read', '$'
-MSG_A5:	DB	'A5 PIO-B Write 0x14 erneut', '$'
+MSG_A3:	DB	'A3 PIO-B Wr 0x14 Rd', '$'
+MSG_A4:	DB	'A4 PIO-B Wr 0x10 Rd', '$'
+MSG_A5:	DB	'A5 PIO-B Wr 0x14 Rd2', '$'
 MSG_A6:	DB	'A6 PIO Reinit (OTIR)', '$'
 MSG_A7:	DB	'A7 PIO-B nach Reinit', '$'
 MSG_A8:	DB	'A8 PIO-B Toggle', '$'
-MSG_A9:	DB	'A9 Parity-Latch Reset', '$'
+MSG_A9:	DB	'A9 Parity nach Reset', '$'
 
 MSG_B1:	DB	'B1 EM256-Erkennung', '$'
 MSG_B2:	DB	'B2 Seite 0 R/W', '$'
@@ -1924,7 +1947,7 @@ MD_R1:	DB	' R1=', '$'
 MD_VC:	DB	'   VEC=', '$'
 MD_CD:	DB	' CD=', '$'
 
-; Debug-Trace fuer C1
+; Debug-Trace Marker (in RUN_FW_TEST)
 DBG_1:	DB	'[1]', '$'
 DBG_2:	DB	'[2]', '$'
 DBG_3:	DB	'[3]', '$'
@@ -1934,7 +1957,7 @@ DBG_6:	DB	'[6]', '$'
 DBG_7:	DB	'[7]', '$'
 DBG_8:	DB	'[8]', '$'
 DBG_9:	DB	'[9]', '$'
-DBG_OK:	DB	'[OK]', 0DH, 0AH, '$'
+DBG_PA_MSG:	DB	' PA=', '$'
 
 MSG_PAUSE:
 	DB	'--- Taste druecken ---', '$'
