@@ -242,21 +242,12 @@ class Encoder:
 
     @staticmethod
     def encode_ld_r_r(rd, rs, byte_op=False):
-        """LD Rd, Rs -> word: 1010 1000 w Rs Rd
-        w=1 for word, w=0 for byte"""
+        """LD Rd, Rs -> 1010 000w ssss dddd
+        LDB Rbd, Rbs: 0xA0 (w=0), LD Rd, Rs: 0xA1 (w=1)
+        Verified from MAME: ZA0=LDB, ZA1=LD (R,R)
+        """
         w_bit = 0 if byte_op else 1
-        w1 = 0xA000 | (0x800) | (w_bit << 8) | ((rs & 0xF) << 4) | (rd & 0xF)
-        # Recalculate: 1010 1 w Rs(4) Rd(4)
-        # bits: 15-12=1010, 11=1, 10=w, 9-8=00, wait no.
-        # 1010 1000 w Rs Rd -> that's: A(high nibble)=1010, then 100, w, Rs(4), Rd(4)
-        # 16 bits: 1010 100w ssss dddd
-        w1 = (0b10101000 << 8) | (w_bit << 8) | ((rs & 0xF) << 4) | (rd & 0xF)
-        # Wait: 1010 1000 is 0xA8 for w=0 (byte), 1010 1001 is 0xA9 for w=1 (word)
-        # Hmm let me re-read. The table says: LD Rd,Rs: 1w|0|Rs|Rd but that seems wrong.
-        # From the known working code: no R,R load in existing code.
-        # From extracted table: LD Rd, Rs -> '1010 1000 w Rs Rd'
-        # So bits 15-8 = 1010 100w, bits 7-0 = ssss dddd
-        w1 = (0xA800 | (w_bit << 8)) | ((rs & 0xF) << 4) | (rd & 0xF)
+        w1 = 0xA000 | (w_bit << 8) | ((rs & 0xF) << 4) | (rd & 0xF)
         return Encoder.word_bytes(w1)
 
     @staticmethod
@@ -391,15 +382,280 @@ class Encoder:
 
     @staticmethod
     def encode_addl_rr_rr(rrd, rrs):
-        """ADDL RRd, RRs -> 1001 0110 RRs RRd"""
+        """ADDL RRd, RRs -> 1001 0110 RRs RRd (MAME: Z96=ADDL)"""
         w1 = 0x9600 | ((rrs & 0xF) << 4) | (rrd & 0xF)
         return Encoder.word_bytes(w1)
 
     @staticmethod
     def encode_subl_rr_rr(rrd, rrs):
-        """SUBL RRd, RRs -> 1001 0010 RRs RRd"""
+        """SUBL RRd, RRs -> 1001 0010 RRs RRd (MAME: Z92=SUBL)"""
         w1 = 0x9200 | ((rrs & 0xF) << 4) | (rrd & 0xF)
         return Encoder.word_bytes(w1)
+
+    @staticmethod
+    def encode_cpl_rr_rr(rrd, rrs):
+        """CPL RRd, RRs -> 1001 0000 RRs RRd (MAME: Z90=CPL)"""
+        w1 = 0x9000 | ((rrs & 0xF) << 4) | (rrd & 0xF)
+        return Encoder.word_bytes(w1)
+
+    @staticmethod
+    def encode_addl_rr_imm(rrd, imm32):
+        """ADDL RRd, #imm32 -> 0x1600 | RRd + imm32 (MAME: Z16=ADDL)"""
+        w1 = 0x1600 | (rrd & 0xF)
+        hi = (imm32 >> 16) & 0xFFFF
+        lo = imm32 & 0xFFFF
+        return Encoder.word_bytes(w1) + Encoder.word_bytes(hi) + Encoder.word_bytes(lo)
+
+    @staticmethod
+    def encode_subl_rr_imm(rrd, imm32):
+        """SUBL RRd, #imm32 -> 0x1200 | RRd + imm32 (MAME: Z12=SUBL)"""
+        w1 = 0x1200 | (rrd & 0xF)
+        hi = (imm32 >> 16) & 0xFFFF
+        lo = imm32 & 0xFFFF
+        return Encoder.word_bytes(w1) + Encoder.word_bytes(hi) + Encoder.word_bytes(lo)
+
+    @staticmethod
+    def encode_cpl_rr_imm(rrd, imm32):
+        """CPL RRd, #imm32 -> 0x1000 | RRd + imm32 (MAME: Z10=CPL)"""
+        w1 = 0x1000 | (rrd & 0xF)
+        hi = (imm32 >> 16) & 0xFFFF
+        lo = imm32 & 0xFFFF
+        return Encoder.word_bytes(w1) + Encoder.word_bytes(hi) + Encoder.word_bytes(lo)
+
+    @staticmethod
+    def encode_addl_rr_ir(rrd, rs):
+        """ADDL RRd, @Rs -> 0x1600 | (Rs<<4) | RRd (MAME: Z16_ssN0)"""
+        w1 = 0x1600 | ((rs & 0xE) << 4) | (rrd & 0xF)
+        return Encoder.word_bytes(w1)
+
+    @staticmethod
+    def encode_subl_rr_ir(rrd, rs):
+        """SUBL RRd, @Rs -> 0x1200 | (Rs<<4) | RRd"""
+        w1 = 0x1200 | ((rs & 0xE) << 4) | (rrd & 0xF)
+        return Encoder.word_bytes(w1)
+
+    @staticmethod
+    def encode_cpl_rr_ir(rrd, rs):
+        """CPL RRd, @Rs -> 0x1000 | (Rs<<4) | RRd"""
+        w1 = 0x1000 | ((rs & 0xE) << 4) | (rrd & 0xF)
+        return Encoder.word_bytes(w1)
+
+    @staticmethod
+    def encode_mult_rr_rs(rrd, rs):
+        """MULT RRd, Rs -> 0x9900 | (Rs<<4) | RRd (MAME: Z99=MULT, 70 cycles)"""
+        w1 = 0x9900 | ((rs & 0xF) << 4) | (rrd & 0xF)
+        return Encoder.word_bytes(w1)
+
+    @staticmethod
+    def encode_mult_rr_imm(rrd, imm16):
+        """MULT RRd, #imm16 -> 0x1900 | RRd + imm16 (MAME: Z19=MULT)"""
+        w1 = 0x1900 | (rrd & 0xF)
+        return Encoder.word_bytes(w1) + Encoder.word_bytes(imm16 & 0xFFFF)
+
+    @staticmethod
+    def encode_mult_rr_ir(rrd, rs):
+        """MULT RRd, @Rs -> 0x1900 | (Rs<<4) | RRd"""
+        w1 = 0x1900 | ((rs & 0xE) << 4) | (rrd & 0xF)
+        return Encoder.word_bytes(w1)
+
+    @staticmethod
+    def encode_multl_rq_rrs(rqd, rrs):
+        """MULTL RQd, RRs -> 0x9800 | (RRs<<4) | RQd (MAME: Z98=MULTL, 282 cycles)"""
+        w1 = 0x9800 | ((rrs & 0xF) << 4) | (rqd & 0xF)
+        return Encoder.word_bytes(w1)
+
+    @staticmethod
+    def encode_multl_rq_imm(rqd, imm32):
+        """MULTL RQd, #imm32 -> 0x1800 | RQd + imm32 (MAME: Z18=MULTL)"""
+        w1 = 0x1800 | (rqd & 0xF)
+        hi = (imm32 >> 16) & 0xFFFF
+        lo = imm32 & 0xFFFF
+        return Encoder.word_bytes(w1) + Encoder.word_bytes(hi) + Encoder.word_bytes(lo)
+
+    @staticmethod
+    def encode_multl_rq_ir(rqd, rs):
+        """MULTL RQd, @Rs -> 0x1800 | (Rs<<4) | RQd"""
+        w1 = 0x1800 | ((rs & 0xE) << 4) | (rqd & 0xF)
+        return Encoder.word_bytes(w1)
+
+    @staticmethod
+    def encode_div_rr_rs(rrd, rs):
+        """DIV RRd, Rs -> 0x9B00 | (Rs<<4) | RRd (MAME: Z9B=DIV, 107 cycles)"""
+        w1 = 0x9B00 | ((rs & 0xF) << 4) | (rrd & 0xF)
+        return Encoder.word_bytes(w1)
+
+    @staticmethod
+    def encode_div_rr_imm(rrd, imm16):
+        """DIV RRd, #imm16 -> 0x1B00 | RRd + imm16 (MAME: Z1B=DIV)"""
+        w1 = 0x1B00 | (rrd & 0xF)
+        return Encoder.word_bytes(w1) + Encoder.word_bytes(imm16 & 0xFFFF)
+
+    @staticmethod
+    def encode_div_rr_ir(rrd, rs):
+        """DIV RRd, @Rs -> 0x1B00 | (Rs<<4) | RRd"""
+        w1 = 0x1B00 | ((rs & 0xE) << 4) | (rrd & 0xF)
+        return Encoder.word_bytes(w1)
+
+    @staticmethod
+    def encode_divl_rq_rrs(rqd, rrs):
+        """DIVL RQd, RRs -> 0x9A00 | (RRs<<4) | RQd (MAME: Z9A=DIVL, 744 cycles)"""
+        w1 = 0x9A00 | ((rrs & 0xF) << 4) | (rqd & 0xF)
+        return Encoder.word_bytes(w1)
+
+    @staticmethod
+    def encode_divl_rq_imm(rqd, imm32):
+        """DIVL RQd, #imm32 -> 0x1A00 | RQd + imm32 (MAME: Z1A=DIVL)"""
+        w1 = 0x1A00 | (rqd & 0xF)
+        hi = (imm32 >> 16) & 0xFFFF
+        lo = imm32 & 0xFFFF
+        return Encoder.word_bytes(w1) + Encoder.word_bytes(hi) + Encoder.word_bytes(lo)
+
+    @staticmethod
+    def encode_divl_rq_ir(rqd, rs):
+        """DIVL RQd, @Rs -> 0x1A00 | (Rs<<4) | RQd"""
+        w1 = 0x1A00 | ((rs & 0xE) << 4) | (rqd & 0xF)
+        return Encoder.word_bytes(w1)
+
+    @staticmethod
+    def encode_extsb(rd):
+        """EXTSB Rd -> 0xB100 | (Rd<<4) | 0x00 (MAME: ZB1_dddd_0000)
+        Sign-extend byte in low half of Rd to word."""
+        w1 = 0xB100 | ((rd & 0xF) << 4) | 0x00
+        return Encoder.word_bytes(w1)
+
+    @staticmethod
+    def encode_exts(rrd):
+        """EXTS RRd -> 0xB100 | (RRd<<4) | 0x0A (MAME: ZB1_dddd_1010)
+        Sign-extend word in low half of RRd to long."""
+        w1 = 0xB100 | ((rrd & 0xF) << 4) | 0x0A
+        return Encoder.word_bytes(w1)
+
+    @staticmethod
+    def encode_extsl(rqd):
+        """EXTSL RQd -> 0xB100 | (RQd<<4) | 0x07 (MAME: ZB1_dddd_0111)
+        Sign-extend long in low half of RQd to quad."""
+        w1 = 0xB100 | ((rqd & 0xF) << 4) | 0x07
+        return Encoder.word_bytes(w1)
+
+    @staticmethod
+    def encode_test(rd, byte_op=False):
+        """TEST Rd -> 0x8D00 | (Rd<<4) | 0x04 (MAME: Z8D_dddd_0100)
+        TESTB Rbd -> 0x8C00 | (Rbd<<4) | 0x04 (MAME: Z8C_dddd_0100)"""
+        w_bit = 0 if byte_op else 1
+        w1 = 0x8C00 | (w_bit << 8) | ((rd & 0xF) << 4) | 0x04
+        return Encoder.word_bytes(w1)
+
+    @staticmethod
+    def encode_testl(rrd):
+        """TESTL RRd -> 0x9C00 | (RRd<<4) | 0x08 (MAME: Z9C_dddd_1000)"""
+        w1 = 0x9C00 | ((rrd & 0xF) << 4) | 0x08
+        return Encoder.word_bytes(w1)
+
+    @staticmethod
+    def encode_tset(rd, byte_op=False):
+        """TSET Rd -> 0x8D00 | (Rd<<4) | 0x06 (MAME: Z8D_dddd_0110)
+        TSETB Rbd -> 0x8C00 | (Rbd<<4) | 0x06 (MAME: Z8C_dddd_0110)"""
+        w_bit = 0 if byte_op else 1
+        w1 = 0x8C00 | (w_bit << 8) | ((rd & 0xF) << 4) | 0x06
+        return Encoder.word_bytes(w1)
+
+    @staticmethod
+    def encode_dab(rbd):
+        """DAB Rbd -> 0xB000 | (Rbd<<4) | 0x00 (MAME: ZB0_dddd_0000)"""
+        w1 = 0xB000 | ((rbd & 0xF) << 4)
+        return Encoder.word_bytes(w1)
+
+    @staticmethod
+    def encode_rldb(rba, rbb):
+        """RLDB Rbb, Rba -> 0xBE00 | (Rba<<4) | Rbb (MAME: ZBE_aaaa_bbbb)"""
+        w1 = 0xBE00 | ((rba & 0xF) << 4) | (rbb & 0xF)
+        return Encoder.word_bytes(w1)
+
+    @staticmethod
+    def encode_rrdb(rba, rbb):
+        """RRDB Rbb, Rba -> 0xBC00 | (Rba<<4) | Rbb (MAME: ZBC_aaaa_bbbb)"""
+        w1 = 0xBC00 | ((rba & 0xF) << 4) | (rbb & 0xF)
+        return Encoder.word_bytes(w1)
+
+    @staticmethod
+    def encode_ldm_load(rs, rd_first, count):
+        """LDM Rd, @Rs, #n -> load n registers starting at Rd from memory @Rs
+        MAME: Z1C_ssN0_0001_0000_dddd_0000_nmin1
+        word1 = 0x1C00 | (Rs<<4) | 0x01
+        word2 = (Rd<<8) | (n-1)
+        """
+        w1 = 0x1C00 | ((rs & 0xE) << 4) | 0x01
+        w2 = ((rd_first & 0xF) << 8) | ((count - 1) & 0xF)
+        return Encoder.word_bytes(w1) + Encoder.word_bytes(w2)
+
+    @staticmethod
+    def encode_ldm_store(rd, rs_first, count):
+        """LDM @Rd, Rs, #n -> store n registers starting at Rs to memory @Rd
+        MAME: Z1C_ddN0_1001_0000_ssss_0000_nmin1
+        word1 = 0x1C00 | (Rd<<4) | 0x09
+        word2 = (Rs<<8) | (n-1)
+        """
+        w1 = 0x1C00 | ((rd & 0xE) << 4) | 0x09
+        w2 = ((rs_first & 0xF) << 8) | ((count - 1) & 0xF)
+        return Encoder.word_bytes(w1) + Encoder.word_bytes(w2)
+
+    @staticmethod
+    def encode_lda(rd, addr16):
+        """LDA Rd, address -> 0x7600 | Rd + addr16 (MAME: Z76_0000_dddd_addr)"""
+        w1 = 0x7600 | (rd & 0xF)
+        return Encoder.word_bytes(w1) + Encoder.word_bytes(addr16 & 0xFFFF)
+
+    @staticmethod
+    def encode_ld_r_da(rd, addr16, byte_op=False):
+        """LD Rd, address -> 0x6100 | Rd + addr16 (MAME: Z61_0000_dddd_addr)
+        LDB Rbd, address -> 0x6000 | Rbd + addr16 (MAME: Z60_0000_dddd_addr)"""
+        w_bit = 0 if byte_op else 1
+        w1 = 0x6000 | (w_bit << 8) | (rd & 0xF)
+        return Encoder.word_bytes(w1) + Encoder.word_bytes(addr16 & 0xFFFF)
+
+    @staticmethod
+    def encode_ld_da_r(addr16, rs, byte_op=False):
+        """LD address, Rs -> 0x6F00 | Rs + addr16 (MAME: Z6F_0000_ssss_addr)
+        LDB address, Rbs -> 0x6E00 | Rbs + addr16 (MAME: Z6E_0000_ssss_addr)"""
+        w_bit = 0 if byte_op else 1
+        w1 = 0x6E00 | (w_bit << 8) | ((rs & 0xF) << 4)
+        return Encoder.word_bytes(w1) + Encoder.word_bytes(addr16 & 0xFFFF)
+
+    @staticmethod
+    def encode_ldl_rr_ir(rrd, rs):
+        """LDL RRd, @Rs -> 0x1400 | (Rs<<4) | RRd (MAME: Z14_ssN0_dddd)"""
+        w1 = 0x1400 | ((rs & 0xE) << 4) | (rrd & 0xF)
+        return Encoder.word_bytes(w1)
+
+    @staticmethod
+    def encode_ldl_ir_rrs(rd, rrs):
+        """LDL @Rd, RRs -> 0x1D00 | (Rd<<4) | RRs (MAME: Z1D_ddN0_ssss)"""
+        w1 = 0x1D00 | ((rd & 0xE) << 4) | (rrs & 0xF)
+        return Encoder.word_bytes(w1)
+
+    @staticmethod
+    def encode_ldi(dst_reg, src_reg, cnt_reg, repeat=False):
+        """LDI @Rd, @Rs, Rr -> block load increment
+        LDIR @Rd, @Rs, Rr -> block load increment with repeat
+        MAME: ZBB_ssN0_0001_0000_rrrr_ddN0_x000
+        word1 = 0xBB00 | (Rs<<4) | 0x01
+        word2 = (Rr<<8) | (Rd<<4) | (0x08 if repeat else 0x00)
+        """
+        w1 = 0xBB00 | ((src_reg & 0xE) << 4) | 0x01
+        w2 = ((cnt_reg & 0xF) << 8) | ((dst_reg & 0xE) << 4) | (0x08 if repeat else 0x00)
+        return Encoder.word_bytes(w1) + Encoder.word_bytes(w2)
+
+    @staticmethod
+    def encode_ldd(dst_reg, src_reg, cnt_reg, repeat=False):
+        """LDD @Rd, @Rs, Rr -> block load decrement
+        LDDR @Rd, @Rs, Rr -> block load decrement with repeat
+        MAME: ZBB_ssN0_1001_0000_rrrr_ddN0_x000
+        word1 = 0xBB00 | (Rs<<4) | 0x09
+        word2 = (Rr<<8) | (Rd<<4) | (0x08 if repeat else 0x00)
+        """
+        w1 = 0xBB00 | ((src_reg & 0xE) << 4) | 0x09
+        w2 = ((cnt_reg & 0xF) << 8) | ((dst_reg & 0xE) << 4) | (0x08 if repeat else 0x00)
+        return Encoder.word_bytes(w1) + Encoder.word_bytes(w2)
 
     @staticmethod
     def encode_inc_dec(rd, n, is_dec=False, byte_op=False):
@@ -613,36 +869,54 @@ class Encoder:
 
     @staticmethod
     def encode_shift(rd, amount, shift_type='SRA', byte_op=False):
-        """Shifts and rotates.
-        SLA/SRA: 1011 0011 w Rd 1001 + word2 (positive=left, negative=right)
-        SLL/SRL: 1011 0011 w Rd 1011 + word2
-        RL:  1011 0011 w Rd 00 (1 bit) or 10 (2 bits)
-        RR:  1011 0011 w Rd 0100 (1 bit) or 1100 (2 bits)
+        """Shifts and rotates (MAME-verified encodings).
+        Base: 0xB2 (byte) / 0xB3 (word)
+        Low byte: dddd ssss where dddd=register, ssss=sub-opcode
+        
+        Sub-opcodes (from MAME z8000tbl.hxx / z8000ops.hxx):
+        Rotates (single word, no imm16):
+          RL 1-bit:  0000 (0x00)    RL 2-bit:  0010 (0x02)
+          RR 1-bit:  0100 (0x04)    RR 2-bit:  0110 (0x06)
+          RLC 1-bit: 1000 (0x08)    RLC 2-bit: 1010 (0x0A)
+          RRC 1-bit: 1100 (0x0C)    RRC 2-bit: 1110 (0x0E)
+        Shifts (+ imm16 follow word, positive=left, negative=right):
+          SLL/SRL: 0001 (0x01)
+          SLA/SRA: 1001 (0x09)
+          SLAL/SRAL: 1101 (0x0D) [word-sized base 0xB3 for long shift]
         """
         w_bit = 0 if byte_op else 1
         
         if shift_type in ('SLA', 'SRA'):
             sub = 0x09
             if shift_type == 'SRA':
-                # amount is negative (2's complement) for right shift
                 amount = (-amount) & 0xFFFF
             w1 = 0xB200 | (w_bit << 8) | ((rd & 0xF) << 4) | sub
             return Encoder.word_bytes(w1) + Encoder.word_bytes(amount & 0xFFFF)
         elif shift_type in ('SLL', 'SRL'):
-            sub = 0x0B  # Actually 1011 (sub-opcode for logical shift)
+            sub = 0x01
             if shift_type == 'SRL':
                 amount = (-amount) & 0xFFFF
             w1 = 0xB200 | (w_bit << 8) | ((rd & 0xF) << 4) | sub
             return Encoder.word_bytes(w1) + Encoder.word_bytes(amount & 0xFFFF)
+        elif shift_type in ('SLAL', 'SRAL'):
+            sub = 0x0D
+            if shift_type == 'SRAL':
+                amount = (-amount) & 0xFFFF
+            # Long shifts always use 0xB3 base (word-size opcode acts on long register pair)
+            w1 = 0xB300 | ((rd & 0xF) << 4) | sub
+            return Encoder.word_bytes(w1) + Encoder.word_bytes(amount & 0xFFFF)
         elif shift_type in ('RL', 'RLC'):
-            # RL: sub = s0 where s=0 for 1 bit, s=1 for 2 bits
+            # RL: bits[3:2]=00, RLC: bits[3:2]=10
             s = 0 if amount == 1 else 1
-            sub = (s << 1) | (1 if shift_type == 'RLC' else 0)
+            base = 0x00 if shift_type == 'RL' else 0x08
+            sub = base | (s << 1)
             w1 = 0xB200 | (w_bit << 8) | ((rd & 0xF) << 4) | sub
             return Encoder.word_bytes(w1)
         elif shift_type in ('RR', 'RRC'):
+            # RR: bits[3:2]=01, RRC: bits[3:2]=11
             s = 0 if amount == 1 else 1
-            sub = 0x04 | (s << 1) | (1 if shift_type == 'RRC' else 0)
+            base = 0x04 if shift_type == 'RR' else 0x0C
+            sub = base | (s << 1)
             w1 = 0xB200 | (w_bit << 8) | ((rd & 0xF) << 4) | sub
             return Encoder.word_bytes(w1)
         else:
@@ -658,36 +932,23 @@ class Encoder:
     @staticmethod
     def encode_ldctl(dst_is_ctl, ctl_name, reg):
         """LDCTL dst, src.
-        LDCTL FCW, Rs:     0111 1101 Rs   0001 -> 0x7D00 | (Rs<<4) | 0x01
-        LDCTL Rd, FCW:     0111 1101 Rd   1001 -> 0x7D00 | (Rd<<4) | 0x09
-        LDCTL REFRESH, Rs: 0111 1101 Rs   0011 -> 0x7D00 | (Rs<<4) | 0x03
-        LDCTL Rd, REFRESH: 0111 1101 Rd   1011 -> ...
-        ...etc. The sub-opcode encodes the control register + direction.
+        From MAME: Z7D_dddd_0ccc = load ctl→reg, Z7D_ssss_1ccc = load reg→ctl
+        Control register encoding (from MAME):
+          FCW=2, REFRESH=3, PSAPSEG=4, PSAPOFF=5, NSPSEG=6, NSPOFF=7
         """
-        ctl_map_to_ctl = {
-            'FCW': 0x01, 'REFRESH': 0x03, 'PSAPSEG': 0x05,
-            'PSAPOFF': 0x07, 'PSAP': 0x07, 'NSPSEG': 0x09,
-            'NSPOFF': 0x0B, 'NSP': 0x0B,
+        ctl_nums = {
+            'FCW': 2, 'REFRESH': 3, 'PSAPSEG': 4,
+            'PSAPOFF': 5, 'PSAP': 5, 'NSPSEG': 6,
+            'NSPOFF': 7, 'NSP': 7,
         }
-        ctl_map_from_ctl = {
-            'FCW': 0x01, 'REFRESH': 0x03, 'PSAPSEG': 0x05,
-            'PSAPOFF': 0x07, 'PSAP': 0x07, 'NSPSEG': 0x09,
-            'NSPOFF': 0x0B, 'NSP': 0x0B,
-        }
-        # Direction bit seems to be in the sub-opcode field
-        # For now, use the extracted patterns:
-        # Load INTO control: 0x7D00 | (Rs<<4) | ctl_code
-        # Load FROM control: 0x7D00 | (Rd<<4) | (ctl_code | 0x08)?
-        # Actually this needs more careful decoding from the manual.
-        # Let's use a simpler model based on the extract values.
-        # The sub-op codes differ per direction. For now:
         ctl_upper = ctl_name.upper()
+        ctl_num = ctl_nums.get(ctl_upper, 2)
         if dst_is_ctl:
-            sub = ctl_map_to_ctl.get(ctl_upper, 0x01)
-            w1 = 0x7D00 | ((reg & 0xF) << 4) | sub
+            # LDCTL ctl, Rs -> 0x7D00 | (Rs<<4) | (0x08 | ctl_num)
+            w1 = 0x7D00 | ((reg & 0xF) << 4) | (0x08 | ctl_num)
         else:
-            sub = ctl_map_from_ctl.get(ctl_upper, 0x01) | 0x08
-            w1 = 0x7D00 | ((reg & 0xF) << 4) | sub
+            # LDCTL Rd, ctl -> 0x7D00 | (Rd<<4) | ctl_num
+            w1 = 0x7D00 | ((reg & 0xF) << 4) | ctl_num
         return Encoder.word_bytes(w1)
 
     @staticmethod
@@ -1134,23 +1395,9 @@ class Assembler:
         if mnemonic in self.ARITH_R_R_OPS or mnemonic in self.ARITH_R_IMM_OPS:
             return self._encode_arith(mnemonic, ops, line_num)
 
-        # ===== ADDL, SUBL =====
-        if mnemonic == 'ADDL':
-            if len(ops) < 2:
-                raise AsmError("ADDL requires two operands", line_num)
-            rrd = parse_register(ops[0])
-            rrs = parse_register(ops[1])
-            if rrd and rrs and rrd[0] == 'RR' and rrs[0] == 'RR':
-                return Encoder.encode_addl_rr_rr(rrd[1], rrs[1])
-            raise AsmError("ADDL requires RRd, RRs", line_num)
-        if mnemonic == 'SUBL':
-            if len(ops) < 2:
-                raise AsmError("SUBL requires two operands", line_num)
-            rrd = parse_register(ops[0])
-            rrs = parse_register(ops[1])
-            if rrd and rrs and rrd[0] == 'RR' and rrs[0] == 'RR':
-                return Encoder.encode_subl_rr_rr(rrd[1], rrs[1])
-            raise AsmError("SUBL requires RRd, RRs", line_num)
+        # ===== ADDL, SUBL, CPL =====
+        if mnemonic in ('ADDL', 'SUBL', 'CPL'):
+            return self._encode_long_arith(mnemonic, ops, line_num)
 
         # ===== INC, INCB, DEC, DECB =====
         if mnemonic in ('INC', 'INCB', 'DEC', 'DECB'):
@@ -1191,6 +1438,7 @@ class Assembler:
 
         # ===== Shifts & Rotates =====
         if mnemonic in ('SLA', 'SLAB', 'SRA', 'SRAB', 'SLL', 'SLLB', 'SRL', 'SRLB',
+                        'SLAL', 'SRAL',
                         'RL', 'RLB', 'RLC', 'RLCB', 'RR', 'RRB', 'RRC', 'RRCB'):
             byte_op = mnemonic.endswith('B')
             base_op = mnemonic.rstrip('B') if byte_op else mnemonic
@@ -1246,6 +1494,89 @@ class Assembler:
             if not reg:
                 raise AsmError(f"Invalid register: {ops[1]}", line_num)
             return Encoder.encode_tcc(cc, reg[1], byte_op=mnemonic == 'TCCB')
+
+        # ===== MULT, MULTL, DIV, DIVL =====
+        if mnemonic in ('MULT', 'MULTL', 'DIV', 'DIVL'):
+            return self._encode_mult_div(mnemonic, ops, line_num)
+
+        # ===== EXTSB, EXTS, EXTSL =====
+        if mnemonic == 'EXTSB':
+            reg = parse_register(ops[0])
+            if not reg or reg[0] != 'R':
+                raise AsmError("EXTSB requires Rd", line_num)
+            return Encoder.encode_extsb(reg[1])
+        if mnemonic == 'EXTS':
+            reg = parse_register(ops[0])
+            if not reg or reg[0] != 'RR':
+                raise AsmError("EXTS requires RRd", line_num)
+            return Encoder.encode_exts(reg[1])
+        if mnemonic == 'EXTSL':
+            reg = parse_register(ops[0])
+            if not reg or reg[0] != 'RQ':
+                raise AsmError("EXTSL requires RQd", line_num)
+            return Encoder.encode_extsl(reg[1])
+
+        # ===== TEST, TESTB, TESTL =====
+        if mnemonic in ('TEST', 'TESTB'):
+            reg = parse_register(ops[0])
+            if not reg:
+                raise AsmError(f"{mnemonic} requires register", line_num)
+            return Encoder.encode_test(reg[1], byte_op=mnemonic == 'TESTB')
+        if mnemonic == 'TESTL':
+            reg = parse_register(ops[0])
+            if not reg or reg[0] != 'RR':
+                raise AsmError("TESTL requires RRd", line_num)
+            return Encoder.encode_testl(reg[1])
+
+        # ===== TSET, TSETB =====
+        if mnemonic in ('TSET', 'TSETB'):
+            reg = parse_register(ops[0])
+            if not reg:
+                raise AsmError(f"{mnemonic} requires register", line_num)
+            return Encoder.encode_tset(reg[1], byte_op=mnemonic == 'TSETB')
+
+        # ===== DAB =====
+        if mnemonic == 'DAB':
+            reg = parse_register(ops[0])
+            if not reg:
+                raise AsmError("DAB requires Rbd", line_num)
+            return Encoder.encode_dab(reg[1])
+
+        # ===== RLDB, RRDB =====
+        if mnemonic == 'RLDB':
+            if len(ops) < 2:
+                raise AsmError("RLDB requires Rbb, Rba", line_num)
+            rbb = parse_register(ops[0])
+            rba = parse_register(ops[1])
+            if not rbb or not rba:
+                raise AsmError("RLDB requires register operands", line_num)
+            return Encoder.encode_rldb(rba[1], rbb[1])
+        if mnemonic == 'RRDB':
+            if len(ops) < 2:
+                raise AsmError("RRDB requires Rbb, Rba", line_num)
+            rbb = parse_register(ops[0])
+            rba = parse_register(ops[1])
+            if not rbb or not rba:
+                raise AsmError("RRDB requires register operands", line_num)
+            return Encoder.encode_rrdb(rba[1], rbb[1])
+
+        # ===== LDM =====
+        if mnemonic == 'LDM':
+            return self._encode_ldm(ops, line_num)
+
+        # ===== LDA =====
+        if mnemonic == 'LDA':
+            if len(ops) < 2:
+                raise AsmError("LDA requires Rd, address", line_num)
+            reg = parse_register(ops[0])
+            if not reg or reg[0] != 'R':
+                raise AsmError("LDA requires Rd", line_num)
+            addr = self._eval(ops[1])
+            return Encoder.encode_lda(reg[1], addr)
+
+        # ===== LDIR, LDDR, LDI, LDD =====
+        if mnemonic in ('LDI', 'LDIR', 'LDD', 'LDDR'):
+            return self._encode_block_load(mnemonic, ops, line_num)
 
         raise AsmError(f"Unknown mnemonic: {mnemonic}", line_num)
 
@@ -1311,6 +1642,14 @@ class Assembler:
         # LDL RRd, RRs
         if is_long and dst_reg and src_reg and dst_reg[0] == 'RR' and src_reg[0] == 'RR':
             return Encoder.encode_ldl_rr_rr(dst_reg[1], src_reg[1])
+
+        # LDL RRd, @Rs
+        if is_long and dst_reg and src_ir and dst_reg[0] == 'RR':
+            return Encoder.encode_ldl_rr_ir(dst_reg[1], src_ir[1])
+
+        # LDL @Rd, RRs
+        if is_long and dst_ir and src_reg and src_reg[0] == 'RR':
+            return Encoder.encode_ldl_ir_rrs(dst_ir[1], src_reg[1])
 
         # LD Rd, #imm16
         if dst_reg and dst_reg[0] == 'R' and src_is_imm and not byte_op:
@@ -1487,6 +1826,146 @@ class Assembler:
             return Encoder.encode_ldctl(False, src_str, dst_reg[1])
         else:
             raise AsmError(f"LDCTL requires a control register operand", line_num)
+
+    def _encode_long_arith(self, mnemonic, ops, line_num):
+        """Encode ADDL, SUBL, CPL with RR,RR / RR,#imm32 / RR,@Rs operand modes."""
+        if len(ops) < 2:
+            raise AsmError(f"{mnemonic} requires two operands", line_num)
+        rrd = parse_register(ops[0])
+        if not rrd or rrd[0] != 'RR':
+            raise AsmError(f"{mnemonic} requires RRd as destination", line_num)
+
+        src_str = ops[1].strip()
+        src_reg = parse_register(src_str)
+        src_ir = parse_indirect(src_str)
+        src_is_imm = src_str.startswith('#') or (not src_reg and not src_ir)
+
+        # RRd, RRs
+        if src_reg and src_reg[0] == 'RR':
+            if mnemonic == 'ADDL':
+                return Encoder.encode_addl_rr_rr(rrd[1], src_reg[1])
+            elif mnemonic == 'SUBL':
+                return Encoder.encode_subl_rr_rr(rrd[1], src_reg[1])
+            elif mnemonic == 'CPL':
+                return Encoder.encode_cpl_rr_rr(rrd[1], src_reg[1])
+
+        # RRd, @Rs
+        if src_ir:
+            if mnemonic == 'ADDL':
+                return Encoder.encode_addl_rr_ir(rrd[1], src_ir[1])
+            elif mnemonic == 'SUBL':
+                return Encoder.encode_subl_rr_ir(rrd[1], src_ir[1])
+            elif mnemonic == 'CPL':
+                return Encoder.encode_cpl_rr_ir(rrd[1], src_ir[1])
+
+        # RRd, #imm32
+        if src_is_imm:
+            imm = self._eval(src_str)
+            if mnemonic == 'ADDL':
+                return Encoder.encode_addl_rr_imm(rrd[1], imm)
+            elif mnemonic == 'SUBL':
+                return Encoder.encode_subl_rr_imm(rrd[1], imm)
+            elif mnemonic == 'CPL':
+                return Encoder.encode_cpl_rr_imm(rrd[1], imm)
+
+        raise AsmError(f"Unsupported {mnemonic} operand combination: {ops}", line_num)
+
+    def _encode_mult_div(self, mnemonic, ops, line_num):
+        """Encode MULT, MULTL, DIV, DIVL."""
+        if len(ops) < 2:
+            raise AsmError(f"{mnemonic} requires two operands", line_num)
+
+        dst = parse_register(ops[0])
+        if not dst:
+            raise AsmError(f"{mnemonic} requires register destination", line_num)
+
+        src_str = ops[1].strip()
+        src_reg = parse_register(src_str)
+        src_ir = parse_indirect(src_str)
+        src_is_imm = src_str.startswith('#') or (not src_reg and not src_ir)
+
+        if mnemonic == 'MULT':
+            if dst[0] != 'RR':
+                raise AsmError("MULT requires RRd", line_num)
+            if src_reg and src_reg[0] == 'R':
+                return Encoder.encode_mult_rr_rs(dst[1], src_reg[1])
+            if src_ir:
+                return Encoder.encode_mult_rr_ir(dst[1], src_ir[1])
+            if src_is_imm:
+                return Encoder.encode_mult_rr_imm(dst[1], self._eval(src_str))
+
+        elif mnemonic == 'MULTL':
+            if dst[0] != 'RQ':
+                raise AsmError("MULTL requires RQd", line_num)
+            if src_reg and src_reg[0] == 'RR':
+                return Encoder.encode_multl_rq_rrs(dst[1], src_reg[1])
+            if src_ir:
+                return Encoder.encode_multl_rq_ir(dst[1], src_ir[1])
+            if src_is_imm:
+                return Encoder.encode_multl_rq_imm(dst[1], self._eval(src_str))
+
+        elif mnemonic == 'DIV':
+            if dst[0] != 'RR':
+                raise AsmError("DIV requires RRd", line_num)
+            if src_reg and src_reg[0] == 'R':
+                return Encoder.encode_div_rr_rs(dst[1], src_reg[1])
+            if src_ir:
+                return Encoder.encode_div_rr_ir(dst[1], src_ir[1])
+            if src_is_imm:
+                return Encoder.encode_div_rr_imm(dst[1], self._eval(src_str))
+
+        elif mnemonic == 'DIVL':
+            if dst[0] != 'RQ':
+                raise AsmError("DIVL requires RQd", line_num)
+            if src_reg and src_reg[0] == 'RR':
+                return Encoder.encode_divl_rq_rrs(dst[1], src_reg[1])
+            if src_ir:
+                return Encoder.encode_divl_rq_ir(dst[1], src_ir[1])
+            if src_is_imm:
+                return Encoder.encode_divl_rq_imm(dst[1], self._eval(src_str))
+
+        raise AsmError(f"Unsupported {mnemonic} operand combination: {ops}", line_num)
+
+    def _encode_ldm(self, ops, line_num):
+        """Encode LDM @Rd, Rs, #n (store) or LDM Rd, @Rs, #n (load)."""
+        if len(ops) < 3:
+            raise AsmError("LDM requires three operands: @Rd, Rs, #n or Rd, @Rs, #n", line_num)
+        first_ir = parse_indirect(ops[0])
+        second_ir = parse_indirect(ops[1])
+
+        count = self._eval(ops[2])
+        if count < 1 or count > 16:
+            raise AsmError(f"LDM count must be 1-16, got: {count}", line_num)
+
+        if first_ir:
+            # LDM @Rd, Rs, #n (store to memory)
+            rs = parse_register(ops[1])
+            if not rs:
+                raise AsmError("LDM store requires Rs", line_num)
+            return Encoder.encode_ldm_store(first_ir[1], rs[1], count)
+        elif second_ir:
+            # LDM Rd, @Rs, #n (load from memory)
+            rd = parse_register(ops[0])
+            if not rd:
+                raise AsmError("LDM load requires Rd", line_num)
+            return Encoder.encode_ldm_load(second_ir[1], rd[1], count)
+        else:
+            raise AsmError("LDM requires indirect addressing (@Rd or @Rs)", line_num)
+
+    def _encode_block_load(self, mnemonic, ops, line_num):
+        """Encode LDI/LDIR/LDD/LDDR @Rd, @Rs, Rr."""
+        if len(ops) < 3:
+            raise AsmError(f"{mnemonic} requires @Rd, @Rs, Rr", line_num)
+        dst_ir = parse_indirect(ops[0])
+        src_ir = parse_indirect(ops[1])
+        cnt_reg = parse_register(ops[2])
+        if not dst_ir or not src_ir or not cnt_reg:
+            raise AsmError(f"{mnemonic} requires @Rd, @Rs, Rr", line_num)
+        repeat = mnemonic.endswith('R')
+        if mnemonic.startswith('LDI') or mnemonic.startswith('LDIR'):
+            return Encoder.encode_ldi(dst_ir[1], src_ir[1], cnt_reg[1], repeat=repeat)
+        else:
+            return Encoder.encode_ldd(dst_ir[1], src_ir[1], cnt_reg[1], repeat=repeat)
 
     # ===== Output generators =====
 
