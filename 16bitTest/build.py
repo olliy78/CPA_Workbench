@@ -16,7 +16,7 @@ Unterstuetzte Quelldateien:
 Arbeitsweise
 ------------
 1. Ergebnisverzeichnis 16bitTest/build/ anlegen (falls noetig)
-2. Z8001-Firmware assemblieren (nur fuer em256full)
+2. Z8001-Firmware assemblieren (fw_*.s aus src/ -> .bin/.inc in build/)
 3. Quelldatei vorverarbeiten: ;%INCLUDE-Direktiven durch .inc-Dateien ersetzen
 4. Vorverarbeitete Datei nach build/ kopieren (mit CRLF-Konvertierung)
 5. M80-Tools (m80.com, linkmt.com) aus tools/ nach build/ kopieren
@@ -56,7 +56,7 @@ ADDITIONS_DIR = os.path.join(PROJECT_DIR, 'additions', 'bc_a5120')  # Ziel fuer 
 SRC_DIR     = os.path.join(SCRIPT_DIR, 'src')      # 16bitTest/src/
 BUILD_DIR   = os.path.join(SCRIPT_DIR, 'build')    # 16bitTest/build/
 TOOLS_DIR   = os.path.join(PROJECT_DIR, 'tools')   # tools/
-Z8001_DIR   = os.path.join(SCRIPT_DIR, 'z8001')    # 16bitTest/z8001/
+Z8001_ASM   = os.path.join(SCRIPT_DIR, 'z8001asm.py')  # 16bitTest/z8001asm.py
 
 # Standard-Quelle (ueber Kommandozeile aenderbar)
 DEFAULT_SOURCE = 'em256ful'
@@ -147,22 +147,37 @@ def preprocess_includes(src_content, inc_dir):
     return include_re.sub(replace_include, src_content)
 
 
-def assemble_z8001_firmware():
-    """Z8001-Firmware-Quelldateien assemblieren (alle .s-Dateien in z8001/)."""
-    asm_path = os.path.join(Z8001_DIR, 'z8001asm.py')
-    if not os.path.isfile(asm_path):
-        raise RuntimeError(f"Z8001-Assembler nicht gefunden: {asm_path}")
+def clean():
+    """Build-Verzeichnis leeren."""
+    if os.path.isdir(BUILD_DIR):
+        shutil.rmtree(BUILD_DIR)
+        log(f"    Geloescht: {BUILD_DIR}")
+    else:
+        log(f"    Bereits leer.")
 
-    s_files = sorted(glob.glob(os.path.join(Z8001_DIR, '*.s')))
+
+def assemble_z8001_firmware():
+    """Z8001-Firmware-Quelldateien assemblieren (alle .s-Dateien in src/).
+
+    Quellen liegen in src/, Ausgaben (.bin, .inc) landen in build/.
+    """
+    if not os.path.isfile(Z8001_ASM):
+        raise RuntimeError(f"Z8001-Assembler nicht gefunden: {Z8001_ASM}")
+
+    s_files = sorted(glob.glob(os.path.join(SRC_DIR, 'fw_*.s')))
     if not s_files:
-        raise RuntimeError(f"Keine .s-Dateien in {Z8001_DIR} gefunden.")
+        raise RuntimeError(f"Keine fw_*.s-Dateien in {SRC_DIR} gefunden.")
 
     log(f"    {len(s_files)} Firmware-Dateien gefunden")
     for s_file in s_files:
         basename = os.path.basename(s_file)
+        stem = os.path.splitext(basename)[0]
+        bin_path = os.path.join(BUILD_DIR, stem + '.bin')
+        inc_path = os.path.join(BUILD_DIR, stem + '.inc')
         result = run(
-            [sys.executable, asm_path, s_file],
-            cwd=Z8001_DIR, check=True
+            [sys.executable, Z8001_ASM, s_file,
+             '-o', bin_path, '--inc', inc_path],
+            cwd=BUILD_DIR, check=True
         )
         log(f"    Assembliert: {basename}")
 
@@ -215,7 +230,7 @@ def main():
 
     if needs_preprocessing:
         log("    Include-Direktiven verarbeiten...")
-        content = preprocess_includes(content, Z8001_DIR)
+        content = preprocess_includes(content, BUILD_DIR)
 
     # CRLF-Konvertierung
     content = content.replace('\r\n', '\n').replace('\r', '\n')
@@ -282,6 +297,7 @@ def main():
     log("\n[STEP 7] Temporaere Dateien loeschen")
     for pattern in ['*.mac', '*.MAC', '*.erl', '*.ERL', '*.prn', '*.PRN',
                     '*.rel', '*.REL', '*.syp', '*.SYP',
+                    '*.bin', '*.inc',
                     'm80.com', 'linkmt.com']:
         for f in glob.glob(os.path.join(BUILD_DIR, pattern)):
             basename = os.path.basename(f).lower()
@@ -307,7 +323,11 @@ def main():
 
 if __name__ == '__main__':
     try:
-        main()
+        if len(sys.argv) > 1 and sys.argv[1] == 'clean':
+            log("Build-Verzeichnis leeren...")
+            clean()
+        else:
+            main()
     except RuntimeError as e:
         print(f"\nFEHLER: {e}", file=sys.stderr)
         sys.exit(1)

@@ -690,11 +690,11 @@ LDB RH2, %5E23    !load RH2 with the!
                   !5E23!
 
 **Before Execution**
-R2 [ 167891 ]  (Note: Original OCR text shows 167891, possibly meaning 1678 / 91)
+R2 [ 1678 ]
 Address 5E23 contains: 06
 
 **After Execution**
-R2 [ 06891 ]
+R2 [ 0678 ]
 
 ### 5.4.5 Index (X)
 In the Index Addressing mode, the data processed is found at an address that is the sum of the contents of a register and an address specified in the instruction.
@@ -786,10 +786,10 @@ LDL R5(#%18), RR2    !load the long word!
 
 **Before Execution**          **Data Memory**
 RR2: R2 [ 0A00 ]
-     R3 [ 1500 ]              20C0 [ OABE ]
+     R3 [ 1500 ]              20C0 [ 0ABE ]
 R4      [ 3100 ]              20C2 [ F50D ]
 R5      [ 20AA ]              20C4 [ BADE ]
-                              20C6 [ BOD1 ]
+                              20C6 [ B0D1 ]
 
 **Address Calculation**
   20AA
@@ -798,10 +798,10 @@ R5      [ 20AA ]              20C4 [ BADE ]
 
 **After Execution**           **Data Memory**
 RR2: R2 [ 0A00 ]
-     R3 [ 1500 ]              20C0 [ OABE ]
+     R3 [ 1500 ]              20C0 [ 0ABE ]
 R4      [ 3100 ]              20C2 [ 0A00 ]
 R5      [ 20AA ]              20C4 [ 1500 ]
-                              20C6 [ BOD1 ]
+                              20C6 [ B0D1 ]
 
 ---
 
@@ -824,7 +824,7 @@ LD R2, R5(R3)    !load into R2 the!
 **Before Execution**          **Data Memory**
 R2 [ 1F3A ]
 R3 [ FFFE ]                   14FE [ 0101 ]
-R4 [ 0300 ]                   1500 [ BODE ]
+R4 [ 0300 ]                   1500 [ B0DE ]
 R5 [ 1502 ]                   1502 [ F732 ]
 
 **Address Calculation**
@@ -833,7 +833,7 @@ R5 [ 1502 ]                   1502 [ F732 ]
   1500
 
 **After Execution**
-R2 [ BODE ]
+R2 [ B0DE ]
 R3 [ FFFE ]
 R4 [ 0300 ]
 R5 [ 1502 ]
@@ -882,10 +882,10 @@ Because an immediate operand is part of the instruction, it is always located in
 LDB RH2, #%55    !load hex 55 into RH2!
 
 **Before Execution**
-R2 [ 167891 ]
+R2 [ 6789 ]
 
 **After Execution**
-R2 [ 155891 ]
+R2 [ 5589 ]
 
 ---
 
@@ -949,13 +949,13 @@ LDB RH2, <<15>> %23    !load RH2 with the!
                        !23 (hex)!
 
 **Before Execution**          **Data Memory**
-R2 [ 167891 ]
+R2 [ 1678 ]
                               <<15>> 0022 [ 0101 ]
                               <<15>> 0023 [ 06 ]
                               <<15>> 0024 [ 0304 ]
 
 **After Execution**
-R2 [ 106891 ]
+R2 [ 0678 ]
 
 ---
 
@@ -1019,7 +1019,7 @@ LDR R2, $+6    !load into R2 the con-!
 Because the program counter will be advanced to point to the next instruction when the address calculation is performed, the constant that occurs in the instruction will actually be +2.
 
 **Before Execution**          **Program Memory**
-R2 [ IA0F0 I ]
+R2 [ A0F0 ]
 PC [ <<13>> 0202 ]            <<13>> 0202 [ 3102 ] }
                               <<13>> 0204 [ 0002 ] } Instruction
                               <<13>> 0206 [ E801 ]
@@ -1057,11 +1057,11 @@ LDL RR4(#%18), RR2    !load the long word!
                       !+ hex 18!
 
 **Before Execution**          **Data Memory**
-RR2: R2 [ OAOO ]
-     R3 [ 1500 ]              <<31>> 20C0 [ OABE ]
-RR4: R4 [ IFOO ]              <<31>> 20C2 [ F50D ]
+RR2: R2 [ 0A00 ]
+     R3 [ 1500 ]              <<31>> 20C0 [ 0ABE ]
+RR4: R4 [ 1F00 ]              <<31>> 20C2 [ F50D ]
      R5 [ 20AA ]              <<31>> 20C4 [ BADE ]
-                              <<31>> 20C6 [ BOD1 ]
+                              <<31>> 20C6 [ B0D1 ]
 
 **Address Calculation**
 <<31>> 20AA
@@ -1069,11 +1069,11 @@ RR4: R4 [ IFOO ]              <<31>> 20C2 [ F50D ]
 <<31>> 20C2
 
 **After Execution**           **Data Memory**
-RR2: R2 [ OAOO ]
-     R3 [ 1500 ]              <<31>> 20C0 [ OABE ]
-RR4: R4 [ IFOO ]              <<31>> 20C2 [ OAOO ]
+RR2: R2 [ 0A00 ]
+     R3 [ 1500 ]              <<31>> 20C0 [ 0ABE ]
+RR4: R4 [ 1F00 ]              <<31>> 20C2 [ 0A00 ]
      R5 [ 20AA ]              <<31>> 20C4 [ 1500 ]
-                              <<31>> 20C6 [ BOD1 ]
+                              <<31>> 20C6 [ B0D1 ]
 
 ---
 
@@ -1096,7 +1096,7 @@ LD R2, RR4(R3)    !load into R2 the value!
 **Before Execution**          **Data Memory**
 RR2: R2 [ 3535 ]
      R3 [ FFFE ]              <<13>> 14FE [ 0101 ]
-RR4: R4 [ ODOO ]              <<13>> 1500 [ BODE ]
+RR4: R4 [ 0D00 ]              <<13>> 1500 [ B0DE ]
      R5 [ 1502 ]              <<13>> 1502 [ F732 ]
 
 **Address Calculation**
@@ -1105,9 +1105,9 @@ RR4: R4 [ ODOO ]              <<13>> 1500 [ BODE ]
 <<13>> 1500
 
 **After Execution**           **Data Memory**
-RR2: R2 [ BODE ]
+RR2: R2 [ B0DE ]
      R3 [ FFFE ]              <<13>> 14FE [ 0101 ]
-RR4: R4 [ ODOO ]              <<13>> 1500 [ BODE ]
+RR4: R4 [ 0D00 ]              <<13>> 1500 [ B0DE ]
      R5 [ 1502 ]              <<13>> 1502 [ F732 ]
 
 # Chapter 6
@@ -1285,8 +1285,8 @@ This group provides string comparison, string translation and block transfer fun
 | CPSDR / CPSDRB | | Compare String, Decrement and Repeat |
 | CPSI / CPSIB | | Compare String and Increment |
 | CPSIR / CPSIRB | | Compare String, Increment and Repeat |
-| LOD / LODB | dst, src, r | Load and Decrement |
-| LODR / LODRB | | Load, Decrement and Repeat |
+| LDD / LDDB | dst, src, r | Load and Decrement |
+| LDDR / LDDRB | | Load, Decrement and Repeat |
 | LDI / LDIB | | Load and Increment |
 | LDIR / LDIRB | | Load, Increment and Repeat |
 | TRDB | dst, src, r | Translate and Decrement |
@@ -1395,7 +1395,7 @@ The condition code forms a part of all conditional instructions.
 The Z8000 CPUs implement four kinds of traps:
 * Extended Instruction
 * Privileged Instruction
-* Addressing Violation (Segment Trap in 28001)
+* Addressing Violation (Segment Trap in Z8001)
 * System Call
 
 ---
@@ -1490,7 +1490,7 @@ The source operand is added to the destination operand and the sum is stored in 
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | R | ADD Rd, Rs | 10000001 Rs Rd | 4 | 10000001 Rs Rd | 4 |
 | R | ADDB Rbd, Rbs | 10000000 Rbs Rbd | 4 | 10000000 Rbs Rbd | 4 |
-| R | ADDL RRd, RRs | 10101101 RRs RRd | 8 | 10101101 RRs RRd | 8 |
+| R | ADDL RRd, RRs | 10010110 RRs RRd | 8 | 10010110 RRs RRd | 8 |
 | IM | ADD Rd, #data | 00100001 0000 Rd | 7 | 00100001 0000 Rd | 7 |
 | IR | ADD Rd, @Rs | 00000001 Rs 0000 | 7 | 10000001 RRs 0000 | 7 |
 | DA | ADD Rd, addr | 10110000 1w 0000 Rd | 9 | 01100000 1w 0000 Rd | 10/12 |
@@ -2538,7 +2538,7 @@ SP <- SP + 2 (Pop "identifier")
 PS <- @SP
 SP <- SP + 6
 
-This instruction is used to return to a previously executed procedure at the end of a procedure entered by an interrupt or trap (including a System Call instruction). First, the "identifier" word associated with the interrupt or trap is popped from the system stack and discarded. Then the contents of the location addressed by the system stack pointer are popped into the program status (PS), loading the Flags and Control Word (FCW) and the program counter (PC). The new value of the FCW is not effective until the next instruction, so that the status pins will not be affected by the new control bits until after the IRET instruction execution is completed. The system stack pointer (R15 if nonsegmented, or RR14 if segmented) is used to access memory. When using a 28001 or 28003, the operation of IRET in nonsegmented mode is undefined. A 28001/3 must be in segmented mode when an IRET instruction is performed.
+This instruction is used to return to a previously executed procedure at the end of a procedure entered by an interrupt or trap (including a System Call instruction). First, the "identifier" word associated with the interrupt or trap is popped from the system stack and discarded. Then the contents of the location addressed by the system stack pointer are popped into the program status (PS), loading the Flags and Control Word (FCW) and the program counter (PC). The new value of the FCW is not effective until the next instruction, so that the status pins will not be affected by the new control bits until after the IRET instruction execution is completed. The system stack pointer (R15 if nonsegmented, or RR14 if segmented) is used to access memory. When using a Z8001 or Z8003, the operation of IRET in nonsegmented mode is undefined. A Z8001/3 must be in segmented mode when an IRET instruction is performed.
 
 **Flags:**
 Loaded from system stack.
@@ -2861,7 +2861,7 @@ dst (2:7) <- FLAGS (2:7), dst (0:1) <- 0
 When the FLAGS register is the destination, all the flags are loaded from the source. When the FLAGS register is the source, none of the flags are affected.
 
 | Assembler Syntax | Format (Nonseg) | Cycles | Format (Seg) | Cycles |
-| :--- | :--- | :--- | :--- | :--- | :--- |
+| :--- | :--- | :--- | :--- | :--- |
 | LDCTLB FLAGS, Rbs | 10001100 Rbs 0000 | 7 | 10001100 Rbs 0000 | 7 |
 | LDCTLB Rbd, FLAGS | 10001100 Rbd 0100 | 7 | 10001100 Rbd 0100 | 7 |
 
@@ -3289,7 +3289,7 @@ If register R8 contains %051F, the statement
 ```assembly
 NEG R8
 ```
-will leave the value %FAEI in R8.
+will leave the value %FAE1 in R8.
 
 ---
 
@@ -4865,7 +4865,7 @@ T_A = 0°C to +70°C, V_CC = +5V ± 5%
 
 **transaction:** One of the basic bus operations. A transaction lasts three or more clock cycles and covers a single data movement on the bus.
 
-**trap:** A condition that occurs at the end of an instruction that caused an illegal operation. The 28000 traps are internal traps (system call, privileged instructions) or external traps (segmentation violation).
+**trap:** A condition that occurs at the end of an instruction that caused an illegal operation. The Z8000 traps are internal traps (system call, privileged instructions) or external traps (segmentation violation).
 
 **vectored interrupts:** Interrupts (q.v.) which use the identifier word as a vector to the interrupt service routine (q.v.).
 

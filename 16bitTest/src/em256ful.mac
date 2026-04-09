@@ -249,10 +249,7 @@ A8_START:
 A8_FAIL:
 	LD	(TMP_BYTE), A
 	CALL	PRINT_FAIL
-	LD	HL, FAIL_CNT
-	INC	(HL)
-	LD	HL, TOTAL_CNT
-	INC	(HL)
+	CALL	COUNT_FAIL_A8
 
 ; --- A9: Parity-Latch Reset ---
 A9_START:
@@ -275,10 +272,7 @@ A9_START:
 	JR	A_DONE
 A9_FAIL:
 	CALL	PRINT_FAIL
-	LD	HL, FAIL_CNT
-	INC	(HL)
-	LD	HL, TOTAL_CNT
-	INC	(HL)
+	CALL	COUNT_FAIL_A9
 
 A_DONE:
 	CALL	PRINT_GRP_SUMMARY
@@ -880,10 +874,7 @@ D_DONE:
 	JR	E2_START
 E1_FAIL:
 	CALL	PRINT_FAIL
-	LD	HL, FAIL_CNT
-	INC	(HL)
-	LD	HL, TOTAL_CNT
-	INC	(HL)
+	CALL	COUNT_FAIL_E1
 
 ; --- E2: Parity-Latch Reset + Pruefen ---
 E2_START:
@@ -904,10 +895,7 @@ E2_START:
 	JR	E_DONE
 E2_FAIL:
 	CALL	PRINT_FAIL
-	LD	HL, FAIL_CNT
-	INC	(HL)
-	LD	HL, TOTAL_CNT
-	INC	(HL)
+	CALL	COUNT_FAIL_E2
 
 E_DONE:
 	CALL	PRINT_GRP_SUMMARY
@@ -1313,8 +1301,12 @@ RUN_FW_TEST:
 	CALL	RAMOFF
 	; U8001 starten
 	CALL	START_U8000
+	; Pause damit U8001 Reset-Sequenz + Firmware ausfuehren kann
+	; (~2ms bei 2 MHz Z80, Firmware braucht <100us)
+	LD	B, 0
+FW_DLY:	DJNZ	FW_DLY
 	CALL	WAIT_READY
-	JR	C, FW_TIMEOUT
+	JR	C, FW_TOUT
 	CALL	STOP_U8000
 	; Ergebnis lesen
 	CALL	RAMON_S0
@@ -1322,10 +1314,8 @@ RUN_FW_TEST:
 	CALL	RAMOFF
 	OR	A			; CF=0
 	RET
-FW_TIMEOUT:
-	CALL	STOP_U8000
-	SCF
-	RET
+FW_TOUT:
+	JP	DBG_TOUT
 
 ; =============================================================================
 ; RUN_FW_TEST_LONG - Wie RUN_FW_TEST, aber mit langem Timeout
@@ -1343,18 +1333,26 @@ RUN_FW_TEST_LONG:
 	LD	(EM256ADR + MB_STATUS + 1), A
 	CALL	RAMOFF
 	CALL	START_U8000
+	; Lange Pause damit March-C Firmware ausfuehren kann
+	; 3-Ebenen-Schleife: ~4s bei 2 MHz, ~2s bei 4 MHz Z80
+	LD	D, 10
+FDL_O:	LD	E, 0
+FDL_M:	LD	B, 0
+FDL_I:	DJNZ	FDL_I
+	DEC	E
+	JR	NZ, FDL_M
+	DEC	D
+	JR	NZ, FDL_O
 	CALL	WAIT_READY_LONG
-	JR	C, FWL_TIMEOUT
+	JR	C, FWL_TO
 	CALL	STOP_U8000
 	CALL	RAMON_S0
 	CALL	READ_MAILBOX
 	CALL	RAMOFF
 	OR	A
 	RET
-FWL_TIMEOUT:
-	CALL	STOP_U8000
-	SCF
-	RET
+FWL_TO:
+	JP	DBG_TOUT
 
 ; =============================================================================
 ; READ_MAILBOX - Mailbox-Daten aus EM256-Speicher lesen (RAM muss eingeblendet sein!)
@@ -1534,10 +1532,13 @@ PRINT_TIMEOUT:
 
 ; PRINT_DETAIL_HEX - Detailzeile "   Soll: xxH  Ist: xxH"
 ; A=Ist-Wert, B=Soll-Wert
+; BDOS zerstoert alle Register -> AF und BC auf Stack sichern
 PRINT_DETAIL_HEX:
 	PUSH	AF
+	PUSH	BC
 	LD	DE, MSG_DET_SOLL
 	CALL	PUTS
+	POP	BC
 	LD	A, B
 	CALL	PUTHEX
 	LD	DE, MSG_DET_IST
@@ -1580,6 +1581,70 @@ PRINT_MARCH_DETAIL:
 	CALL	PUTHEX
 	LD	DE, MSG_CRLF
 	JP	PUTS
+
+; =============================================================================
+; DBG_TOUT - Debug-Ausgabe bei Firmware-Timeout
+;
+; Liest PIO-A (TREN/INT16), stoppt U8001, liest Mailbox + Resetvektor
+; aus DRAM zurueck. Gibt kompakte Debug-Zeile aus.
+; =============================================================================
+DBG_TOUT:
+	; PIO-A Status (TREN=Bit7, INT16=Bit4) VOR Stop
+	LD	B, 0
+	LD	C, PIOA
+	IN	A, (C)
+	LD	(DBG_PA), A
+	CALL	STOP_U8000
+	; DRAM Diagnose lesen
+	CALL	RAMON_S0
+	CALL	READ_MAILBOX
+	; Resetvektor PC-Offset (Bytes 6-7, erwartet 00 40)
+	LD	A, (EM256ADR + 6)
+	LD	(DBG_V6), A
+	LD	A, (EM256ADR + 7)
+	LD	(DBG_V7), A
+	; Erster Opcode bei 0x0040 (erwartet 21=LD Rn,#imm)
+	LD	A, (EM256ADR + 040H)
+	LD	(DBG_C0), A
+	LD	A, (EM256ADR + 041H)
+	LD	(DBG_C1), A
+	CALL	RAMOFF
+	; Zeile 1: PA=xx ST=xxxx R1=xxxx
+	LD	DE, MD_PA
+	CALL	PUTS
+	LD	A, (DBG_PA)
+	CALL	PUTHEX
+	LD	DE, MD_ST
+	CALL	PUTS
+	LD	A, (MB_STATUS_HI)
+	CALL	PUTHEX
+	LD	A, (MB_STATUS_LO)
+	CALL	PUTHEX
+	LD	DE, MD_R1
+	CALL	PUTS
+	LD	A, (MB_RES1_HI)
+	CALL	PUTHEX
+	LD	A, (MB_RES1_LO)
+	CALL	PUTHEX
+	LD	DE, MSG_CRLF
+	CALL	PUTS
+	; Zeile 2: VEC=xxxx CD=xxxx
+	LD	DE, MD_VC
+	CALL	PUTS
+	LD	A, (DBG_V6)
+	CALL	PUTHEX
+	LD	A, (DBG_V7)
+	CALL	PUTHEX
+	LD	DE, MD_CD
+	CALL	PUTS
+	LD	A, (DBG_C0)
+	CALL	PUTHEX
+	LD	A, (DBG_C1)
+	CALL	PUTHEX
+	LD	DE, MSG_CRLF
+	CALL	PUTS
+	SCF
+	RET
 
 ; =============================================================================
 ; STATISTIK-MANAGEMENT
@@ -1670,6 +1735,18 @@ COUNT_FAIL_C8:
 	JR	CF_ADD
 COUNT_FAIL_D1:
 	LD	DE, 'D1'
+	JR	CF_ADD
+COUNT_FAIL_A8:
+	LD	DE, 'A8'
+	JR	CF_ADD
+COUNT_FAIL_A9:
+	LD	DE, 'A9'
+	JR	CF_ADD
+COUNT_FAIL_E1:
+	LD	DE, 'E1'
+	JR	CF_ADD
+COUNT_FAIL_E2:
+	LD	DE, 'E2'
 	JR	CF_ADD
 CF_ADD:
 	; DE = Test-ID (2 Zeichen)
@@ -1833,6 +1910,13 @@ MSG_UNKNOWN:
 
 MSG_CRLF:
 	DB	0DH, 0AH, '$'
+
+MD_PA:	DB	'   PA=', '$'
+MD_ST:	DB	' ST=', '$'
+MD_R1:	DB	' R1=', '$'
+MD_VC:	DB	'   VEC=', '$'
+MD_CD:	DB	' CD=', '$'
+
 MSG_PAUSE:
 	DB	'--- Taste druecken ---', '$'
 MSG_CLRPAUSE:
@@ -1903,6 +1987,13 @@ GRP_TOTAL:	DB	0
 FAIL_LIST:	DS	40		; Max. 20 Test-IDs a 2 Bytes
 FAIL_LPTR:	DB	0
 LINECNT:	DB	0
+
+; Debug-Variablen
+DBG_PA:		DB	0
+DBG_V6:		DB	0
+DBG_V7:		DB	0
+DBG_C0:		DB	0
+DBG_C1:		DB	0
 
 ; Stack
 	DS	128

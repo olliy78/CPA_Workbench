@@ -7,8 +7,8 @@
 
     ORG  0x0000
 
-    ; Z8001 Reset-Vektor
-    DW   0x0000, 0x0000, 0x0000, 0x0040
+    ; Z8001 Reset-Vektor (FCW=0x4000: System Mode fuer MSET)
+    DW   0x0000, 0x4000, 0x0000, 0x0040
 
     ; Mailbox
     DS   56
@@ -61,6 +61,7 @@
     LD   R1, #0x0001
     LD   R2, #0x0010
     LD   @R2, R1
+    MSET
     JR   T, $
 
 FAIL:
@@ -74,4 +75,5 @@ FAIL:
     LD   @R5, R4            ; RESULT2 = Ist
     INC  R5, #2
     LD   @R5, R3            ; RESULT3 = Adresse
+    MSET
     JR   T, $

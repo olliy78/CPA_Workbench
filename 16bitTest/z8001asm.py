@@ -66,7 +66,7 @@ def parse_register(s):
         n = int(m.group(1))
         if n > 7:
             raise ValueError(f"Invalid low byte register: {s}")
-        return ('RL', n)
+        return ('RL', n + 8)
     m = re.match(r'^R(\d+)$', s)
     if m:
         n = int(m.group(1))
@@ -1316,8 +1316,11 @@ class Assembler:
             if cc is None:
                 raise AsmError(f"Unknown condition code: {cc_name}", line_num)
             target = self._eval(ops[1])
-            # Displacement relative to address of next instruction (PC + 2)
-            disp = target - (self.pc + 2)
+            # Displacement in bytes, then convert to words (CPU multiplies dsp8 by 2)
+            byte_disp = target - (self.pc + 2)
+            if self.pass_num == 2 and byte_disp % 2 != 0:
+                raise AsmError(f"JR target not word-aligned: disp={byte_disp}", line_num)
+            disp = byte_disp // 2
             if self.pass_num == 2 and (disp < -128 or disp > 127):
                 raise AsmError(f"JR displacement out of range: {disp}", line_num)
             return Encoder.encode_jr(cc, disp & 0xFF)
