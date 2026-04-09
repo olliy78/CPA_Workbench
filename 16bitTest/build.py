@@ -174,12 +174,15 @@ def assemble_z8001_firmware():
         stem = os.path.splitext(basename)[0]
         bin_path = os.path.join(BUILD_DIR, stem + '.bin')
         inc_path = os.path.join(BUILD_DIR, stem + '.inc')
+        # Label-Prefix: fw_add -> FW_ADD, damit .inc FW_ADD_CODE / FW_ADD_CODE_LEN erzeugt
+        label_prefix = stem.upper()
         result = run(
             [sys.executable, Z8001_ASM, s_file,
-             '-o', bin_path, '--inc', inc_path],
+             '-o', bin_path, '--inc', inc_path,
+             '--label', label_prefix],
             cwd=BUILD_DIR, check=True
         )
-        log(f"    Assembliert: {basename}")
+        log(f"    Assembliert: {basename} (Label: {label_prefix}_CODE)")
 
 
 def main():
