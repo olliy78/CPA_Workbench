@@ -1,51 +1,39 @@
-; fw_byte.s - C8: Byte-Operationen (LDB, ADDB)
+; fw_byte.s - C8: Byte-Operationen (CLR, LDB)
 ;
-; RH1 = 0x30 + 0x45 = 0x75
-; RL1 = 0xF0 + 0x20 = 0x10 (Carry, aber Byte-Ueberlauf)
-; Ergebnis als Wort: R1 = 0x7510
+; Z8001-Firmware fuer EM256 Testprogramm
+; Testet Byte-Zugriff auf Teilregister (RH/RL) des U8001.
+;
+; Ablauf:
+;   1. CLR R1            - Ganzes 16-Bit-Register loeschen
+;   2. LDB RH1, #0x75   - High-Byte (Bits 15-8) laden
+;   3. LDB RL1, #0x10   - Low-Byte (Bits 7-0) laden
+;   4. R1 als Wort lesen -> sollte 0x7510 sein
 ;
 ; Erwartung: RESULT1 = 0x7510, STATUS = 0x0001
+;
+; (c) 2026 Olaf Krieger - MIT Lizenz
 
     ORG  0x0000
 
     ; Z8001 Reset-Vektor (FCW=0xC000: Segmented + System Mode)
     DW   0x0000, 0xC000, 0x0000, 0x0040
 
-    ; Mailbox
+    ; Mailbox (0x0008 - 0x003F)
     DS   56
 
     ; Code ab 0x0040
-    LD   R15, #0xFFF0
+    LD   R15, #0xFFF0       ; Stack-Pointer
 
-    LDB  RH1, #0x30
-    LDB  RL1, #0xF0
-    ; RH1 + 0x45 = 0x75
-    ; Use ADD word with immediate to add to high byte? No, use ADDB.
-    ; But we only have short-form LDB for loading. For adding byte we need ADDB.
-    ; ADDB RH1, #imm8 -> opcode 0x0000 | (RH1<<4) | imm (but this is R,#imm form)
-    ; Actually ADDB Rbd, #imm: 0x0000 0Rbd + imm16 = 0x00 | Rbd, 00, imm8
-    ; Hmm, this needs the 2-word form. Let me use word-level instead:
-    ; Load R1 = 0x3000, then work at word level.
+    CLR  R1                 ; R1 = 0x0000 (alle Bits loeschen)
+    LDB  RH1, #0x75         ; High-Byte: R1 = 0x75xx
+    LDB  RL1, #0x10         ; Low-Byte:  R1 = 0x7510
 
-    ; Simpler approach: use word ops on the full register
-    LD   R1, #0x30F0        ; RH1=0x30, RL1=0xF0
-    LD   R2, #0x4520        ; RH2=0x45, RL2=0x20
-
-    ; Byte add: RH1 += RH2 -> 0x30+0x45=0x75
-    ;           RL1 += RL2 -> 0xF0+0x20=0x10 (with carry lost at byte boundary)
-    ; But we want byte-level adds. The ADDB instruction works on byte registers.
-    ; We'll use the R,R form: ADDB RH1, RH2 and ADDB RL1, RL2
-
-    ; Actually, let's simplify - just test that LDB and word read-back work:
-    CLR  R1
-    LDB  RH1, #0x75
-    LDB  RL1, #0x10
-
-    ; R1 should now be 0x7510
-    LD   R3, #0x0012
+    ; Ergebnis 0x7510 in Mailbox schreiben (ueber ungerades Register)
+    LD   R3, #0x0012        ; R3 ungerade -> non-segmented -> RESULT1 Offset
     LD   @R3, R1            ; RESULT1 = 0x7510
+
     ; STATUS = OK
     LD   R1, #0x0001
-    LD   R3, #0x0010
+    LD   R3, #0x0010        ; STATUS Offset
     LD   @R3, R1
-    JR   T, $
+    JR   T, $               ; Endlosschleife (wartet auf Bus-Uebernahme)

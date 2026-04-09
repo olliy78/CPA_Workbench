@@ -1,9 +1,12 @@
 ; fw_add32.s - C7: 32-Bit-Arithmetik (ADDL)
 ;
+; Z8001-Firmware fuer EM256 Testprogramm
+; Testet die 32-Bit-Addition (ADDL) mit Registerpaaren.
 ; RR2 = 0x00010000 + 0x0000FFFF = 0x0001FFFF
-; Testet Langwort-Operationen.
 ;
 ; Erwartung: RESULT1 = 0x0001 (High), RESULT2 = 0xFFFF (Low), STATUS = 0x0001
+;
+; (c) 2026 Olaf Krieger - MIT Lizenz
 
     ORG  0x0000
 

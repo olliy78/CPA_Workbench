@@ -1,9 +1,12 @@
-; fw_loop.s - C5: Schleifentest (DJNZ)
+; fw_loop.s - C5: Schleifentest (256x INC)
 ;
-; Zaehlt R1 256 mal hoch (R1 += 1, R2 = 256 Iterationen)
-; Ergebnis: R1 = 256 = 0x0100
+; Z8001-Firmware fuer EM256 Testprogramm
+; Testet Schleifen-Steuerung: INC, DEC, CP und bedingten Sprung.
+; Zaehlt R1 in 256 Iterationen hoch, Ergebnis R1 = 0x0100.
 ;
 ; Erwartung: RESULT1 = 0x0100, STATUS = 0x0001
+;
+; (c) 2026 Olaf Krieger - MIT Lizenz
 
     ORG  0x0000
 

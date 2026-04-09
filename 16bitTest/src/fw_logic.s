@@ -1,11 +1,15 @@
 ; fw_logic.s - C3: Logik-Test AND/OR/XOR
 ;
-; R1 = 0xFF00 AND 0x0F0F = 0x0F00
-; R1 = R1 OR 0x00F0       = 0x0FF0
-; R1 = R1 XOR 0x0FF0      = 0x0000
-; R1 = R1 XOR 0x1234      = 0x1234
+; Z8001-Firmware fuer EM256 Testprogramm
+; Testet alle drei logischen Operationen des U8001 in einer Kette:
+;   AND 0xFF00 & 0x0F0F = 0x0F00
+;   OR  0x0F00 | 0x00F0 = 0x0FF0
+;   XOR 0x0FF0 ^ 0x0FF0 = 0x0000
+;   XOR 0x0000 ^ 0x1234 = 0x1234
 ;
 ; Erwartung: RESULT1 = 0x1234, STATUS = 0x0001
+;
+; (c) 2026 Olaf Krieger - MIT Lizenz
 
     ORG  0x0000
 

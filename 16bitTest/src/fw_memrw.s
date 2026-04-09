@@ -1,9 +1,14 @@
 ; fw_memrw.s - C4: Speicher Read/Write Test
 ;
-; Schreibt verschiedene Muster in Speicheradressen und liest zurueck.
-; Vergleicht geschriebene mit gelesenen Werten.
+; Z8001-Firmware fuer EM256 Testprogramm
+; Testet Schreib-/Lesezugriffe des U8001 auf das EM256-DRAM.
+; Schreibt 4 verschiedene Muster (0xA55A, 0x5AA5, 0xFFFF, 0x0000)
+; an aufeinanderfolgende Adressen und liest sie sofort zurueck.
+; Prueft auch Kreuzlesen (Adresse 0x0100 nach weiteren Schreibzugriffen).
 ;
-; Erwartung: STATUS = 0x0001 (OK), RESULT1 = 0xA55A (letztes gelesenes Muster)
+; Erwartung: STATUS = 0x0001 (OK), RESULT1 = 0xA55A
+;
+; (c) 2026 Olaf Krieger - MIT Lizenz
 
     ORG  0x0000
 

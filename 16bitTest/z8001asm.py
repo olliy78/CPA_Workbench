@@ -19,7 +19,11 @@ from pathlib import Path
 
 
 # =============================================================================
-# Condition codes
+# Condition codes (Z8001 FCW Bits)
+#
+# Kodierung als 4-Bit-Wert im Instruktionswort (z.B. JR cc, JP cc, RET cc).
+# Jeder Wert kombininiert die Flags C, Z, S, P/V nach dem Schema der
+# Zilog Z8000 CPU User's Reference.
 # =============================================================================
 CC_TABLE = {
     'F': 0x0, 'T': 0x8,
@@ -205,10 +209,17 @@ def _tokenize_expr(expr):
 
 # =============================================================================
 # Instruction encoder
+#
+# Jede statische Methode kodiert eine Z8001-Instruktion in eine Folge
+# von Bytes (Big-Endian).  Die Kommentare referenzieren die MAME-
+# Opcode-Tabelle z8000tbl.hxx als Verifikationsquelle.
+#
+# Z8001-Wortformat:  Byte 0 = MSB (Bits 15-8), Byte 1 = LSB (Bits 7-0)
+# Alle Instruktionen sind wortausgerichtet (2, 4 oder 6 Bytes).
 # =============================================================================
 
 class Encoder:
-    """Encodes Z8001 instructions to bytes (nonsegmented addressing within segments)."""
+    """Kodiert Z8001-Instruktionen zu Bytes (non-segmented Adressierung)."""
 
     @staticmethod
     def word_bytes(w):
@@ -1052,6 +1063,14 @@ class Encoder:
 
 # =============================================================================
 # Assembler (two-pass)
+#
+# Pass 1: Labels und Groessen sammeln (forward references erlaubt).
+#          Symboltabelle wird aufgebaut, PC wird fuer jede Instruktion
+#          um deren Groesse weitergeschoben.
+# Pass 2: Code generieren.  Alle Symbole sind bekannt, Ausdruecke
+#          werden endgueltig ausgewertet und Binaerdaten erzeugt.
+#
+# Unterstuetzte Pseudo-Instruktionen: ORG, EQU, DW, DB, DS
 # =============================================================================
 
 class AsmError(Exception):
@@ -1062,7 +1081,13 @@ class AsmError(Exception):
 
 
 class Assembler:
-    """Two-pass Z8001 cross-assembler."""
+    """Zwei-Pass Z8001 Cross-Assembler.
+
+    Verarbeitet Z8001-Assemblerquelltext und erzeugt Binaerausgabe.
+    Unterstuetzt alle gaengigen Instruktionen des Z8001 im non-segmented
+    Modus (innerhalb eines Segments), Labels, Ausdruecke und
+    Pseudo-Instruktionen.
+    """
 
     # Instruction table mapping mnemonic -> handler method name
     ARITH_R_IMM_OPS = {

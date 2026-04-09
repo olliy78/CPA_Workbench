@@ -1,6 +1,12 @@
 ; fw_sub.s - C2: Subtraktion 0x8000 - 0x0001 = 0x7FFF
 ;
+; Z8001-Firmware fuer EM256 Testprogramm
+; Testet die 16-Bit-Subtraktionsinstruktion des U8001.
+; Prueft insbesondere den Vorzeichenwechsel (0x8000 -> 0x7FFF).
+;
 ; Erwartung: RESULT1 = 0x7FFF, STATUS = 0x0001
+;
+; (c) 2026 Olaf Krieger - MIT Lizenz
 
     ORG  0x0000
 

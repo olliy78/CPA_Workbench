@@ -1,8 +1,9 @@
 # EM256 Comprehensive Test Program – Design Document
 
-**Version:** 1.2  
+**Version:** 1.7  
 **Datum:** 2026-04-09  
 **Autor:** Olaf Krieger  
+**Lizenz:** MIT  
 **Zielplattform:** BC A5120 mit EM256-Karte (U8001, 256 KB DRAM)
 
 ---
@@ -14,10 +15,11 @@ Prüft alle Hardwarekomponenten in fünf Gruppen (A–E) mit kompakter, übersic
 Konsolenausgabe. Ein Z80-Masterprogramm (CP/M .COM) steuert den gesamten Ablauf und
 lädt bei Bedarf Z8001-Firmware in das Shared-DRAM, die der U8001 autonom ausführt.
 
-Das fertige Programm `em256ful.com` umfasst ~6016 Bytes und enthält:
-- 2002 Zeilen Z80-Assembler (em256ful.mac, M80-Syntax)
-- 9 eingebettete Z8001-Firmware-Blöcke (96–230 Bytes je Firmware)
+Das fertige Programm `em256ful.com` umfasst ~6400 Bytes und enthält:
+- ~2215 Zeilen Z80-Assembler (em256ful.mac, M80-Syntax)
+- 9 eingebettete Z8001-Firmware-Blöcke (96–302 Bytes je Firmware)
 - 30 Einzeltests in 5 Gruppen (A–E)
+- Fortschrittsanzeige beim DRAM-Test (KB-Zähler mit CR-Überschreibung)
 - Automatische Seitensteuerung, Fehlerstatistik und Debug-Diagnose bei Timeout
 
 ### 1.1 Anforderungen
@@ -272,20 +274,30 @@ CALL RAMOFF
 > **Bei Timeout** wird `DBG_TOUT` aufgerufen, das PIO-A-Status, Mailbox-Inhalt,
 > Resetvektor-PC und ersten Opcode bei 0x0040 als Diagnose ausgibt.
 
-### Gruppe D: Autonomer DRAM-Test (U8001) (1 Test)
+### Gruppe D: Autonomer DRAM-Test (U8001) (1 Test, alle 4 Segmente)
 
-Der U8001 testet selbstständig den EM256-Speicher in Segment 0.
-Das Z80-Programm lädt die Testfirmware, startet den U8001 und wartet auf das Ergebnis
-mit verlängertem Timeout (~16 Sekunden).
+Der U8001 testet selbstständig den EM256-Speicher in allen erkannten Segmenten.
+Das Z80-Programm lädt die Testfirmware fw_march.s und ruft sie für jedes Segment
+(0–3) einzeln auf. Der Segment-Parameter wird über die Mailbox (MB_PARAM1)
+an die Firmware übergeben.
 
 | Nr  | Test | U8001-Firmware | Erwartung |
 |-----|------|----------------|----------|
-| D1 | Seg 0: March-C | 5-Phasen March-C, 0x0100–0xFFFE wortweise | STATUS = OK |
+| D1 | Seg 0–3: March-C | 5-Phasen March-C, segmentiert über RR8 | STATUS = OK je Segment |
 
-> **Nicht implementiert (v1.0):** D2–D4 (Segmente 1–3) und D5 (Adressleitung-Test).
-> Die Segment-Umschaltung vom U8001 aus erfordert Klärung der A33-Programmierung
-> (siehe §5.2). Für den Z80-seitigen Segmentzugriff werden die Segmente in Gruppe B
-> bereits getestet.
+**Fortschrittsanzeige (v1.7):** Während jedes Segment-Tests zeigt das Programm
+eine KB-basierte Fortschrittsanzeige mit CR-Überschreibung an (via PUTDEC3).
+Beispiel: `  D1 DRAM March-C Seg 0:  64 KB`
+
+**Segmentierte Adressierung (v1.7):** Die Firmware fw_march.s verwendet das
+Registerpaar RR8 (R8=Segment, R9=Offset) für alle Speicherzugriffe per
+`LD @RR8, Rn`. Dadurch kann jedes Segment (0–3) getestet werden, während
+Code und Mailbox stets in Segment 0 verbleiben. Mailbox-Zugriffe erfolgen
+über ungerade Register (R7, R11) im non-segmented Modus (→ immer Segment 0).
+
+**Testbereich:**
+- Segment 0: 0x0100–0xFFFE (Code+Mailbox bei 0x0000–0x00FF übersprungen)
+- Segment 1–3: 0x0000–0xFFFE (komplett, 64 KB)
 
 **March-C-Algorithmus (auf U8001):**
 
@@ -312,13 +324,13 @@ ausgeführt.
 
 | Nr  | Test | Methode | Erwartung |
 |-----|------|---------|----------|
-| E1 | Parity-Latch lesen | PIO-A Bit 7 (n_pe) | n_pe = 1 (kein Fehler) |
-| E2 | Parity-Latch Reset | PRRESET-Flanke auf PIO-B, PIO-A Bit 7 prüfen | n_pe = 1 nach Reset |
+| E1 | Parity-Latch lesen | PIO-A Bit 7 (n_pe) | Wert anzeigen [INFO] |
+| E2 | Parity-Latch Reset | PRRESET-Flanke auf PIO-B, PIO-A Bit 7 prüfen | Wert anzeigen [INFO] |
 
-> **Nicht implementiert (v1.0):** E3 (Paritätsfehler-Provokation). Zu riskant:
-> Bei falschen Bits im Paritäts-RAM könnte der Latch dauerhaft gesetzt bleiben.
-> Nur implementieren wenn eine sichere Methode über U8001-Byte-Schreiben
-> mit absichtlich falschem Paritätsbit verifiziert wurde.
+> **Hinweis (v1.7):** E1 und E2 zeigen den Paritätsstatus nur als [INFO] an,
+> da nach den DRAM-Schreibzugriffen in Gruppe C/D Paritätsfehler erwartet werden
+> (die C/D-Tests überschreiben DRAM-Inhalte, ohne die zugehörigen Paritätsbits
+> korrekt zu setzen).
 
 ---
 
@@ -341,14 +353,24 @@ gemeinsamen Prolog:
 ; Offset 0x0040: Firmware-Einstieg
     LD  R15, #0xFFF0    ; Stack-Pointer initialisieren (Ende Segment 0)
     ; ... testspezifischer Code ...
-    ; Ergebnis in Mailbox schreiben:
+    ; Ergebnis in Mailbox schreiben (ungerade Register = non-segmented = Seg 0):
+    LD  R3, #0x0010     ; R3 ungerade → non-segmented Zugriff auf Seg 0
     LD  R1, #0x0001     ; STATUS = OK
-    LD  R2, #0x0010     ; Mailbox-Offset STATUS
-    LD  @R2, R1
-    ; Bus freigeben und Endlosschleife:
-    MSET                ; Multi-Micro-Bit setzen (MO-Pin → TREN)
-    JR  T, $            ; Wartet bis Z80 µI-Reset auslöst
+    LD  @R3, R1         ; STATUS in Mailbox
+    JR  T, $            ; Endlosschleife – wartet auf Bus-Übernahme durch Z80
 ```
+
+> **Wichtig (v1.4+):** Im segmentierten Modus des Z8001 bedeutet `LD @Rn` mit
+> **geradem** Rn einen Zugriff über das Registerpaar RRn = {Rn:Rn+1} als
+> segmentierte Adresse. Nur **ungerade** Register (R3, R5, R7, R9, R11, R13)
+> erzeugen 16-Bit non-segmented Zugriffe (→ immer Segment 0).
+> Alle Firmware-Dateien verwenden daher ungerade Register für Mailbox-Zugriffe.
+
+> **TRQ8/TREN-Handshake (v1.3+):** Das Terminierungsprotokoll nutzt nicht MSET/MO-Pin,
+> sondern den kooperativen Bus-Handshake: Der Z80 sendet TRQ8 (n_trq8=0) über PIO-B,
+> woraufhin der U8001 den Bus freigibt (TREN=1 über PIO-A Bit 7). Die Firmware geht
+> nach Ergebnis-Schreiben in `JR T, $` und reagiert auf das TRQ8-Signal automatisch
+> über die Hardware-Buslogik.
 
 **Wichtige Erkenntnisse zum FCW:**
 
@@ -360,149 +382,125 @@ gemeinsamen Prolog:
 
 > **Warum FCW = 0xC000?**
 >
-> 1. **System Mode (Bit 14)** ist zwingend erforderlich, weil `MSET` ein privilegierter
->    Befehl ist. Im Normal Mode (FCW=0x0000) löst MSET eine Privilege Violation Trap aus,
->    statt den MO-Pin zu setzen → TREN wird nie HIGH → Z80 wartet endlos → TIMEOUT.
+> 1. **System Mode (Bit 14)** aktiviert den privilegierten Modus (für spätere Erweiterungen).
 >
 > 2. **Segmented Mode (Bit 15)** ist erforderlich, weil die EM256-Hardware für den
 >    segmentierten Z8001-Bus ausgelegt ist. Die Adressleitungen SN0–SN6 erwarten gültige
 >    Segmentnummern. Im Non-Segmented Mode könnte das Busprotokoll nicht korrekt
 >    funktionieren.
 
-**MSET und JR T, $ – Terminierungsprotokoll:**
+**TRQ8/TREN-Terminierungsprotokoll (v1.3+):**
 
 ```
 U8001-Seite:                    Z80-Seite:
-  MSET → MO-Pin HIGH             WAIT_READY:
-  JR T, $ (Endlosschleife)         OUT PIOB_TRQ (n_trq8=0, Bus-Request)
-                                    Poll PIO-A Bit 7 (TREN) + Bit 4 (INT16)
-                                    → TREN HIGH erkannt → CF=0 (bereit)
-                                  STOP_U8000 (PIOB_IDLE, Reset)
-                                  RAMON_S0 → READ_MAILBOX → RAMOFF
+  Ergebnis → Mailbox              RUN_FW_TEST:
+  JR T, $ (Endlosschleife)         [1] RAMON_S0 → LDIR (Firmware laden)
+                                    [3] STATUS nullen
+                                    [4] RAMOFF
+                                    [5] START_U8000 (PIOB_RUN)
+                                    (Pause ~2ms)
+                                    [6] TRQ8 (n_trq8=0, Bus-Anforderung)
+                                    [7] Poll PIO-A: TREN (Bit 7) oder INT16 (Bit 4)
+                                    → TREN HIGH → Firmware fertig
+                                    [8] STOP_U8000 (PIOB_IDLE, Reset)
+                                    [9] RAMON → READ_MAILBOX → RAMOFF
 ```
 
-`MSET` muss vor jedem `JR T, $` stehen. Ohne MSET bleibt der MO-Pin LOW,
-und der Z80 erkennt nie, dass die Firmware fertig ist.
+> **MSET wird nicht verwendet (v1.3+).** Die Firmware verlässt sich auf den
+> TRQ8/TREN-Hardware-Handshake, bei dem der Z80 aktiv den Bus anfordert (TRQ8)
+> und der U8001 ihn automatisch freigibt (TREN).
 
-### 5.2 Segment-Umschaltung (für Gruppe D)
+### 5.2 Segment-Umschaltung (gelöst in v1.7)
 
-Im Grundzustand (nach Reset) ist die Segmentweiche in Mode 0 mit AD5\*=AD6\*=AD7\*=0,
-d.h. alle Zugriffe gehen in Segment 0. Für Zugriff auf andere Segmente muss der
-U8001 über einen Special-I/O-Zugriff das Steuer-16-Register A33 programmieren.
+Seit v1.7 verwendet die March-C-Firmware **segmentierte Adressierung** über das
+Registerpaar RR8, statt Register A33 zu programmieren:
 
-Allerdings ist die genaue I/O-Adresse und Methode für A33 aus dem Handbuch zu
-ermitteln. Der U8001 nutzt dafür den **RESET OUT**-Befehl beim Einschalten bzw.
-schreibt über seinen AD-Bus Daten in Register A33.
+- **R8** enthält die Z8001-Segmentnummer (0x0000, 0x0100, 0x0200, 0x0300)
+- **R9** wird als Offset-Zähler verwendet
+- `LD @RR8, R1` adressiert automatisch das in R8 kodierte Segment
 
-> **Offene Frage:** Wie genau schreibt der U8001 in Register A33? Das muss aus dem
-> Handbuch oder durch Experiment geklärt werden. Für den ersten Prototyp testen
-> wir nur **Segment 0** (Mode 0, Grundstellung) und den Z80-seitigen Segmentzugriff.
+Der Segment-Parameter wird vom Z80-Programm vor dem Start des U8001 in die
+Mailbox (MB_PARAM1, Offset 0x000A) geschrieben. Die Firmware liest ihn über
+ein ungerades Register: `LD R11, #0x000A; LD R8, @R11`.
 
-### 5.3 DRAM-Test-Firmware (Gruppe D – March-C)
+### 5.3 DRAM-Test-Firmware (Gruppe D – March-C, v1.7)
 
 Pseudo-Code für den March-C-Test eines Segments:
 
 ```z8001
-; Register-Konventionen (wie in fw_march.s):
+; Register-Konventionen (fw_march.s v1.7):
 ; R1  = Testmuster (Soll-Wert)
-; R2  = aktuelle Adresse
-; R3  = Anfangsadresse (0x0100)
-; R4  = Endadresse (0xFFFE)
-; R5  = gelesener Wert
+; RR8 = Segmentierte Adresse für Speicherzugriff:
+;        R8 = Ziel-Segment (aus MB_PARAM1 geladen, bleibt konstant)
+;        R9 = Offset-Zähler (wird in Schleifen inkrementiert/dekrementiert)
+; R3  = Startoffset (0x0100 für Seg 0, 0x0000 für Seg 1-3)
+; R4  = Endoffset (0xFFFE)
+; R5  = Gelesener Wert
 ; R6  = Hilfsregister (neues Muster)
-; R7-R8 = Mailbox-Hilfsregister (bei FAIL)
+; R7, R11 = Mailbox-Zugriff (ungerade → non-segmented → Seg 0)
 ; R15 = SP (0x00FE, knapp unter Testbereich)
 
 MARCH_C:
     LD  R15, #0x00FE        ; SP unter Testbereich
-    LD  R3, #0x0100         ; Start (hinter Code+Mailbox)
-    LD  R4, #0xFFFE         ; Ende (letzte Wortadresse)
-    LD  R1, #0x0000         ; Muster Phase 1
+
+    ; Segment-Parameter aus Mailbox lesen
+    LD  R11, #0x000A        ; R11 ungerade → non-segmented → MB_PARAM1
+    LD  R8, @R11            ; R8 = Ziel-Segment (0x0000, 0x0100, 0x0200, 0x0300)
+
+    ; Startadresse bestimmen
+    CP  R8, #0x0000         ; Segment 0?
+    JR  NE, OTHER_SEG
+    LD  R3, #0x0100         ; Seg 0: Code+Mailbox überspringen
+    JR  T, SETUP_OK
+OTHER_SEG:
+    LD  R3, #0x0000         ; Seg 1-3: komplett testen
+SETUP_OK:
+    LD  R4, #0xFFFE         ; Endadresse (letztes Wort)
 
 ; Phase 1: Aufwärts mit 0x0000 füllen
-+   LD  R2, R3
+    LD  R1, #0x0000
+    LD  R9, R3              ; Offset = Start
 P1_LOOP:
-    LD  @R2, R1
-    INC R2, #2
-    CP  R2, R4
-    JR  ULE, P1_LOOP
-    LD  @R2, R1             ; Auch letzte Adresse
+    LD  @RR8, R1            ; Segmentierter Zugriff: {R8:R9} ← R1
+    CP  R9, R4              ; Ende erreicht?
+    JR  EQ, P1_DONE
+    INC R9, #2              ; Nächstes Wort
+    JR  T, P1_LOOP
+P1_DONE:
 
 ; Phase 2: Aufwärts: 0x0000 lesen, 0xFFFF schreiben
     LD  R1, #0x0000         ; Erwartung
-    LD  R6, #0xFFFF         ; neues Muster
-    LD  R2, R3
+    LD  R6, #0xFFFF         ; Neues Muster
+    LD  R9, R3
 P2_LOOP:
-    LD  R5, @R2
-    CP  R5, R1              ; Sollte 0x0000 sein
-    JR  NZ, FAIL
-    LD  @R2, R6             ; 0xFFFF schreiben
-    INC R2, #2
-    CP  R2, R4
-    JR  ULE, P2_LOOP
-    ; letzte Adresse
-    LD  R5, @R2
+    LD  R5, @RR8
     CP  R5, R1
     JR  NZ, FAIL
-    LD  @R2, R6
+    LD  @RR8, R6
+    CP  R9, R4
+    JR  EQ, P2_DONE
+    INC R9, #2
+    JR  T, P2_LOOP
+P2_DONE:
 
-; Phase 3: Aufwärts: 0xFFFF lesen
-    LD  R1, #0xFFFF
-    LD  R2, R3
-P3_LOOP:
-    LD  R5, @R2
-    CP  R5, R1
-    JR  NZ, FAIL
-    INC R2, #2
-    CP  R2, R4
-    JR  ULE, P3_LOOP
-    LD  R5, @R2
-    CP  R5, R1
-    JR  NZ, FAIL
+; Phase 3-5 analog (siehe fw_march.s)
 
-; Phase 4: Abwärts: 0xFFFF lesen, 0x0000 schreiben
-    LD  R1, #0xFFFF
-    LD  R6, #0x0000
-    LD  R2, R4              ; von Ende
-P4_LOOP:
-    LD  R5, @R2
-    CP  R5, R1              ; Sollte 0xFFFF sein
-    JR  NZ, FAIL
-    LD  @R2, R6             ; 0x0000 schreiben
-    DEC R2, #2
-    CP  R2, R3
-    JR  UGE, P4_LOOP
-
-; Phase 5: Abwärts: 0x0000 lesen
-    LD  R1, #0x0000
-    LD  R2, R4
-P5_LOOP:
-    LD  R5, @R2
-    CP  R5, R1
-    JR  NZ, FAIL
-    DEC R2, #2
-    CP  R2, R3
-    JR  UGE, P5_LOOP
-
-; Erfolg
+; Erfolg (non-segmented Mailbox-Zugriff)
+    LD  R7, #0x0010         ; R7 ungerade → Seg 0
     LD  R1, #0x0001         ; STATUS = OK
-    LD  R2, #0x0010
-    LD  @R2, R1
-    MSET                    ; MO-Pin setzen → TREN → Z80 erkennt "fertig"
-    JR  T, $                ; Fertig
+    LD  @R7, R1
+    JR  T, $                ; Endlosschleife
 
 FAIL:
-    ; R2 = Fehleradresse, R5 = gelesener Wert, R1 = erwarteter Wert
     LD  R7, #0x0010
-    LD  R8, #0x0002         ; STATUS = FEHLER
-    LD  @R7, R8
+    LD  R11, #0x0002        ; STATUS = FEHLER
+    LD  @R7, R11
     INC R7, #2
-    LD  @R7, R1             ; RESULT1 = Soll-Wert
+    LD  @R7, R1             ; RESULT1 = Soll
     INC R7, #2
-    LD  @R7, R5             ; RESULT2 = Ist-Wert
+    LD  @R7, R5             ; RESULT2 = Ist
     INC R7, #2
-    LD  @R7, R2             ; RESULT3 = Fehleradresse
-    MSET
+    LD  @R7, R9             ; RESULT3 = Fehleradresse (Offset)
     JR  T, $
 ```
 
@@ -515,21 +513,21 @@ FAIL:
 ```
 16bitTest/
 ├── build.py                 ← Build-Script (z8001asm + Präprozessor + M80 + LINKMT)
-├── z8001asm.py              ← Z8001 Cross-Assembler (Python, 2075 Zeilen)
+├── z8001asm.py              ← Z8001 Cross-Assembler (Python, ~2075 Zeilen)
 ├── src/
-│   ├── em256ful.mac         ← Volltest (Z80-Assembler, M80-Syntax, 2002 Zeilen)
+│   ├── em256ful.mac         ← Volltest (Z80-Assembler, M80-Syntax, ~2215 Zeilen)
 │   ├── em256tst.mac         ← Original-Test (bestehend, nur Grundfunktionstest)
-│   ├── fw_add.s             ← C1: Additionstest (96 Bytes)
-│   ├── fw_sub.s             ← C2: Subtraktionstest (96 Bytes)
-│   ├── fw_logic.s           ← C3: Logiktest (108 Bytes)
-│   ├── fw_memrw.s           ← C4: Speicher-R/W (186 Bytes)
-│   ├── fw_loop.s            ← C5: Schleifentest (106 Bytes)
-│   ├── fw_stack.s           ← C6: Stacktest (138 Bytes)
-│   ├── fw_add32.s           ← C7: 32-Bit-Arithmetik (106 Bytes)
-│   ├── fw_byte.s            ← C8: Byte-Operationen (106 Bytes)
-│   └── fw_march.s           ← D1: March-C DRAM-Test (230 Bytes)
+│   ├── fw_add.s             ← C1: Additionstest
+│   ├── fw_sub.s             ← C2: Subtraktionstest
+│   ├── fw_logic.s           ← C3: Logiktest
+│   ├── fw_memrw.s           ← C4: Speicher-R/W
+│   ├── fw_loop.s            ← C5: Schleifentest
+│   ├── fw_stack.s           ← C6: Stacktest
+│   ├── fw_add32.s           ← C7: 32-Bit-Arithmetik
+│   ├── fw_byte.s            ← C8: Byte-Operationen
+│   └── fw_march.s           ← D1: March-C DRAM-Test (segmentiert, ~302 Bytes)
 ├── build/
-│   └── em256ful.com         ← Fertiges CP/M-Programm (~6016 Bytes)
+│   └── em256ful.com         ← Fertiges CP/M-Programm (~6400 Bytes)
 └── docs/
     ├── em256test_design.md  ← Dieses Dokument
     ├── Auszug_Handbuch.md   ← Handbuch A 5120.16

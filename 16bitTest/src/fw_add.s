@@ -1,6 +1,16 @@
 ; fw_add.s - C1: Addition 0x1234 + 0x5678 = 0x68AC
 ;
+; Z8001-Firmware fuer EM256 Testprogramm
+; Testet die 16-Bit-Additionsinstruktion des U8001.
+;
+; Ablauf:
+;   1. LD R1, #0x1234   - Ersten Operanden laden
+;   2. ADD R1, #0x5678  - Addition ausfuehren (Ergebnis in R1)
+;   3. Ergebnis (R1=0x68AC) in Mailbox schreiben
+;
 ; Erwartung: RESULT1 = 0x68AC, STATUS = 0x0001
+;
+; (c) 2026 Olaf Krieger - MIT Lizenz
 
     ORG  0x0000
 

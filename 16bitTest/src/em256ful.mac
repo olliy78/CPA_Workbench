@@ -1,4 +1,4 @@
-	TITLE	'EM256 Full Test v1.5'
+	TITLE	'EM256 Full Test v1.7'
 	.Z80
 ;
 ; em256ful.mac - Umfassendes Testprogramm fuer die EM256 16-Bit-Erweiterung
@@ -801,33 +801,162 @@ C_DONE:
 	LD	(GRP_FAIL), A
 	LD	(GRP_TOTAL), A
 
-; --- D1: Segment 0 March-C ---
+; --- D1: March-C DRAM alle 4 Segmente (256 KB) ---
 	LD	DE, MSG_D1
 	CALL	PUTS
+	; Fortschritt: "  0 KB" anzeigen
+	LD	DE, MSG_D1_0KB
+	CALL	PUTS
+	; Segment-Schleife: 0, 1, 2, 3
+	XOR	A
+	LD	(D1_SEGIDX), A		; 0-3 Zaehler
+D1_SEG_LOOP:
+	; Firmware laden
+	CALL	RAMON_S0
 	LD	HL, FW_MARCH_CODE
 	LD	BC, FW_MARCH_CODE_LEN
-	LD	A, TIMEOUT_LONG
-	LD	(TOUT_VAL), A
-	CALL	RUN_FW_TEST_LONG
-	JR	C, D1_TOUT
+	LD	DE, EM256ADR
+	LDIR
+	; Segment-Parameter in Mailbox schreiben (MB_PARAM1 = 0x000A)
+	; Z8001 Format: Segment N -> Wort = N * 0x0100
+	LD	A, (D1_SEGIDX)
+	LD	(EM256ADR + MB_PARAM1), A	; High-Byte = Segment-Nr
+	XOR	A
+	LD	(EM256ADR + MB_PARAM1 + 1), A	; Low-Byte = 0
+	; Mailbox-Status nullen
+	LD	(EM256ADR + MB_STATUS), A
+	LD	(EM256ADR + MB_STATUS + 1), A
+	CALL	RAMOFF
+	; U8001 starten
+	CALL	START_U8000
+	; Lange Pause (~8s pro Segment)
+	LD	D, 20
+D1DL_O:	LD	E, 0
+D1DL_M:	LD	B, 0
+D1DL_I:	DJNZ	D1DL_I
+	DEC	E
+	JR	NZ, D1DL_M
+	DEC	D
+	JR	NZ, D1DL_O
+	; TRQ8 aktivieren
+	LD	A, PIOB_TRQ
+	LD	B, 0
+	LD	C, PIOB
+	OUT	(C), A
+	; Langer Timeout
+	LD	D, TIMEOUT_LONG
+D1PL_O:	LD	E, 0
+D1PL_I:	LD	B, 0
+	LD	C, PIOA
+	IN	A, (C)
+	BIT	TREN, A
+	JR	NZ, D1_RDY
+	BIT	INT16, A
+	JR	NZ, D1_RDY
+	DEC	E
+	JR	NZ, D1PL_I
+	DEC	D
+	JR	NZ, D1PL_O
+D1_RDY:
+	CALL	STOP_U8000
+	CALL	RAMON_S0
+	CALL	READ_MAILBOX
+	CALL	RAMOFF
+	; Ergebnis pruefen
 	LD	A, (MB_STATUS_HI)
 	OR	A
-	JR	NZ, D1_FAIL
+	JR	NZ, D1_CHK		; High-Byte != 0 -> weiter pruefen
+	LD	A, (MB_STATUS_LO)
+	OR	A
+	JR	Z, D1_TOUT		; STATUS=0000 -> Timeout
+D1_CHK:
 	LD	A, (MB_STATUS_LO)
 	CP	ST_OK AND 0FFH
-	JR	NZ, D1_FAIL
+	JR	NZ, D1_SFAIL		; STATUS != OK -> Speicherfehler
+	LD	A, (MB_STATUS_HI)
+	OR	A
+	JR	NZ, D1_SFAIL
+	; Segment OK - Fortschritt aktualisieren
+	; CR ausgeben, dann "D1 March-C DRAM: XXX KB"
+	LD	E, 0DH			; CR (Carriage Return)
+	CALL	PUTC
+	LD	DE, MSG_D1
+	CALL	PUTS
+	; KB berechnen: (Segment+1) * 64
+	LD	A, (D1_SEGIDX)
+	INC	A
+	; A * 64: Shift links 6x (= *64), max 256
+	LD	H, 0
+	LD	L, A
+	ADD	HL, HL			; *2
+	ADD	HL, HL			; *4
+	ADD	HL, HL			; *8
+	ADD	HL, HL			; *16
+	ADD	HL, HL			; *32
+	ADD	HL, HL			; *64
+	; HL = KB-Wert (64, 128, 192 oder 256)
+	LD	A, L
+	LD	D, H			; D:A = 16-Bit Wert
+	; Dezimal ausgeben (max 256)
+	PUSH	AF
+	LD	A, D
+	OR	A
+	JR	Z, D1_NO100
+	; >= 256
+	LD	E, '2'
+	CALL	PUTC
+	LD	E, '5'
+	CALL	PUTC
+	LD	E, '6'
+	CALL	PUTC
+	JR	D1_KBDONE
+D1_NO100:
+	POP	AF
+	PUSH	AF
+	CALL	PUTDEC3
+D1_KBDONE:
+	POP	AF
+	LD	DE, MSG_D1_KB
+	CALL	PUTS
+	; Naechstes Segment
+	LD	A, (D1_SEGIDX)
+	INC	A
+	LD	(D1_SEGIDX), A
+	CP	4
+	JP	C, D1_SEG_LOOP
+	; Alle 4 Segmente OK!
 	CALL	PRINT_OK
 	CALL	COUNT_PASS
 	JR	D_DONE
 D1_TOUT:
+	; Segment-Info ausgeben
+	LD	E, 0DH
+	CALL	PUTC
+	LD	DE, MSG_D1
+	CALL	PUTS
+	LD	DE, MSG_D1_SEG
+	CALL	PUTS
+	LD	A, (D1_SEGIDX)
+	ADD	A, '0'
+	LD	E, A
+	CALL	PUTC
 	CALL	PRINT_TIMEOUT
 	CALL	DBG_TOUT
 	CALL	COUNT_FAIL_D1
 	JR	D_DONE
-D1_FAIL:
+D1_SFAIL:
+	LD	E, 0DH
+	CALL	PUTC
+	LD	DE, MSG_D1
+	CALL	PUTS
+	LD	DE, MSG_D1_SEG
+	CALL	PUTS
+	LD	A, (D1_SEGIDX)
+	ADD	A, '0'
+	LD	E, A
+	CALL	PUTC
 	CALL	PRINT_FAIL
 	CALL	COUNT_FAIL_D1
-	; Zeige Fehleradresse
 	CALL	PRINT_MARCH_DETAIL
 
 D_DONE:
@@ -845,22 +974,18 @@ D_DONE:
 	LD	(GRP_FAIL), A
 	LD	(GRP_TOTAL), A
 
-; --- E1: Parity-Latch lesen ---
+; --- E1: Parity-Latch lesen [INFO] ---
 	LD	DE, MSG_E1
 	CALL	PUTS
 	LD	B, 0
 	LD	C, PIOA
 	IN	A, (C)
-	BIT	7, A			; n_pe = 1 -> kein Fehler
-	JR	Z, E1_FAIL
-	CALL	PRINT_OK
-	CALL	COUNT_PASS
-	JR	E2_START
-E1_FAIL:
-	CALL	PRINT_FAIL
-	CALL	COUNT_FAIL_E1
+	CALL	PRINT_COLON
+	CALL	PUTHEX
+	CALL	PRINT_INFO
+	CALL	COUNT_INFO
 
-; --- E2: Parity-Latch Reset + Pruefen ---
+; --- E2: Parity-Latch Reset + Pruefen [INFO] ---
 E2_START:
 	LD	DE, MSG_E2
 	CALL	PUTS
@@ -872,14 +997,10 @@ E2_START:
 	OUT	(C), A
 	LD	C, PIOA
 	IN	A, (C)
-	BIT	7, A
-	JR	Z, E2_FAIL
-	CALL	PRINT_OK
-	CALL	COUNT_PASS
-	JR	E_DONE
-E2_FAIL:
-	CALL	PRINT_FAIL
-	CALL	COUNT_FAIL_E2
+	CALL	PRINT_COLON
+	CALL	PUTHEX
+	CALL	PRINT_INFO
+	CALL	COUNT_INFO
 
 E_DONE:
 	CALL	PRINT_GRP_SUMMARY
@@ -982,33 +1103,44 @@ EXIT:
 	RET
 
 ; =============================================================================
-; INIT_PIO - PIO initialisieren (OTIR, wie BIOS)
+; INIT_PIO - PIO-A und PIO-B im Bitmodus initialisieren
+;
+; PIO-A: Alle 8 Bits als Eingang (0xFF), Interrupt-Maske 0x07
+;        Bit 7 = TREN (Bus-Freigabe), Bit 4 = INT16 (Interrupt vom U8001)
+; PIO-B: Bit 7 als Eingang (Paritaetsfehler), Rest Ausgang (0x80)
+;        Steuert U8001-Reset, RAM-Enable, Stop, TRQ8, Segment-Adresse
+;
+; Setzt anschliessend das Parity-Latch zurueck und deaktiviert alle
+; 16x4-RAM-Seiten (Speicherfenster fuer Z80-Zugriff auf EM256-DRAM).
 ; =============================================================================
 INIT_PIO:
+	; PIO-A: 3 Bytes Konfiguration (Modus/Maske/Interrupt)
 	LD	B, 3
 	LD	HL, PA_INIT
 	LD	C, PIOACTRL
 	OTIR
+	; PIO-B: 3 Bytes Konfiguration
 	LD	B, 3
 	LD	HL, PB_INIT
 	LD	C, PIOBCTRL
 	OTIR
-	; Parity-Latch Reset
+	; Parity-Latch Reset: PRRESET-Bit kurz HIGH setzen
 	LD	C, PIOB
 	LD	A, (1 SHL PRRESET) OR PIOB_IDLE
 	OUT	(C), A
 	LD	A, PIOB_IDLE
 	OUT	(C), A
-	; 16*4-RAM: alle Positionen deaktivieren
+	; 16*4-RAM: alle 16 Positionen (0x0x..0xFx) deaktivieren
+	; B=Positionsadresse (oberes Nibble), Wert 0x07 = Page off
 	LD	B, 0
 	LD	C, RAM16
 INIT_LOOP:
-	LD	A, 07H
+	LD	A, 07H		; Alle Steuerbits gesetzt = deaktiviert
 	OUT	(C), A
 	LD	A, B
-	ADD	A, 010H
+	ADD	A, 010H		; Naechste Position (+16)
 	LD	B, A
-	JR	NZ, INIT_LOOP
+	JR	NZ, INIT_LOOP	; 16 Positionen (0x00..0xF0)
 	; PIO-B Idle
 	LD	B, 0
 	LD	C, PIOB
@@ -1017,37 +1149,44 @@ INIT_LOOP:
 	RET
 
 PA_INIT:
-	DB	0CFH, 0FFH, 07H
+	DB	0CFH, 0FFH, 07H	; Bitmodus, alle Bits Input, Maske 0x07
 PB_INIT:
-	DB	0CFH, 80H, 07H
+	DB	0CFH, 80H, 07H		; Bitmodus, Bit7=Input Rest=Output, Maske 0x07
 
 ; =============================================================================
 ; DETECT_EM256 - EM256 erkennen (BIOS-Methode, atomar)
-; CF=0 gefunden, CF=1 nicht gefunden
-; Setzt EM256_OK-Flag
+;
+; Prueft ob EM256-Hardware vorhanden ist:
+;   1. Z80-RAM-Inhalt an EM256ADR (0x4000) sichern
+;   2. Z80-Adresse mit 0x0000 vorbelegen
+;   3. EM256-Seite einblenden, 0xA55A schreiben, zuruecklesen
+;   4. EM256 ausblenden, Z80-Adresse pruefen (muss wieder 0x0000 sein)
+;   5. Wenn EM256-Wert = 0xA55A und Z80-Wert = 0x0000 -> EM256 vorhanden
+;
+; CF=0 gefunden, CF=1 nicht gefunden.  Setzt EM256_OK-Flag.
 ; =============================================================================
 DETECT_EM256:
-	LD	HL, (EM256ADR)
+	LD	HL, (EM256ADR)	; Z80-RAM sichern
 	LD	(SAVE_WORD), HL
-	LD	HL, 0
+	LD	HL, 0		; Referenzwert 0 ins Z80-RAM
 	LD	(EM256ADR), HL
-	CALL	RAMON_S0
-	LD	HL, 0A55AH
+	CALL	RAMON_S0	; EM256 Seg 0 einblenden
+	LD	HL, 0A55AH	; Testmuster 0xA55A ins EM256-DRAM
 	LD	(EM256ADR), HL
-	LD	HL, (EM256ADR)
+	LD	HL, (EM256ADR)	; Zuruecklesen aus EM256
 	LD	(TMP_WORD), HL
-	CALL	RAMOFF
-	LD	HL, (EM256ADR)
+	CALL	RAMOFF		; EM256 ausblenden
+	LD	HL, (EM256ADR)	; Z80-RAM pruefen (sollte 0 sein)
 	LD	(TMP_WORD2), HL
-	LD	HL, (SAVE_WORD)
+	LD	HL, (SAVE_WORD)	; Z80-RAM restaurieren
 	LD	(EM256ADR), HL
-	; Schreibtest
+	; Test 1: EM256 muss 0xA55A zurueckgegeben haben
 	LD	HL, (TMP_WORD)
 	LD	DE, 0A55AH
 	OR	A
 	SBC	HL, DE
 	JR	NZ, DET_FAIL
-	; Z80-RAM muss 0 sein
+	; Test 2: Z80-RAM muss 0 sein (nicht durch EM256 ueberschrieben)
 	LD	HL, (TMP_WORD2)
 	LD	A, H
 	OR	L
@@ -1063,23 +1202,29 @@ DET_FAIL:
 	RET
 
 ; =============================================================================
-; DETECT_CAPACITY - Segmentzahl erkennen (Alias-Pruefung)
+; DETECT_CAPACITY - Anzahl DRAM-Segmente erkennen (1-4 x 64 KB)
+;
+; Alias-Pruefung: Schreibt 0xBEEF in Seg 0, liest andere Segmente.
+; Wenn ein Segment denselben Wert liefert, ist es ein Alias fuer Seg 0
+; (d.h. die Adressleitungen A16/A17 werden nicht dekodiert).
+; Unterschiedlicher Wert = eigenes physisches Segment vorhanden.
+;
 ; Ergebnis: A = Anzahl Segmente (1-4)
 ; =============================================================================
 DETECT_CAPACITY:
-	; Seg 0, Seite 0: Muster 0xBEEF
+	; Referenzmuster 0xBEEF in Seg 0 schreiben (Offset 0x500)
 	CALL	RAMON_S0
 	LD	HL, 0BEEFH
 	LD	(EM256ADR + 500H), HL
 	CALL	RAMOFF
-	; Seg 1 pruefen
+	; Seg 1 lesen: Alias oder eigener Speicher?
 	CALL	RAMON_S1
 	LD	HL, (EM256ADR + 500H)
 	CALL	RAMOFF
 	LD	DE, 0BEEFH
 	OR	A
 	SBC	HL, DE
-	JR	Z, CAP_1SEG
+	JR	Z, CAP_1SEG	; Gleicher Wert = Alias = nur 1 Segment
 	; Seg 2 pruefen
 	CALL	RAMON_S2
 	LD	HL, (EM256ADR + 500H)
@@ -1110,25 +1255,37 @@ CAP_1SEG:
 
 ; =============================================================================
 ; RAMON-Routinen (Segment/Seite-Einblendung)
+;
+; Das EM256-DRAM (256 KB) wird ueber ein 16x4-RAM seitenweise in das
+; Z80-Adressfenster ab 0x4000 (16 KB) eingeblendet.
+;
+; 16x4-RAM Adresse:
+;   Oberes Nibble (B-Register): Seitenposition, hier immer 0x4x (0x4000)
+;   Unteres Nibble (Datenbyte): Konfiguration:
+;     Bit 3-2 = /A15,/A14 (invertiert!) = Seite innerhalb des Segments
+;     Bit 1   = /WRITE (0=schreibbar)
+;     Bit 0   = /PAGEN (0=aktiv)
+;
+; PIO-B steuert Segment-Adresse (SG0P, SG1B) und RAM-Aktivierung.
 ; =============================================================================
 
-; Segment 0, Seite 0
+; Segment 0, Seite 0: /A15=1,/A14=1 -> Adressbereich 0x0000-0x3FFF
 RAMON_S0:
-	LD	B, 04CH
+	LD	B, 04CH		; 16x4-RAM Position 0x4x (Fenster ab 0x4000)
 	LD	C, RAM16
-	LD	A, RAM16_P0
+	LD	A, RAM16_P0	; Seite 0: Bits=1100 (/A15=1,/A14=1,W=0,P=0)
 	OUT	(C), A
-	LD	A, PIOB_RAMON
+	LD	A, PIOB_RAMON	; RESET16=1, /RAMEN=0 (RAM aktiv)
 	LD	B, 0
 	LD	C, PIOB
 	OUT	(C), A
 	RET
 
-; Segment 0, Seite 1
+; Segment 0, Seite 1: /A15=1,/A14=0 -> Adressbereich 0x4000-0x7FFF
 RAMON_S0_P1:
 	LD	B, 04CH
 	LD	C, RAM16
-	LD	A, RAM16_P1
+	LD	A, RAM16_P1	; Seite 1: Bits=1000
 	OUT	(C), A
 	LD	A, PIOB_RAMON
 	LD	B, 0
@@ -1136,11 +1293,11 @@ RAMON_S0_P1:
 	OUT	(C), A
 	RET
 
-; Segment 0, Seite 2
+; Segment 0, Seite 2: /A15=0,/A14=1 -> Adressbereich 0x8000-0xBFFF
 RAMON_S0_P2:
 	LD	B, 04CH
 	LD	C, RAM16
-	LD	A, RAM16_P2
+	LD	A, RAM16_P2	; Seite 2: Bits=0100
 	OUT	(C), A
 	LD	A, PIOB_RAMON
 	LD	B, 0
@@ -1148,11 +1305,11 @@ RAMON_S0_P2:
 	OUT	(C), A
 	RET
 
-; Segment 0, Seite 3
+; Segment 0, Seite 3: /A15=0,/A14=0 -> Adressbereich 0xC000-0xFFFF
 RAMON_S0_P3:
 	LD	B, 04CH
 	LD	C, RAM16
-	LD	A, RAM16_P3
+	LD	A, RAM16_P3	; Seite 3: Bits=0000
 	OUT	(C), A
 	LD	A, PIOB_RAMON
 	LD	B, 0
@@ -1160,7 +1317,7 @@ RAMON_S0_P3:
 	OUT	(C), A
 	RET
 
-; Segment 1, Seite 0
+; Segment 1, Seite 0: SG0P=1 (Bit 0 der Segmentadresse)
 RAMON_S1:
 	LD	B, 04CH
 	LD	C, RAM16
@@ -1172,7 +1329,7 @@ RAMON_S1:
 	OUT	(C), A
 	RET
 
-; Segment 2, Seite 0
+; Segment 2, Seite 0: SG1B=1 (Bit 1 der Segmentadresse)
 RAMON_S2:
 	LD	B, 04CH
 	LD	C, RAM16
@@ -1184,7 +1341,7 @@ RAMON_S2:
 	OUT	(C), A
 	RET
 
-; Segment 3, Seite 0
+; Segment 3, Seite 0: SG0P=1 + SG1B=1 (beide Seg-Bits)
 RAMON_S3:
 	LD	B, 04CH
 	LD	C, RAM16
@@ -1197,21 +1354,26 @@ RAMON_S3:
 	RET
 
 ; =============================================================================
-; RAMOFF - EM256-RAM ausblenden
+; RAMOFF - EM256-DRAM ausblenden, Z80-Normalzustand herstellen
+;
+; Deaktiviert 16x4-RAM-Seite und setzt PIO-B auf Idle (/RAMEN=1).
 ; =============================================================================
 RAMOFF:
-	LD	B, 04CH
+	LD	B, 04CH		; Position 0x4x
 	LD	C, RAM16
-	LD	A, RAM16_OFF
+	LD	A, RAM16_OFF	; Alle Steuerbits gesetzt = Seite deaktiviert
 	OUT	(C), A
-	LD	A, PIOB_IDLE
+	LD	A, PIOB_IDLE	; RESET16=1, /RAMEN=1 (RAM inaktiv)
 	LD	B, 0
 	LD	C, PIOB
 	OUT	(C), A
 	RET
 
 ; =============================================================================
-; START_U8000 / STOP_U8000
+; START_U8000 - U8001-CPU starten
+;
+; Setzt PIO-B auf PIOB_RUN: /STOP=1 (laeuft), /RAMEN=1, /TRQ8=1 (kein TRQ)
+; Der U8001 laeuft nach Reset aus dem Code in Segment 0 ab 0x0040.
 ; =============================================================================
 START_U8000:
 	LD	A, PIOB_RUN
@@ -1220,6 +1382,11 @@ START_U8000:
 	OUT	(C), A
 	RET
 
+; =============================================================================
+; STOP_U8000 - U8001-CPU stoppen und in Reset-Zustand versetzen
+;
+; PIOB_IDLE: RESET16=1 (Reset aktiv), /RAMEN=1, /STOP=0, /TRQ8=0
+; =============================================================================
 STOP_U8000:
 	LD	A, PIOB_IDLE
 	LD	B, 0
@@ -1426,7 +1593,13 @@ FWL_DONE:
 	RET
 
 ; =============================================================================
-; READ_MAILBOX - Mailbox-Daten aus EM256-Speicher lesen (RAM muss eingeblendet sein!)
+; READ_MAILBOX - Mailbox-Daten aus EM256-Speicher lesen
+;
+; Liest die 16-Bit-Werte STATUS, RESULT1-3 aus dem EM256-DRAM in lokale
+; Variablen.  Jeder Wert wird byteweise gelesen (Hi/Lo), weil der Z80
+; Big-Endian-Worte des Z8001 byteweise zugreifen muss.
+;
+; WICHTIG: RAM muss eingeblendet sein (RAMON_Sx vorher aufrufen)!
 ; =============================================================================
 READ_MAILBOX:
 	LD	A, (EM256ADR + MB_STATUS)
@@ -1463,7 +1636,11 @@ CHECK_RESULT1:
 ; AUSGABE-ROUTINEN
 ; =============================================================================
 
-; PUTS - String zeichenweise mit Seitenpause
+; PUTS - $-terminierten String zeichenweise ausgeben, mit Seitenpause.
+;
+; Zaehlt Zeilenumbrueche (0x0A).  Nach PAGELEN Zeilen wird auf
+; Tastendruck gewartet ("Weiter..."), damit der Bildschirm
+; nicht davonlaeuft.  DE = Adresse des Strings.
 PUTS:
 	LD	A, (DE)
 	CP	'$'
@@ -1512,7 +1689,10 @@ PUTC:
 	CALL	BDOS
 	RET
 
-; PUTHEX - Byte als HEX (A=Wert)
+; PUTHEX - Byte als 2-stellige Hex-Zahl ausgeben (A=Wert)
+;
+; Extrahiert oberes Nibble durch 4x Rechtsrotation (RRCA),
+; gibt es als Hex-Ziffer aus, dann unteres Nibble.
 PUTHEX:
 	PUSH	AF
 	RRCA
@@ -1540,7 +1720,10 @@ PUTHEX16:
 	LD	A, E
 	JP	PUTHEX
 
-; PUTDEC - Byte als Dezimal (A=Wert, 0-255, ohne Vornullen)
+; PUTDEC - Byte als Dezimal mit unterdrueckten Vornullen (A=Wert, 0-255)
+;
+; Dividiert schrittweise durch 100 und 10 (wiederholte Subtraktion).
+; B-Flag verhindert Ausgabe fuehrender Nullen.
 PUTDEC:
 	LD	B, 0		; Fuehrende-Null-Flag
 	LD	C, 100
@@ -1550,6 +1733,53 @@ PUTDEC:
 	ADD	A, '0'
 	LD	E, A
 	JP	PUTC
+
+; PUTDEC3 - Byte als 3-stellige Dezimal mit fuehrenden Leerzeichen
+;
+; A=Wert (0-255), gibt z.B. " 64" oder "128" aus.
+; Wie PUTDEC, aber fuehrende Nullen werden als Leerzeichen ausgegeben
+; statt unterdrueckt (fuer rechtsbuendige Spaltenformatierung).
+PUTDEC3:
+	LD	B, 0		; Fuehrende-Null-Flag
+	LD	C, 100
+	CALL	PD3_DIG
+	LD	C, 10
+	CALL	PD3_DIG
+	ADD	A, '0'
+	LD	E, A
+	JP	PUTC
+PD3_DIG:
+	LD	D, 0
+PD3_D1:
+	CP	C
+	JR	C, PD3_D2
+	SUB	C
+	INC	D
+	JR	PD3_D1
+PD3_D2:
+	PUSH	AF
+	LD	A, D
+	OR	B
+	JR	NZ, PD3_PRINT
+	; Fuehrende Null -> Leerzeichen
+	LD	E, ' '
+	PUSH	BC
+	LD	C, CONOUT
+	CALL	BDOS
+	POP	BC
+	POP	AF
+	RET
+PD3_PRINT:
+	LD	B, 1
+	LD	A, D
+	ADD	A, '0'
+	LD	E, A
+	PUSH	BC
+	LD	C, CONOUT
+	CALL	BDOS
+	POP	BC
+	POP	AF
+	RET
 PD_DIG:
 	LD	D, 0
 PD_D1:
@@ -1835,7 +2065,7 @@ GS_NOFAIL:
 ; =============================================================================
 MSG_BANNER:
 	DB	0DH, 0AH
-	DB	'EM256 Full Test v1.5', 0DH, 0AH
+	DB	'EM256 Full Test v1.7', 0DH, 0AH
 	DB	'(c) 2026 Olaf Krieger', 0DH, 0AH
 	DB	'============================', 0DH, 0AH, '$'
 
@@ -1880,7 +2110,10 @@ MSG_C6:	DB	'C6 Stack PUSH/POP', '$'
 MSG_C7:	DB	'C7 32-Bit Addition', '$'
 MSG_C8:	DB	'C8 Byte-Operationen', '$'
 
-MSG_D1:	DB	'D1 Seg 0 March-C DRAM', '$'
+MSG_D1:	DB	'D1 March-C DRAM: ', '$'
+MSG_D1_0KB:	DB	'  0 KB', '$'
+MSG_D1_KB:	DB	' KB', '$'
+MSG_D1_SEG:	DB	'Seg', '$'
 
 MSG_E1:	DB	'E1 Parity-Latch lesen', '$'
 MSG_E2:	DB	'E2 Parity-Latch Reset', '$'
@@ -2036,6 +2269,9 @@ DBG_V6:		DB	0
 DBG_V7:		DB	0
 DBG_C0:		DB	0
 DBG_C1:		DB	0
+
+; March-C Segment-Test
+D1_SEGIDX:	DB	0
 
 ; Stack
 	DS	128

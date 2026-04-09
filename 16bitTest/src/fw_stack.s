@@ -1,9 +1,12 @@
 ; fw_stack.s - C6: Stack-Test (PUSH/POP)
 ;
-; Pusht 0xBEEF und 0xCAFE auf den Stack, poppt sie zurueck
-; und prueft die Reihenfolge (LIFO).
+; Z8001-Firmware fuer EM256 Testprogramm
+; Testet die Stack-Operationen des U8001 (PUSH/POP) auf LIFO-Korrektheit.
+; Pusht 0xBEEF und 0xCAFE, poppt in umgekehrter Reihenfolge zurueck.
 ;
 ; Erwartung: RESULT1 = 0xBEEF, RESULT2 = 0xCAFE, STATUS = 0x0001
+;
+; (c) 2026 Olaf Krieger - MIT Lizenz
 
     ORG  0x0000
 
