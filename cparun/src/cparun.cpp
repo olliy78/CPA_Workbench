@@ -29,8 +29,17 @@
 
 #include <cstdio>
 #include <cstring>
+#include <cerrno>
 #include <string>
 #include <csignal>
+
+#ifdef _WIN32
+#  include <direct.h>
+#  define OS_CHDIR _chdir
+#else
+#  include <unistd.h>
+#  define OS_CHDIR chdir
+#endif
 
 static volatile bool g_running = true;
 
@@ -73,6 +82,19 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // Change into the working directory so that all subsequent file operations
+    // (via the CP/M BDOS emulation) are naturally relative to it.  This works
+    // with both absolute paths ("-dir /tmp/build") and relative paths
+    // ("-dir ../build"), and removes the need for the build scripts to pass
+    // -dir at all when they already set the subprocess cwd correctly.
+    if (workDir != ".") {
+        if (OS_CHDIR(workDir.c_str()) != 0) {
+            fprintf(stderr, "cparun: cannot change to directory '%s': %s\n",
+                    workDir.c_str(), strerror(errno));
+            return 1;
+        }
+    }
+
     // Build argument string from remaining args
     std::string command = argv[cmdStart];
     std::string args;
@@ -85,10 +107,10 @@ int main(int argc, char* argv[]) {
     signal(SIGINT, signalHandler);
     signal(SIGTERM, signalHandler);
 
-    // Create emulator components
+    // Create emulator components – always use "." because we already chdir-ed above.
     Z80 cpu;
     Memory mem;
-    CpmBdos bdos(cpu, mem, workDir);
+    CpmBdos bdos(cpu, mem, ".");
 
     // Set up page zero and traps
     bdos.setup();

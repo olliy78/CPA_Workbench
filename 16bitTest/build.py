@@ -237,7 +237,7 @@ def main():
     cparun = find_cparun()
     log(f"\n[STEP 5] Assemblieren mit M80 ({source_mac_up} -> {source_erl})")
     result = run(
-        [cparun, '-dir', BUILD_DIR, 'm80', f'{source_erl}={source_name_up}'],
+        [cparun, 'm80', f'{source_erl}={source_name_up}'],
         cwd=BUILD_DIR, check=True
     )
 
@@ -256,7 +256,7 @@ def main():
     log(f"\n[STEP 6] Linken mit LINKMT ({source_erl} -> {target_com_up})")
     log(f"    Ladeadresse: 0x{LOAD_ADDR} (CP/M .COM-Standard)")
     run(
-        [cparun, '-dir', BUILD_DIR, 'linkmt',
+        [cparun, 'linkmt',
          f'{source_name_up}={source_name_up}/p:{LOAD_ADDR}'],
         cwd=BUILD_DIR, check=True
     )

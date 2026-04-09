@@ -250,7 +250,7 @@ def assemble_file(cparun, cpm_name):
 
     # M80 Aufruf: objfile,lstfile=source
     result = run(
-        [cparun, '-dir', BUILD_DIR, 'm80',
+        [cparun, 'm80',
          f'{cpm_name},{cpm_name}={cpm_name}'],
         cwd=BUILD_DIR, check=False
     )
@@ -261,7 +261,7 @@ def assemble_file(cparun, cpm_name):
         # Alternativer Aufruf
         log(f"    PRN nicht gefunden, versuche alternativen Aufruf...")
         result = run(
-            [cparun, '-dir', BUILD_DIR, 'm80',
+            [cparun, 'm80',
              f'={cpm_name}/L'],
             cwd=BUILD_DIR, check=False
         )

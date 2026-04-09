@@ -347,10 +347,18 @@ std::string CpmBdos::findFileCI(const std::string& name) {
 
 /**
  * @brief Kombiniert Arbeitsverzeichnis und Dateiname zu einem Host-Pfad.
+ *
+ * Verwendet den betriebssystemspezifischen Pfadtrenner.
+ * Mit dem chdir-Ansatz in cparun.cpp ist workDir_ in der Praxis immer ".",
+ * sodass diese Funktion schlicht den Dateinamen zurueckgibt.
  */
 std::string CpmBdos::hostPath(const std::string& name) {
     if (workDir_.empty() || workDir_ == ".") return name;
+#ifdef _WIN32
+    return workDir_ + "\\" + name;
+#else
     return workDir_ + "/" + name;
+#endif
 }
 
 /**

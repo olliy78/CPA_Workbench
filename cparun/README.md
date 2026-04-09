@@ -91,8 +91,13 @@ cparun [options] <command> [args...]
 
 | Option | Description |
 |---|---|
-| `-dir <path>` | Working directory where `.com` files and data files are located (default: current directory) |
+| `-dir <path>` | Change into `<path>` before starting emulation. Supports both absolute and relative paths. When omitted, the current working directory is used. |
 | `-h`, `--help` | Print help and exit |
+
+> **Tip for build scripts:** Since `-dir` simply performs a `chdir` at startup,
+> you can achieve the same effect by setting the subprocess working directory
+> (`cwd` in Python's `subprocess.run`) and omitting `-dir` altogether.  Both
+> approaches are equivalent; choose whichever is more convenient.
 
 ### Arguments
 

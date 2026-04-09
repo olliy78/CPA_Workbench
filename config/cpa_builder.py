@@ -152,7 +152,9 @@ class CPABuilder:
         """Externen Befehl ausführen, Ausgabe loggen und optional Fehler werfen.
 
         Args:
-            cmd: Befehl als Liste (z.B. ['tools/cparun', '-dir', 'build', 'm80', ...])
+            cmd: Befehl als Liste (z.B. ['tools/cparun', 'm80', ...])
+                 cparun-Aufrufe benötigen kein '-dir'-Argument mehr – das
+                 Arbeitsverzeichnis wird über den cwd-Parameter gesetzt.
             cwd: Arbeitsverzeichnis (Standard: self.project_dir)
             check: Bei True wird bei Rückgabewert != 0 ein RuntimeError geworfen
             timeout: Timeout in Sekunden (Standard: 120, None = kein Timeout)
@@ -533,16 +535,16 @@ class CPABuilder:
         # STEP 4: Assemblieren mit M80 - Listing erzeugen (für /p:-Wert-Extraktion)
         # Das Listing enthält den /p:-Wert, der für den Linker benötigt wird
         self.log("[STEP 4] Assemblieren mit M80")
-        cparun_abs = os.path.abspath(self._abs(self.cparun))
+        cparun_abs = self._abs(self.cparun)
         result = self._run(
-            [cparun_abs, '-dir', build_abs, 'm80', f'={main_src}/L'],
+            [cparun_abs, 'm80', f'={main_src}/L'],
             cwd=build_abs, check=False
         )
 
         # STEP 5: M80 Assemblierung - ERL-Datei (relocatable Objektcode) erzeugen
         self.log(f"[STEP 5] Assembliere {main_src}.erl")
         self._run(
-            [cparun_abs, '-dir', build_abs, 'm80', f'{main_src}.erl={main_src}'],
+            [cparun_abs, 'm80', f'{main_src}.erl={main_src}'],
             cwd=build_abs
         )
 
@@ -556,7 +558,7 @@ class CPABuilder:
         # Reihenfolge: cpabas (BIOS-Basis), ccp (Console Command Processor),
         # bdos (Basic Disk Operating System), bios/biop (BIOS der Variante)
         self._run(
-            [cparun_abs, '-dir', build_abs, 'linkmt', f'@OS=cpabas,ccp,bdos,{main_src}/p:{p_value}'],
+            [cparun_abs, 'linkmt', f'@OS=cpabas,ccp,bdos,{main_src}/p:{p_value}'],
             cwd=build_abs
         )
 
