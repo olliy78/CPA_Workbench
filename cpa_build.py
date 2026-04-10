@@ -147,10 +147,12 @@ class CPAWorkbenchApp:
         self.build_widgets = {}         # CONFIG_KEY → (Typ, tk.Variable) für Build-Configs
         self.log_queue = queue.Queue()  # Thread-sichere Warteschlange für Log-Nachrichten
         self.build_running = False      # Flag: läuft gerade ein Build?
+        self._loading = False           # Flag: UI-Aufbau läuft, Auto-Save unterdrücken
 
         # Build-Engine mit Callback für Log-Ausgaben in die GUI
         self.builder = CPABuilder(PROJECT_DIR, log_callback=self._queue_log)
 
+        self._loading = True            # Auto-Save während UI-Aufbau unterdrücken
         self._create_ui()               # Oberfläche aufbauen
         self._load_config()             # Konfiguration aus .config laden
         self._poll_log()                # Log-Polling-Timer starten
@@ -219,7 +221,7 @@ class CPAWorkbenchApp:
         btn_frame = ttk.Frame(bottom_frame)
         btn_frame.pack(fill='x', pady=(0, 5))
 
-        self.btn_save = ttk.Button(btn_frame, text='Speichern', command=self._save_config)
+        self.btn_save = ttk.Button(btn_frame, text='Patch .mac', command=self._do_patch_mac)
         self.btn_save.pack(side='left', padx=2)
 
         self.btn_clean = ttk.Button(btn_frame, text='Clean', command=self._do_clean)
@@ -463,7 +465,11 @@ class CPAWorkbenchApp:
             sel = var.get()
             help_label.config(text=help_map.get(sel, ''))
 
-        combo.bind('<<ComboboxSelected>>', update_help)
+        def on_combo_selected(event=None):
+            update_help(event)
+            self._auto_save_config()
+
+        combo.bind('<<ComboboxSelected>>', on_combo_selected)
         update_help()  # Initialen Hilfetext für die Vorgabe-Auswahl setzen
 
         # Widget speichern: Alle Config-Namen dieser Choice-Gruppe teilen sich
@@ -496,12 +502,16 @@ class CPAWorkbenchApp:
                 default_val = cfg.default.strip('"').strip("'")
                 var.set(default_val)
             widgets_dict[config_key] = ('string', var)
+            # Auto-Sync bei Fokusverlust
+            entry.bind('<FocusOut>', self._auto_save_config)
         else:
             # Bool: Checkbox über Spalte 0+1
             var = tk.BooleanVar(value=(cfg.default == 'y'))
             cb = ttk.Checkbutton(parent, text=cfg.label or cfg.name, variable=var)
             cb.grid(row=row[0], column=0, columnspan=2, sticky='w', padx=5, pady=2)
             widgets_dict[config_key] = ('bool', var)
+            # Auto-Sync bei Klick
+            var.trace_add('write', self._auto_save_config)
 
         # Spalte 2: Hilfetext
         if help_text:
@@ -692,16 +702,40 @@ class CPAWorkbenchApp:
 
     def _load_config(self):
         """Konfiguration aus .config laden und alle GUI-Widgets aktualisieren."""
+        self._loading = True
         self.config = CPABuilder.load_config(CONFIG_FILE)
         self._config_to_gui()           # Config-Werte in GUI-Widgets übertragen
         self._on_variant_changed(save=False)  # System-Tab für gewählte Variante laden
+        self._loading = False
         self.log_msg('[INFO] Konfiguration geladen.')
+
+    def _auto_save_config(self, *args):
+        """GUI-Werte automatisch in .config synchronisieren (Callback für Traces/Events)."""
+        if self._loading:
+            return
+        self._gui_to_config()
+        CPABuilder.save_config(self.config, CONFIG_FILE)
 
     def _save_config(self):
         """GUI-Werte sammeln und als .config-Datei speichern."""
         self._gui_to_config()           # GUI-Werte ins Config-Dict übernehmen
         CPABuilder.save_config(self.config, CONFIG_FILE)
         self.log_msg('[INFO] Konfiguration gespeichert.')
+
+    def _do_patch_mac(self):
+        """Aktuelle Konfiguration in die .mac-Quelldateien patchen."""
+        self._auto_save_config()
+        variant = self.variant_var.get()
+        if not variant:
+            messagebox.showerror('Fehler', 'Keine Systemvariante gewählt!')
+            return
+        kconfig_sys = os.path.join(PROJECT_DIR, 'config', variant, 'Kconfig.system')
+        if os.path.isfile(kconfig_sys):
+            try:
+                self.builder.run_patch_mac(CONFIG_FILE, variant, 'patch')
+                self.log_msg('[INFO] Konfiguration in .mac-Dateien geschrieben.')
+            except Exception as e:
+                self.log_msg(f'[FEHLER] patch_mac patch: {e}')
 
     def _config_to_gui(self):
         """Config-Dict → GUI-Widgets: Variante und Build-Optionen setzen."""
@@ -798,16 +832,17 @@ class CPAWorkbenchApp:
     def _on_variant_changed(self, save=True):
         """Wird aufgerufen, wenn die Systemvariante geändert wird.
 
-        Speichert die aktuelle Konfiguration, führt patch_mac.py extract
-        aus (um aktuelle Werte aus den .mac-Quellen zu lesen), lädt die
-        Konfiguration neu und baut den System-Tab für die neue Variante auf.
+        Führt patch_mac.py extract aus (um aktuelle Werte aus den
+        .mac-Quellen zu lesen), lädt die Konfiguration neu und baut
+        den System-Tab für die neue Variante auf.
+        Die .config ist durch Auto-Sync bereits aktuell.
         """
         variant = self.variant_var.get()
         if not variant:
             return
 
         if save:
-            # Aktuelle Werte sichern, bevor System-Tab neu geladen wird
+            # Aktuelle Werte sichern (Auto-Sync hat ggf. nicht alle erfasst)
             self._gui_to_config()
 
         # Alte SYSTEM_ Einträge entfernen
@@ -828,11 +863,13 @@ class CPAWorkbenchApp:
             except Exception as e:
                 self.log_msg(f'[WARNUNG] patch_mac extract: {e}')
 
-        # System-Tab neu aufbauen
+        # System-Tab neu aufbauen (Auto-Save unterdrücken während Widgets erstellt werden)
+        self._loading = True
         self._refresh_system_tab()
 
         # System-Widgets mit geladenen Werten füllen
         self._apply_config_to_widgets(self.system_widgets)
+        self._loading = False
 
         self.log_msg(f'[INFO] Variante gewechselt: {variant}')
 
@@ -877,22 +914,13 @@ class CPAWorkbenchApp:
             messagebox.showwarning('Warnung', 'Build läuft bereits!')
             return
 
-        # Konfiguration speichern, damit patch_mac die aktuellen Werte hat
-        self._save_config()
+        # .mac-Dateien patchen (speichert auch .config)
+        self._do_patch_mac()
 
         variant = self.variant_var.get()
         if not variant:
             messagebox.showerror('Fehler', 'Keine Systemvariante gewählt!')
             return
-
-        # patch_mac.py patch ausführen: .config-Werte in die .mac-Dateien schreiben
-        kconfig_sys = os.path.join(PROJECT_DIR, 'config', variant, 'Kconfig.system')
-        if os.path.isfile(kconfig_sys):
-            try:
-                self.builder.run_patch_mac(CONFIG_FILE, variant, 'patch')
-            except Exception as e:
-                self.log_msg(f'[FEHLER] patch_mac patch: {e}')
-                return
 
         # Clean wenn in den Build-Optionen aktiviert
         if self.config.get('CONFIG_BUILD_CLEAN') == 'y':
