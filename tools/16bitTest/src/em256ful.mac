@@ -1,4 +1,4 @@
-	TITLE	'EM256 Full Test v1.7'
+	TITLE	'EM256 Full Test v1.8'
 	.Z80
 ;
 ; em256ful.mac - Umfassendes Testprogramm fuer die EM256 16-Bit-Erweiterung
@@ -67,6 +67,7 @@ RAM16_OFF EQU	0FH		; Seite aus
 ; Mailbox-Offsets (im EM256-Speicher ab EM256ADR)
 MB_CMD	  EQU	008H
 MB_PARAM1 EQU	00AH
+MB_PARAM2 EQU	00CH
 MB_STATUS EQU	010H
 MB_RES1	  EQU	012H
 MB_RES2	  EQU	014H
@@ -801,16 +802,26 @@ C_DONE:
 	LD	(GRP_FAIL), A
 	LD	(GRP_TOTAL), A
 
-; --- D1: March-C DRAM alle 4 Segmente (256 KB) ---
+; --- D1: March-C DRAM alle 4 Segmente (256 KB), phasenweise ---
 	LD	DE, MSG_D1
 	CALL	PUTS
-	; Fortschritt: "  0 KB" anzeigen
-	LD	DE, MSG_D1_0KB
+	; Anfangsstatus: "  0 KB Phase 0/5"
+	LD	DE, MSG_D1_INIT
 	CALL	PUTS
-	; Segment-Schleife: 0, 1, 2, 3
+	; Defekt-Tabelle initialisieren (4 Bytes fuer RAS0-RAS3)
 	XOR	A
-	LD	(D1_SEGIDX), A		; 0-3 Zaehler
+	LD	(DEFECT_RAS+0), A
+	LD	(DEFECT_RAS+1), A
+	LD	(DEFECT_RAS+2), A
+	LD	(DEFECT_RAS+3), A
+	LD	(D1_HAD_ERROR), A
+	; Segment-Schleife: 0, 1, 2, 3
+	LD	(D1_SEGIDX), A
 D1_SEG_LOOP:
+	; Phasen-Schleife: 1, 2, 3, 4, 5
+	LD	A, 1
+	LD	(D1_PHASE), A
+D1_PH_LOOP:
 	; Firmware laden
 	CALL	RAMON_S0
 	LD	HL, FW_MARCH_CODE
@@ -820,17 +831,22 @@ D1_SEG_LOOP:
 	; Segment-Parameter in Mailbox schreiben (MB_PARAM1 = 0x000A)
 	; Z8001 Format: Segment N -> Wort = N * 0x0100
 	LD	A, (D1_SEGIDX)
-	LD	(EM256ADR + MB_PARAM1), A	; High-Byte = Segment-Nr
+	LD	(EM256ADR + MB_PARAM1), A		; High-Byte = Segment-Nr
 	XOR	A
-	LD	(EM256ADR + MB_PARAM1 + 1), A	; Low-Byte = 0
+	LD	(EM256ADR + MB_PARAM1 + 1), A		; Low-Byte = 0
+	; Phasen-Parameter in Mailbox schreiben (MB_PARAM2 = 0x000C)
+	LD	(EM256ADR + MB_PARAM2), A		; High-Byte = 0
+	LD	A, (D1_PHASE)
+	LD	(EM256ADR + MB_PARAM2 + 1), A		; Low-Byte = Phase
 	; Mailbox-Status nullen
+	XOR	A
 	LD	(EM256ADR + MB_STATUS), A
 	LD	(EM256ADR + MB_STATUS + 1), A
 	CALL	RAMOFF
 	; U8001 starten
 	CALL	START_U8000
-	; Lange Pause (~8s pro Segment)
-	LD	D, 20
+	; Pause (~3.4s, genuegt fuer Worst-Case: volle 64KB Fehler + Wait-States)
+	LD	D, 8
 D1DL_O:	LD	E, 0
 D1DL_M:	LD	B, 0
 D1DL_I:	DJNZ	D1DL_I
@@ -843,8 +859,8 @@ D1DL_I:	DJNZ	D1DL_I
 	LD	B, 0
 	LD	C, PIOB
 	OUT	(C), A
-	; Langer Timeout
-	LD	D, TIMEOUT_LONG
+	; Timeout-Poll fuer TREN/INT16
+	LD	D, TIMEOUT_HI
 D1PL_O:	LD	E, 0
 D1PL_I:	LD	B, 0
 	LD	C, PIOA
@@ -865,71 +881,104 @@ D1_RDY:
 	; Ergebnis pruefen
 	LD	A, (MB_STATUS_HI)
 	OR	A
-	JR	NZ, D1_CHK		; High-Byte != 0 -> weiter pruefen
+	JR	NZ, D1_HAVEST
 	LD	A, (MB_STATUS_LO)
 	OR	A
-	JR	Z, D1_TOUT		; STATUS=0000 -> Timeout
-D1_CHK:
+	JP	Z, D1_TOUT		; STATUS=0000 -> Timeout
+D1_HAVEST:
 	LD	A, (MB_STATUS_LO)
-	CP	ST_OK AND 0FFH
-	JR	NZ, D1_SFAIL		; STATUS != OK -> Speicherfehler
-	LD	A, (MB_STATUS_HI)
-	OR	A
-	JR	NZ, D1_SFAIL
-	; Segment OK - Fortschritt aktualisieren
-	; CR ausgeben, dann "D1 March-C DRAM: XXX KB"
-	LD	E, 0DH			; CR (Carriage Return)
+	CP	ST_FAIL AND 0FFH
+	JR	Z, D1_CHERR		; STATUS=FEHLER -> Fehler-Bits auswerten
+	; Phase OK (oder Phase 1 = nur Schreiben)
+	JR	D1_UPDDISP
+D1_CHERR:
+	; Fehlermaske aus RESULT1 in Defekt-Tabelle eintragen
+	; Mapping: Seg 0,1 -> RAS0 (lo), RAS2 (hi)
+	;          Seg 2,3 -> RAS1 (lo), RAS3 (hi)
+	LD	A, (D1_SEGIDX)
+	CP	2
+	JR	NC, D1_RASHI	; Seg >= 2 -> RAS1/RAS3
+	; Seg 0,1: Low-Byte -> DEFECT_RAS[0], High-Byte -> DEFECT_RAS[2]
+	LD	A, (MB_RES1_LO)
+	LD	HL, DEFECT_RAS+0
+	OR	(HL)
+	LD	(HL), A
+	LD	A, (MB_RES1_HI)
+	LD	HL, DEFECT_RAS+2
+	OR	(HL)
+	LD	(HL), A
+	JR	D1_MARKERR
+D1_RASHI:
+	; Seg 2,3: Low-Byte -> DEFECT_RAS[1], High-Byte -> DEFECT_RAS[3]
+	LD	A, (MB_RES1_LO)
+	LD	HL, DEFECT_RAS+1
+	OR	(HL)
+	LD	(HL), A
+	LD	A, (MB_RES1_HI)
+	LD	HL, DEFECT_RAS+3
+	OR	(HL)
+	LD	(HL), A
+D1_MARKERR:
+	LD	A, 1
+	LD	(D1_HAD_ERROR), A
+D1_UPDDISP:
+	; Fortschrittsanzeige: CR + "D1 DRAM: XXX-YYY KB Phase N/5"
+	LD	E, 0DH
 	CALL	PUTC
 	LD	DE, MSG_D1
 	CALL	PUTS
-	; KB berechnen: (Segment+1) * 64
+	; KB-Bereich: Segment * 64 - (Segment+1) * 64
 	LD	A, (D1_SEGIDX)
-	INC	A
-	; A * 64: Shift links 6x (= *64), max 256
-	LD	H, 0
-	LD	L, A
-	ADD	HL, HL			; *2
-	ADD	HL, HL			; *4
-	ADD	HL, HL			; *8
-	ADD	HL, HL			; *16
-	ADD	HL, HL			; *32
-	ADD	HL, HL			; *64
-	; HL = KB-Wert (64, 128, 192 oder 256)
-	LD	A, L
-	LD	D, H			; D:A = 16-Bit Wert
-	; Dezimal ausgeben (max 256)
-	PUSH	AF
-	LD	A, D
-	OR	A
-	JR	Z, D1_NO100
-	; >= 256
-	LD	E, '2'
-	CALL	PUTC
-	LD	E, '5'
-	CALL	PUTC
-	LD	E, '6'
-	CALL	PUTC
-	JR	D1_KBDONE
-D1_NO100:
-	POP	AF
-	PUSH	AF
-	CALL	PUTDEC3
-D1_KBDONE:
-	POP	AF
-	LD	DE, MSG_D1_KB
+	ADD	A, A			; *2 (Index in Worttabelle)
+	LD	E, A
+	LD	D, 0
+	LD	HL, D1_RANGE_TAB
+	ADD	HL, DE
+	LD	E, (HL)
+	INC	HL
+	LD	D, (HL)		; DE = Adresse des Bereichs-Strings
 	CALL	PUTS
-	; Naechstes Segment
+	; " Phase "
+	LD	DE, MSG_D1_PHASE
+	CALL	PUTS
+	; Phasennummer
+	LD	A, (D1_PHASE)
+	ADD	A, '0'
+	LD	E, A
+	CALL	PUTC
+	; "/5"
+	LD	DE, MSG_D1_OF5
+	CALL	PUTS
+	; Naechste Phase
+	LD	A, (D1_PHASE)
+	INC	A
+	LD	(D1_PHASE), A
+	CP	6			; Phase 6 -> alle 5 fertig
+	JP	C, D1_PH_LOOP
+	; Alle 5 Phasen fuer dieses Segment fertig -> naechstes Segment
 	LD	A, (D1_SEGIDX)
 	INC	A
 	LD	(D1_SEGIDX), A
 	CP	4
 	JP	C, D1_SEG_LOOP
-	; Alle 4 Segmente OK!
+	; Alle 4 Segmente getestet
+	; Abschlusszeile: CR + "D1 DRAM: 256 KB" + Leerzeichen
+	LD	E, 0DH
+	CALL	PUTC
+	LD	DE, MSG_D1
+	CALL	PUTS
+	LD	DE, MSG_D1_DONE
+	CALL	PUTS
+	; Fehlerergebnis pruefen
+	LD	A, (D1_HAD_ERROR)
+	OR	A
+	JR	NZ, D1_REPORT
+	; Kein Fehler
 	CALL	PRINT_OK
 	CALL	COUNT_PASS
-	JR	D_DONE
+	JP	D_DONE
 D1_TOUT:
-	; Segment-Info ausgeben
+	; Timeout: Segment-Info ausgeben
 	LD	E, 0DH
 	CALL	PUTC
 	LD	DE, MSG_D1
@@ -937,27 +986,76 @@ D1_TOUT:
 	LD	DE, MSG_D1_SEG
 	CALL	PUTS
 	LD	A, (D1_SEGIDX)
+	ADD	A, '0'
+	LD	E, A
+	CALL	PUTC
+	LD	E, ' '
+	CALL	PUTC
+	LD	DE, MSG_D1P
+	CALL	PUTS
+	LD	A, (D1_PHASE)
 	ADD	A, '0'
 	LD	E, A
 	CALL	PUTC
 	CALL	PRINT_TIMEOUT
-	CALL	DBG_TOUT
 	CALL	COUNT_FAIL_D1
-	JR	D_DONE
-D1_SFAIL:
-	LD	E, 0DH
-	CALL	PUTC
-	LD	DE, MSG_D1
+	JP	D_DONE
+D1_REPORT:
+	; Fehler gefunden -> [FEHLER] + Defekt-Liste
+	CALL	PRINT_FAIL
+	CALL	COUNT_FAIL_D1
+	; Defekte DRAM-ICs auflisten
+	; Bank 0-3 (RAS0-RAS3), je 8 Datenbits (0-7)
+	LD	C, 0			; Bank-Zaehler (0-3)
+D1_BANK_LOOP:
+	LD	B, 0
+	LD	HL, DEFECT_RAS
+	ADD	HL, BC
+	LD	A, (HL)			; Defekt-Bitmask fuer diese Bank
+	OR	A
+	JR	Z, D1_NEXT_BANK	; keine Defekte in dieser Bank
+	; Bits 0-7 durchgehen
+	LD	E, A			; E = Bitmask
+	LD	D, 0			; D = Bit-Zaehler (0-7)
+D1_BIT_LOOP:
+	BIT	0, E
+	JR	Z, D1_NEXT_BIT
+	; Fehler in Bank C Bit D
+	PUSH	DE
+	PUSH	BC
+	LD	DE, MSG_D1_BANK
 	CALL	PUTS
-	LD	DE, MSG_D1_SEG
-	CALL	PUTS
-	LD	A, (D1_SEGIDX)
+	POP	BC
+	PUSH	BC
+	LD	A, C
 	ADD	A, '0'
 	LD	E, A
 	CALL	PUTC
-	CALL	PRINT_FAIL
-	CALL	COUNT_FAIL_D1
-	CALL	PRINT_MARCH_DETAIL
+	LD	DE, MSG_D1_BIT
+	CALL	PUTS
+	POP	BC
+	POP	DE
+	PUSH	DE
+	PUSH	BC
+	LD	A, D
+	ADD	A, '0'
+	LD	E, A
+	CALL	PUTC
+	LD	DE, MSG_CRLF
+	CALL	PUTS
+	POP	BC
+	POP	DE
+D1_NEXT_BIT:
+	SRL	E
+	INC	D
+	LD	A, D
+	CP	8
+	JR	C, D1_BIT_LOOP
+D1_NEXT_BANK:
+	INC	C
+	LD	A, C
+	CP	4
+	JR	C, D1_BANK_LOOP
 
 D_DONE:
 	CALL	PRINT_GRP_SUMMARY
@@ -2110,10 +2208,19 @@ MSG_C6:	DB	'C6 Stack PUSH/POP', '$'
 MSG_C7:	DB	'C7 32-Bit Addition', '$'
 MSG_C8:	DB	'C8 Byte-Operationen', '$'
 
-MSG_D1:	DB	'D1 March-C DRAM: ', '$'
-MSG_D1_0KB:	DB	'  0 KB', '$'
-MSG_D1_KB:	DB	' KB', '$'
-MSG_D1_SEG:	DB	'Seg', '$'
+MSG_D1:	DB	'D1 DRAM: ', '$'
+MSG_D1_INIT: DB	'  0-  0 KB Phase 0/5', '$'
+MSG_D1_PHASE: DB ' KB Phase ', '$'
+MSG_D1_OF5:	DB	'/5', '$'
+MSG_D1_DONE: DB	'256 KB              ', '$'
+MSG_D1_SEG:	DB	'Seg ', '$'
+MSG_D1P:	DB	'Phase ', '$'
+MSG_D1_BANK: DB	'   Bank ', '$'
+MSG_D1_BIT:	DB	' Bit ', '$'
+MSG_D1R0:	DB	'  0- 64', '$'
+MSG_D1R1:	DB	' 64-128', '$'
+MSG_D1R2:	DB	'128-192', '$'
+MSG_D1R3:	DB	'192-256', '$'
 
 MSG_E1:	DB	'E1 Parity-Latch lesen', '$'
 MSG_E2:	DB	'E2 Parity-Latch Reset', '$'
@@ -2272,6 +2379,12 @@ DBG_C1:		DB	0
 
 ; March-C Segment-Test
 D1_SEGIDX:	DB	0
+D1_PHASE:	DB	0
+D1_HAD_ERROR:	DB	0
+DEFECT_RAS:	DB	0, 0, 0, 0	; RAS0, RAS1, RAS2, RAS3
+
+; KB-Bereich Nachschlagetabelle (Wortadressen der Bereichs-Strings)
+D1_RANGE_TAB:	DW	MSG_D1R0, MSG_D1R1, MSG_D1R2, MSG_D1R3
 
 ; Stack
 	DS	128

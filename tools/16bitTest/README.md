@@ -1,6 +1,6 @@
 # EM256 Comprehensive Test Program – Design Document
 
-**Version:** 1.7  
+**Version:** 1.8  
 **Datum:** 2026-04-09  
 **Autor:** Olaf Krieger  
 **Lizenz:** MIT  
@@ -274,48 +274,52 @@ CALL RAMOFF
 > **Bei Timeout** wird `DBG_TOUT` aufgerufen, das PIO-A-Status, Mailbox-Inhalt,
 > Resetvektor-PC und ersten Opcode bei 0x0040 als Diagnose ausgibt.
 
-### Gruppe D: Autonomer DRAM-Test (U8001) (1 Test, alle 4 Segmente)
+### Gruppe D: Autonomer DRAM-Test (U8001) (1 Test, alle 4 Segmente, phasenweise)
 
 Der U8001 testet selbstständig den EM256-Speicher in allen erkannten Segmenten.
 Das Z80-Programm lädt die Testfirmware fw_march.s und ruft sie für jedes Segment
-(0–3) einzeln auf. Der Segment-Parameter wird über die Mailbox (MB_PARAM1)
-an die Firmware übergeben.
+(0–3) und jede Phase (1–5) einzeln auf. Parameter werden über die Mailbox
+übergeben: MB_PARAM1 = Segment, MB_PARAM2 = Phase.
 
 | Nr  | Test | U8001-Firmware | Erwartung |
 |-----|------|----------------|----------|
-| D1 | Seg 0–3: March-C | 5-Phasen March-C, segmentiert über RR8 | STATUS = OK je Segment |
+| D1 | Seg 0–3: March-C | 5 Phasen × 4 Segmente = 20 Firmware-Aufrufe | Defekt-IC-Liste oder OK |
 
-**Fortschrittsanzeige (v1.7):** Während jedes Segment-Tests zeigt das Programm
-eine KB-basierte Fortschrittsanzeige mit CR-Überschreibung an (via PUTDEC3).
-Beispiel: `  D1 DRAM March-C Seg 0:  64 KB`
+**Phasenweise Ausführung (v1.8):** Jede der 5 March-C-Phasen wird als separater
+Firmware-Aufruf gestartet. Der DRAM-Inhalt bleibt zwischen den Aufrufen erhalten
+(Eigenrefresh-Generator). Nach jeder Phase aktualisiert der Z80 die Anzeige:
+`D1 DRAM: 128-192 KB Phase 3/5`
 
-**Segmentierte Adressierung (v1.7):** Die Firmware fw_march.s verwendet das
+**Fehlerakkumulation (v1.8):** Die Firmware bricht bei Fehlern NICHT ab, sondern
+akkumuliert eine 16-Bit-Fehlermaske (OR aller XOR Soll/Ist). Der Z80 wertet
+diese Maske nach jeder Phase aus und ordnet fehlerhafte Bits den physischen
+DRAM-ICs zu.
+
+**DRAM-IC-Identifikation (v1.8):** Die 256 KB Speichermatrix besteht aus
+36 DRAM-ICs (4 Bänke × 9 Chips: 8 Daten + 1 Parität):
+- Bank 0 (RAS0): unteres Datenbyte, Segmente 0,1
+- Bank 1 (RAS1): unteres Datenbyte, Segmente 2,3
+- Bank 2 (RAS2): oberes Datenbyte, Segmente 0,1
+- Bank 3 (RAS3): oberes Datenbyte, Segmente 2,3
+
+Bei Fehlern wird die Zuordnung Segment → Bank über SG1 bestimmt:
+- Seg 0,1 (SG1=0): Fehler-Bits 0–7 → Bank 0, Bits 8–15 → Bank 2
+- Seg 2,3 (SG1=1): Fehler-Bits 0–7 → Bank 1, Bits 8–15 → Bank 3
+
+Ausgabe z.B.: `Bank 2 Bit 5` (Zählung ab 0, max. 36 ICs identifizierbar).
+Bereits identifizierte defekte ICs werden nicht erneut ausgegeben.
+
+**Segmentierte Adressierung (v1.7+):** Die Firmware fw_march.s verwendet das
 Registerpaar RR8 (R8=Segment, R9=Offset) für alle Speicherzugriffe per
-`LD @RR8, Rn`. Dadurch kann jedes Segment (0–3) getestet werden, während
-Code und Mailbox stets in Segment 0 verbleiben. Mailbox-Zugriffe erfolgen
-über ungerade Register (R7, R11) im non-segmented Modus (→ immer Segment 0).
+`LD @RR8, Rn`. Mailbox-Zugriffe erfolgen über ungerade Register (R7, R11)
+im non-segmented Modus (→ immer Segment 0).
 
 **Testbereich:**
 - Segment 0: 0x0100–0xFFFE (Code+Mailbox bei 0x0000–0x00FF übersprungen)
 - Segment 1–3: 0x0000–0xFFFE (komplett, 64 KB)
 
-**March-C-Algorithmus (auf U8001):**
-
-```
-; Testet Speicherbereich 0x0100 bis 0xFFFE (wortweise)
-; Phase 1: Aufwärts alle Worte mit 0x0000 füllen
-; Phase 2: Aufwärts jedes Wort lesen (soll 0x0000), überschreiben mit 0xFFFF
-; Phase 3: Aufwärts lesen 0xFFFF (verifiziert Phase-2-Schreiben)
-; Phase 4: Abwärts lesen 0xFFFF, schreiben 0x0000
-; Phase 5: Abwärts lesen 0x0000 (verifiziert Phase-4-Schreiben)
-; Code+Mailbox (0x0000-0x00FF) wird übersprungen!
-```
-
-Der U8001-Firmware-Block ist größer als bei Gruppe C (~226 Bytes Z8001-Code)
-und enthält die gesamte March-C-Logik.
-
-**Timeout:** Die DRAM-Tests dauern länger (je Segment ca. 0.5–1 Sek. bei 4 MHz).
-Der Z80 verwendet `WAIT_READY_LONG` mit erweitertem Timeout (~16 Sekunden).
+**Timeout:** Pro Phase ~700ms Wartezeit + Polling (~2 Sek. Timeout).
+Gesamt: 20 Aufrufe × ~1 Sek. ≈ 20 Sekunden für 256 KB.
 
 ### Gruppe E: Paritätstests (2 Tests)
 
@@ -423,86 +427,60 @@ Der Segment-Parameter wird vom Z80-Programm vor dem Start des U8001 in die
 Mailbox (MB_PARAM1, Offset 0x000A) geschrieben. Die Firmware liest ihn über
 ein ungerades Register: `LD R11, #0x000A; LD R8, @R11`.
 
-### 5.3 DRAM-Test-Firmware (Gruppe D – March-C, v1.7)
+### 5.3 DRAM-Test-Firmware (Gruppe D – March-C, v1.8)
 
-Pseudo-Code für den March-C-Test eines Segments:
+Die Firmware führt eine **einzelne Phase** pro Aufruf aus und akkumuliert Fehler.
 
 ```z8001
-; Register-Konventionen (fw_march.s v1.7):
+; Register-Konventionen (fw_march.s v1.8):
 ; R1  = Testmuster (Soll-Wert)
-; RR8 = Segmentierte Adresse für Speicherzugriff:
-;        R8 = Ziel-Segment (aus MB_PARAM1 geladen, bleibt konstant)
-;        R9 = Offset-Zähler (wird in Schleifen inkrementiert/dekrementiert)
+; R2  = Fehlermasken-Akkumulator (OR aller XOR Soll/Ist)
 ; R3  = Startoffset (0x0100 für Seg 0, 0x0000 für Seg 1-3)
 ; R4  = Endoffset (0xFFFE)
-; R5  = Gelesener Wert
-; R6  = Hilfsregister (neues Muster)
-; R7, R11 = Mailbox-Zugriff (ungerade → non-segmented → Seg 0)
-; R15 = SP (0x00FE, knapp unter Testbereich)
+; R5  = Gelesener Wert (Scratch)
+; R6  = Neues Muster (für Phasen 2, 4)
+; R7, R11 = Mailbox-Zugriff (ungerade → Seg 0)
+; RR8 = Segmentierte Adresse (R8=Segment, R9=Offset)
+; R10 = Phasennummer (aus MB_PARAM2)
+; R13 = Fehleranzahl
+; R14 = Offset der ersten Fehlerstelle
 
-MARCH_C:
-    LD  R15, #0x00FE        ; SP unter Testbereich
+START:
+    LD  R2, #0x0000         ; Fehlermaske = leer
+    LD  R13, #0x0000        ; Fehleranzahl = 0
+    LD  R14, #0xFFFF        ; keine Fehleradresse
 
-    ; Segment-Parameter aus Mailbox lesen
-    LD  R11, #0x000A        ; R11 ungerade → non-segmented → MB_PARAM1
-    LD  R8, @R11            ; R8 = Ziel-Segment (0x0000, 0x0100, 0x0200, 0x0300)
+    ; Parameter lesen
+    LD  R11, #0x000A        ; MB_PARAM1
+    LD  R8, @R11            ; R8 = Segment
+    LD  R11, #0x000C        ; MB_PARAM2
+    LD  R10, @R11           ; R10 = Phase (1-5)
 
-    ; Startadresse bestimmen
-    CP  R8, #0x0000         ; Segment 0?
-    JR  NE, OTHER_SEG
-    LD  R3, #0x0100         ; Seg 0: Code+Mailbox überspringen
-    JR  T, SETUP_OK
-OTHER_SEG:
-    LD  R3, #0x0000         ; Seg 1-3: komplett testen
-SETUP_OK:
-    LD  R4, #0xFFFE         ; Endadresse (letztes Wort)
+    ; Dispatch → DO_P1..DO_P5
 
-; Phase 1: Aufwärts mit 0x0000 füllen
-    LD  R1, #0x0000
-    LD  R9, R3              ; Offset = Start
-P1_LOOP:
-    LD  @RR8, R1            ; Segmentierter Zugriff: {R8:R9} ← R1
-    CP  R9, R4              ; Ende erreicht?
-    JR  EQ, P1_DONE
-    INC R9, #2              ; Nächstes Wort
-    JR  T, P1_LOOP
-P1_DONE:
+; Fehlerprüfung (inline in jeder Lese-Phase):
+    LD  R5, @RR8            ; Wort lesen
+    XOR R5, R1              ; R5 = Fehler-Bits (0 wenn OK)
+    JR  EQ, Px_OK           ; kein Fehler
+    OR  R2, R5              ; Fehlermaske akkumulieren
+    INC R13, #1             ; Zähler++
+Px_OK:
 
-; Phase 2: Aufwärts: 0x0000 lesen, 0xFFFF schreiben
-    LD  R1, #0x0000         ; Erwartung
-    LD  R6, #0xFFFF         ; Neues Muster
-    LD  R9, R3
-P2_LOOP:
-    LD  R5, @RR8
-    CP  R5, R1
-    JR  NZ, FAIL
-    LD  @RR8, R6
-    CP  R9, R4
-    JR  EQ, P2_DONE
-    INC R9, #2
-    JR  T, P2_LOOP
-P2_DONE:
-
-; Phase 3-5 analog (siehe fw_march.s)
-
-; Erfolg (non-segmented Mailbox-Zugriff)
-    LD  R7, #0x0010         ; R7 ungerade → Seg 0
-    LD  R1, #0x0001         ; STATUS = OK
-    LD  @R7, R1
-    JR  T, $                ; Endlosschleife
-
-FAIL:
-    LD  R7, #0x0010
-    LD  R11, #0x0002        ; STATUS = FEHLER
-    LD  @R7, R11
-    INC R7, #2
-    LD  @R7, R1             ; RESULT1 = Soll
-    INC R7, #2
-    LD  @R7, R5             ; RESULT2 = Ist
-    INC R7, #2
-    LD  @R7, R9             ; RESULT3 = Fehleradresse (Offset)
-    JR  T, $
+; Ergebnis:
+    ; STATUS  = 0x0001 (OK) oder 0x0002 (Fehler)
+    ; RESULT1 = Fehlermaske (16 Bit: jedes gesetzte Bit = defekte Datenleitung)
+    ; RESULT2 = Fehleranzahl
+    ; RESULT3 = Offset der ersten Fehlerstelle
 ```
+
+**Fehlermaske → IC-Zuordnung (Z80-seitig):**
+Die 16-Bit-Fehlermaske wird vom Z80 in je 8 Bit für unteres/oberes Datenbyte
+aufgeteilt und über das Segment der zugehörigen RAS-Bank zugeordnet:
+- Seg 0/1 → Bits 0–7: Bank 0, Bits 8–15: Bank 2
+- Seg 2/3 → Bits 0–7: Bank 1, Bits 8–15: Bank 3
+
+Die Defekt-Tabelle (4 Bytes, je Bank) wird mit OR akkumuliert, sodass jeder
+IC nur einmal identifiziert wird.
 
 ---
 
@@ -515,7 +493,7 @@ FAIL:
 ├── build.py                 ← Build-Script (z8001asm + Präprozessor + M80 + LINKMT)
 ├── z8001asm.py              ← Z8001 Cross-Assembler (Python, ~2075 Zeilen)
 ├── src/
-│   ├── em256ful.mac         ← Volltest (Z80-Assembler, M80-Syntax, ~2215 Zeilen)
+│   ├── em256ful.mac         ← Volltest (Z80-Assembler, M80-Syntax, ~2400 Zeilen)
 │   ├── em256tst.mac         ← Original-Test (bestehend, nur Grundfunktionstest)
 │   ├── fw_add.s             ← C1: Additionstest
 │   ├── fw_sub.s             ← C2: Subtraktionstest
@@ -525,9 +503,9 @@ FAIL:
 │   ├── fw_stack.s           ← C6: Stacktest
 │   ├── fw_add32.s           ← C7: 32-Bit-Arithmetik
 │   ├── fw_byte.s            ← C8: Byte-Operationen
-│   └── fw_march.s           ← D1: March-C DRAM-Test (segmentiert, ~302 Bytes)
+│   └── fw_march.s           ← D1: March-C DRAM-Test (phasenweise, ~332 Bytes)
 ├── build/
-│   └── em256ful.com         ← Fertiges CP/M-Programm (~6400 Bytes)
+│   └── em256ful.com         ← Fertiges CP/M-Programm (~6784 Bytes)
 └── docs/
     ├── em256test_design.md  ← Dieses Dokument
     ├── Auszug_Handbuch.md   ← Handbuch A 5120.16

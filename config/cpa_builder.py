@@ -59,8 +59,9 @@ class CPABuilder:
     DEFAULT_IMAGE_SIZE = 780
     DEFAULT_DISKDEF = 'cpa780_withoutBoot'
 
-    # Bootsektor-Quellen
-    BOOTSEC_SRC_DIR = os.path.join('bootsec', 'src')
+    # Bootsektor-Quellen (nach tools/bootsec verschoben)
+    BOOTSEC_SRC_DIR = os.path.join('tools', 'bootsec', 'src')
+    BOOTSEC_PREBUILT_FIXED = os.path.join('prebuilt', 'bc_a5120', 'bootsec.bin')
 
     def __init__(self, project_dir, log_callback=None):
         """
@@ -359,7 +360,8 @@ class CPABuilder:
             'additions_dir': self.ADDITIONS_DIR,
             'tools_dir': self.TOOLS_DIR,
             'os_target': os.path.join(self.BUILD_DIR, '@os.com'),
-            'bootsector': os.path.join(self.BUILD_DIR, 'bootsec.bin'),
+            # Fuer Diskettenbau immer die feste Prebuilt-Version verwenden
+            'bootsector': self.BOOTSEC_PREBUILT_FIXED,
             'bootsector_prebuilt': os.path.join('prebuilt', variant, 'bootsec.bin'),
         }
 
@@ -381,19 +383,13 @@ class CPABuilder:
     # -----------------------------------------------------------------------
 
     # Pfad zum Build-Skript (relativ zum Projektverzeichnis)
-    BOOTSEC_BUILD_SCRIPT = os.path.join('bootsec', 'build_bootsec.py')
+    BOOTSEC_BUILD_SCRIPT = os.path.join('tools', 'bootsec', 'build.py')
 
     def build_bootsec(self, config):
-        """Bootsektor (bootsec.bin) ueber bootsec/build_bootsec.py bauen.
+        """Bootsektor ueber tools/bootsec/build.py bauen.
 
-        Wenn die Quelldateien in bootsec/src/ vorhanden sind, wird das
-        externe Build-Skript aufgerufen, das die 3-Datei-Assemblierung
-        mit M80 durchfuehrt.
-
-        Ist keine Quelle vorhanden, wird die vorkompilierte bootsec.bin
-        aus prebuilt/<variante>/ kopiert.
-
-        Ergebnis: build/bootsec.bin
+        Das Build-Skript erzeugt bootsec.bin und aktualisiert
+        prebuilt/bc_a5120/bootsec.bin.
         """
         variant = self.get_variant(config)
         if not variant:
@@ -403,7 +399,7 @@ class CPABuilder:
         build_abs = self._abs(paths['build_dir'])
         os.makedirs(build_abs, exist_ok=True)
 
-        bootsec_out = os.path.join(paths['build_dir'], 'bootsec.bin')
+        bootsec_out = self.BOOTSEC_PREBUILT_FIXED
 
         # Pruefen ob Quelldateien vorhanden sind
         src_dir = self._abs(self.BOOTSEC_SRC_DIR)
@@ -412,26 +408,21 @@ class CPABuilder:
             for f in os.listdir(src_dir)
         )
 
-        # --- Fallback: vorkompilierte Datei verwenden ---
+        # --- Wenn keine Quellen vorhanden: ohne Build zurück ---
         if not has_sources:
-            prebuilt = paths['bootsector_prebuilt']
-            if os.path.isfile(self._abs(prebuilt)):
-                shutil.copy2(self._abs(prebuilt), self._abs(bootsec_out))
-                self.log(f"[INFO] Bootsektor aus prebuilt/{variant}/ kopiert (keine Quelle vorhanden)")
+            if os.path.isfile(self._abs(bootsec_out)):
+                self.log(f"[INFO] Bootsektor bereits vorhanden: {bootsec_out}")
             else:
-                self.log("[WARNUNG] Kein Bootsektor verfuegbar (weder Quelle noch prebuilt)")
+                self.log("[WARNUNG] Kein Bootsektor verfuegbar (Quelle fehlt und prebuilt/bc_a5120/bootsec.bin nicht vorhanden)")
             return
 
         # --- Aus Quelle bauen (externes Skript) ---
-        self.log("[STEP] Bootsektor aus Quelle assemblieren (build_bootsec.py)")
+        self.log("[STEP] Bootsektor aus Quelle assemblieren (build.py)")
 
         script = self._abs(self.BOOTSEC_BUILD_SCRIPT)
-        prebuilt_abs = self._abs(paths['bootsector_prebuilt'])
-
         cmd = [
             sys.executable, script,
             '--build-dir', build_abs,
-            '--prebuilt', prebuilt_abs,
             '--project-dir', self.project_dir,
         ]
 
@@ -442,7 +433,7 @@ class CPABuilder:
             size = os.path.getsize(self._abs(bootsec_out))
             self.log(f"    Bootsektor erzeugt: {bootsec_out} ({size} Bytes)")
         else:
-            raise RuntimeError("build_bootsec.py hat keine bootsec.bin erzeugt!")
+            raise RuntimeError("build.py hat keine bootsec.bin erzeugt!")
 
     # --- Patch-Integration ---
 
@@ -773,7 +764,6 @@ class CPABuilder:
             self.build_os(config)
 
         if target in ('diskimage', 'diskimagehfe', 'diskimagescp', 'writeimage'):
-            self.build_bootsec(config)
             self.build_diskimage(config)
 
         if target == 'diskimagehfe':

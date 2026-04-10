@@ -634,7 +634,7 @@ biosln	aset	biosln+70h
 diskA	equ	00877
 diskB	equ	11580
 diskC	equ	11580
-diskD	equ	10877
+diskD	equ	0
 
 ; Es wird eine automatische Formaterkennung fuer gaengige CP/M-
 ; Diskettenformate einschliesslich der SCP-Hausformate von CP/A

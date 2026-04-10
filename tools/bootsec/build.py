@@ -22,7 +22,7 @@ Arbeitsweise
 4. Alle drei Dateien mit M80 assemblieren (PRN-Listings erzeugen)
 5. PRN-Listings parsen: Binaerdaten extrahieren und zusammenfuehren
 6. bootsec.bin konstruieren (4-Track-Format, 15104 Bytes)
-7. Vergleich mit Original (prebuilt/bc_a5120/bootsec.bin)
+7. Nach prebuilt/bc_a5120/bootsec.bin kopieren (uerschreiben)
 8. Temporaere Dateien aufraeumen
 
 Voraussetzungen
@@ -35,10 +35,10 @@ Aufruf
 ------
   Standalone:
     cd /pfad/zu/CPA_Workbench
-    python3 bootsec/build_bootsec.py
+        python3 tools/bootsec/build_bootsec.py
 
   Via cpa_builder.py (benutzerdefinierte Pfade):
-    python3 bootsec/build_bootsec.py --build-dir build/ --prebuilt prebuilt/bc_a5120/bootsec.bin
+        python3 tools/bootsec/build_bootsec.py --build-dir build/
 
 Das fertige bootsec.bin liegt danach im jeweiligen Build-Verzeichnis.
 """
@@ -55,7 +55,7 @@ import sys
 # Pfade (relativ zum CPA_Workbench-Root-Verzeichnis)
 # ---------------------------------------------------------------------------
 SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
-PROJECT_DIR = os.path.dirname(SCRIPT_DIR)           # CPA_Workbench/
+PROJECT_DIR = os.path.dirname(os.path.dirname(SCRIPT_DIR))  # CPA_Workbench/
 SRC_DIR     = os.path.join(SCRIPT_DIR, 'src')       # bootsec/src/
 BUILD_DIR   = os.path.join(SCRIPT_DIR, 'build')     # bootsec/build/
 TOOLS_DIR   = os.path.join(PROJECT_DIR, 'tools')    # tools/
@@ -200,40 +200,6 @@ def build_bootsec_bin(track0_data, track2_data):
     return result
 
 
-def compare_with_original(built_data, original_path):
-    """Vergleich des gebauten Images mit dem Original.
-
-    Returns:
-        True wenn identisch, False sonst.
-    """
-    if not os.path.isfile(original_path):
-        log(f"    WARNUNG: Original nicht gefunden: {original_path}")
-        return False
-
-    with open(original_path, 'rb') as f:
-        original = f.read()
-
-    if built_data == original:
-        log(f"    IDENTISCH mit Original ({len(original)} Bytes)")
-        return True
-    else:
-        min_len = min(len(built_data), len(original))
-        diffs = []
-        for i in range(min_len):
-            if built_data[i] != original[i]:
-                diffs.append(i)
-        if len(built_data) != len(original):
-            log(f"    UNTERSCHIEDLICH: Groesse {len(built_data)} vs. {len(original)}")
-        if diffs:
-            log(f"    UNTERSCHIEDLICH: {len(diffs)} Byte(s) weichen ab")
-            for offset in diffs[:20]:
-                log(f"      Offset {offset:04X}H: gebaut={built_data[offset]:02X}H "
-                    f"original={original[offset]:02X}H")
-            if len(diffs) > 20:
-                log(f"      ... und {len(diffs) - 20} weitere")
-        return False
-
-
 def find_prn_file(cpm_name):
     """PRN-Datei finden (cparun erzeugt lowercase auf Linux)."""
     for name in [cpm_name + '.PRN', cpm_name.lower() + '.prn',
@@ -365,9 +331,11 @@ def main():
         f.write(bootsec)
     log(f"    Geschrieben: {output_path} ({len(bootsec)} Bytes)")
 
-    # --- Schritt 7: Vergleich mit Original ---
-    log(f"\n[STEP 7] Vergleich mit Original")
-    match = compare_with_original(bootsec, PREBUILT)
+    # --- Schritt 7: Nach prebuilt kopieren ---
+    log("\n[STEP 7] Kopiere nach prebuilt/bc_a5120/bootsec.bin")
+    os.makedirs(os.path.dirname(PREBUILT), exist_ok=True)
+    shutil.copy2(output_path, PREBUILT)
+    log(f"    Ueberschrieben: {PREBUILT}")
 
     # --- Schritt 8: Aufraeumen ---
     log("\n[STEP 8] Temporaere Dateien loeschen")
@@ -386,15 +354,12 @@ def main():
 
     # --- Fertig ---
     log("\n" + "=" * 60)
-    if match:
-        log("FERTIG: bootsec.bin ist IDENTISCH mit dem Original!")
-    else:
-        log("FERTIG: bootsec.bin erzeugt (weicht vom Original ab)")
+    log("FERTIG: bootsec.bin erzeugt und prebuilt/bc_a5120 aktualisiert")
     log(f"Pfad:   {output_path}")
     log(f"Groesse: {len(bootsec)} Bytes")
     log("=" * 60)
 
-    return 0 if match else 1
+    return 0
 
 
 def parse_args():
@@ -407,8 +372,6 @@ def parse_args():
         description='CPA780 SYL-Bootlader Build-Skript (3-Datei-Version)')
     parser.add_argument('--build-dir',
         help='Build-Verzeichnis fuer Zwischendateien und Ausgabe')
-    parser.add_argument('--prebuilt',
-        help='Pfad zur vorkompilierten bootsec.bin fuer Vergleich')
     parser.add_argument('--project-dir',
         help='Projektverzeichnis (CPA_Workbench)')
     return parser.parse_args()
@@ -419,10 +382,9 @@ if __name__ == '__main__':
     if args.project_dir:
         PROJECT_DIR = os.path.abspath(args.project_dir)
         TOOLS_DIR = os.path.join(PROJECT_DIR, 'tools')
+        PREBUILT = os.path.join(PROJECT_DIR, 'prebuilt', 'bc_a5120', 'bootsec.bin')
     if args.build_dir:
         BUILD_DIR = os.path.abspath(args.build_dir)
-    if args.prebuilt:
-        PREBUILT = os.path.abspath(args.prebuilt)
     try:
         sys.exit(main())
     except RuntimeError as e:

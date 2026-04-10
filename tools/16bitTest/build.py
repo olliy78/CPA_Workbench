@@ -34,9 +34,9 @@ Voraussetzungen
 Aufruf
 ------
   cd /pfad/zu/CPA_Workbench
-  python3 16bitTest/build.py                    # em256full (Standard)
-  python3 16bitTest/build.py em256tst            # Original-Test
-  python3 16bitTest/build.py em256full           # Volltest (explizit)
+    python3 tools/16bitTest/build.py               # em256full (Standard)
+    python3 tools/16bitTest/build.py em256tst      # Original-Test
+    python3 tools/16bitTest/build.py em256full     # Volltest (explizit)
 """
 
 import glob
@@ -51,7 +51,7 @@ import sys
 # Pfade (relativ zum CPA_Workbench-Root-Verzeichnis)
 # ---------------------------------------------------------------------------
 SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
-PROJECT_DIR = os.path.dirname(SCRIPT_DIR)          # CPA_Workbench/
+PROJECT_DIR = os.path.dirname(os.path.dirname(SCRIPT_DIR))  # CPA_Workbench/
 ADDITIONS_DIR = os.path.join(PROJECT_DIR, 'additions', 'bc_a5120')  # Ziel fuer .COM
 SRC_DIR     = os.path.join(SCRIPT_DIR, 'src')      # 16bitTest/src/
 BUILD_DIR   = os.path.join(SCRIPT_DIR, 'build')    # 16bitTest/build/

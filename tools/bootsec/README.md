@@ -1,4 +1,4 @@
-# CPA780 SYL-Bootlader — Funktionale Analyse
+# CPA SYL-Bootlader
 
 **Quelldatei:** `disks/bootsec.bin`  
 **Größe:** 15104 Bytes = 3 × 3328 (System) + 1 × 5120 (Daten-Fueller)  
@@ -10,7 +10,7 @@
 
 ## 1. Überblick
 
-Der CPA780-Bootlader ist ein selbstständiges Minimal-Betriebssystem, das im ROM des Robotron A5120/A5130 Buerocomputers verankert ist. Es wird beim Einschalten von der Diskette geladen und hat die Aufgabe, die eigentliche Betriebssystem-Datei `@OS.COM` vom CP/M-Dateisystem zu lesen, in den Arbeitsspeicher zu laden und auszuführen.
+Der CPA-Bootlader ist ein selbstständiges Minimal-Betriebssystem, das Bootsektor des Robotron A5120/A5130 Buerocomputers verwendet wird. Es wird beim Einschalten von der Diskette geladen und hat die Aufgabe, die eigentliche Betriebssystem-Datei `@OS.COM` vom CP/M-Dateisystem zu lesen, in den Arbeitsspeicher zu laden und auszuführen.
 
 Der Lader besteht aus **drei logischen Abschnitten**, die auf den ersten drei Systemspuren der Diskette liegen.
 

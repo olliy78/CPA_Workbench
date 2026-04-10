@@ -2,26 +2,27 @@
 # Copyright (c) 2026 Olaf Krieger
 # SPDX-License-Identifier: MIT
 """
-build.py  --  Build-Skript fuer den CPA780 SYL-Bootlader (bootsec.bin)
-=======================================================================
+build_bootsec.py  --  Build-Skript fuer den CPA780 SYL-Bootlader (3-Datei-Version)
+===================================================================================
 
-Baut den Bootlader aus der Assembler-Quelle bootsec.mac mithilfe des
+Baut den Bootlader aus drei separaten Assembler-Quellen mithilfe des
 CP/M-Assemblers M80 (ueber cparun) und erzeugt die fertige bootsec.bin
 im SYL-Mixed-Geometry-Format (15104 Bytes).
+
+Quelldateien:
+  src/bootsec_syl.mac     0000H-00FFH  SYL-Header + Bootloader
+  src/mini_bdos_asm.mac   0100H-0CFFH  Mini-BDOS (voll kommentiert)
+  src/boot_bios.mac       0D00H-19FFH  Boot-BIOS / Stage-2
 
 Arbeitsweise
 ------------
 1. Ergebnisverzeichnis bootsec/build/ anlegen (falls noetig)
-2. Quelldatei src/bootsec.mac nach build/ kopieren (CRLF-Konvertierung)
+2. Quelldateien nach build/ kopieren (CRLF-Konvertierung, CP/M 8.3-Namen)
 3. M80-Tool (m80.com) aus tools/ nach build/ kopieren
-4. M80 assemblieren: BOOTSEC.REL und BOOTSEC.PRN erzeugen
-5. PRN-Listing parsen: Binaerdaten extrahieren (Adressen 0000H-19FFH)
-6. bootsec.bin konstruieren:
-   - Track 0: RAM 0000H-0CFFH (3328 Bytes)
-   - Track 1: Fuellung 53H (3328 Bytes)
-   - Track 2: RAM 0D00H-19FFH (3328 Bytes)
-   - Track 3: Fuellung 53H (5120 Bytes)
-7. Vergleich mit Original (prebuilt/bc_a5120/bootsec.bin)
+4. Alle drei Dateien mit M80 assemblieren (PRN-Listings erzeugen)
+5. PRN-Listings parsen: Binaerdaten extrahieren und zusammenfuehren
+6. bootsec.bin konstruieren (4-Track-Format, 15104 Bytes)
+7. Nach prebuilt/bc_a5120/bootsec.bin kopieren (uerschreiben)
 8. Temporaere Dateien aufraeumen
 
 Voraussetzungen
@@ -32,13 +33,17 @@ Voraussetzungen
 
 Aufruf
 ------
-  cd /pfad/zu/CPA_Workbench
-  python3 bootsec/build.py
+  Standalone:
+    cd /pfad/zu/CPA_Workbench
+        python3 tools/bootsec/build_bootsec.py
 
-Das fertige bootsec.bin liegt danach in bootsec/build/bootsec.bin.
+  Via cpa_builder.py (benutzerdefinierte Pfade):
+        python3 tools/bootsec/build_bootsec.py --build-dir build/
+
+Das fertige bootsec.bin liegt danach im jeweiligen Build-Verzeichnis.
 """
 
-import glob
+import argparse
 import os
 import platform
 import re
@@ -50,17 +55,18 @@ import sys
 # Pfade (relativ zum CPA_Workbench-Root-Verzeichnis)
 # ---------------------------------------------------------------------------
 SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
-PROJECT_DIR = os.path.dirname(SCRIPT_DIR)           # CPA_Workbench/
+PROJECT_DIR = os.path.dirname(os.path.dirname(SCRIPT_DIR))  # CPA_Workbench/
 SRC_DIR     = os.path.join(SCRIPT_DIR, 'src')       # bootsec/src/
 BUILD_DIR   = os.path.join(SCRIPT_DIR, 'build')     # bootsec/build/
 TOOLS_DIR   = os.path.join(PROJECT_DIR, 'tools')    # tools/
 PREBUILT    = os.path.join(PROJECT_DIR, 'prebuilt', 'bc_a5120', 'bootsec.bin')
 
-# CP/M-Dateinamen: max 8.3
-SOURCE_NAME    = 'bootsec'
-SOURCE_NAME_UP = SOURCE_NAME.upper()
-SOURCE_MAC     = SOURCE_NAME + '.mac'
-SOURCE_MAC_UP  = SOURCE_NAME_UP + '.MAC'
+# Quelldateien: (lokaler Name, CP/M 8.3 Name)
+SOURCES = [
+    ('bootsec_syl.mac',   'BOOTSYL'),
+    ('mini_bdos_asm.mac', 'MINIBDOS'),
+    ('boot_bios.mac',     'BOOTBIOS'),
+]
 
 # Track-Konstanten
 TRACK_SYS_SIZE   = 3328         # Systemspur: 26 Sektoren x 128 Bytes
@@ -137,28 +143,11 @@ def parse_prn_listing(prn_path):
     Das PRN-Format von M80 (MACRO-80 V3.50) hat pro Zeile:
       __AAAA'  BB BB BB BB  <tab><quellentext>
     wobei AAAA die Adresse (hex), ' der Segment-Marker (ASEG) und
-    BB die assemblierten Bytes sind. Lange DB-Zeilen werden auf
-    Folgezeilen mit weiteren Bytes fortgesetzt.
+    BB die assemblierten Bytes sind.
 
     Gibt ein dict {adresse: byte_value} zurueck.
     """
     memory = {}
-    # M80 PRN Format (MACRO-80 V3.50):
-    #   Cols 0-1:  2 Leerzeichen
-    #   Cols 2-5:  4-stellige Hex-Adresse
-    #   Col  6:    Segment-Marker (' fuer ASEG) oder Leerzeichen
-    #   Cols 7-9:  Leerzeichen
-    #   Cols 10+:  Hex-Daten (maximal ~12 Zeichen)
-    #   Cols 24+:  Quelltext (Mnemonics, Direktiven, Labels)
-    #
-    # Hex-Daten-Format:
-    #   - Einzelbytes: 2 Hex-Digits (z.B. "3E 29")
-    #   - 16-Bit-Operanden: 4 Hex-Digits in Big-Endian-Anzeige (z.B. "C3 0140")
-    #     -> muessen als Little-Endian (Z80-Speicherreihenfolge) gespeichert werden
-    #
-    # WICHTIG: Hex-Daten nur aus Spalten 8-23 extrahieren, um Label-Namen
-    # (z.B. "FDC_INIT:" -> "FD") und Direktiv-Schluesse (z.B. "DB" -> 0xDB)
-    # nicht faelschlich als Daten zu interpretieren.
     addr_re = re.compile(r'^\s{2}([0-9A-Fa-f]{4})[\'` ]?')
 
     with open(prn_path, 'r', errors='replace') as f:
@@ -168,7 +157,6 @@ def parse_prn_listing(prn_path):
                 addr = int(m.group(1), 16)
                 # Hex-Daten aus fixem Spaltenbereich (Cols 8-23)
                 hex_area = line[8:24] if len(line) > 8 else ''
-                # 4-Digit-Werte zuerst matchen (16-Bit LE), dann 2-Digit (Einzelbytes)
                 byte_vals = re.findall(r'[0-9A-Fa-f]{4}|[0-9A-Fa-f]{2}', hex_area)
                 for bv in byte_vals:
                     v = int(bv, 16)
@@ -176,7 +164,7 @@ def parse_prn_listing(prn_path):
                         memory[addr] = v
                         addr += 1
                     else:
-                        # 16-Bit-Wert: Little-Endian speichern (Low-Byte zuerst)
+                        # 16-Bit-Wert: Little-Endian speichern
                         memory[addr] = v & 0xFF
                         memory[addr + 1] = (v >> 8) & 0xFF
                         addr += 2
@@ -197,15 +185,7 @@ def memory_to_binary(memory, start, end):
 
 
 def build_bootsec_bin(track0_data, track2_data):
-    """Zusammensetzen der 4-Track bootsec.bin.
-
-    Args:
-        track0_data: 3328 Bytes (RAM 0000H-0CFFH)
-        track2_data: 3328 Bytes (RAM 0D00H-19FFH)
-
-    Returns:
-        15104 Bytes: Track0 + Fill_Track1 + Track2 + Fill_Track3
-    """
+    """Zusammensetzen der 4-Track bootsec.bin."""
     assert len(track0_data) == TRACK_SYS_SIZE, \
         f"Track 0 Groesse falsch: {len(track0_data)} != {TRACK_SYS_SIZE}"
     assert len(track2_data) == TRACK_SYS_SIZE, \
@@ -220,44 +200,53 @@ def build_bootsec_bin(track0_data, track2_data):
     return result
 
 
-def compare_with_original(built_data, original_path):
-    """Vergleich des gebauten Images mit dem Original.
+def find_prn_file(cpm_name):
+    """PRN-Datei finden (cparun erzeugt lowercase auf Linux)."""
+    for name in [cpm_name + '.PRN', cpm_name.lower() + '.prn',
+                 cpm_name + '.prn', cpm_name.lower() + '.PRN']:
+        p = os.path.join(BUILD_DIR, name)
+        if os.path.isfile(p):
+            return p
+    return None
 
-    Returns:
-        True wenn identisch, False sonst.
-    """
-    if not os.path.isfile(original_path):
-        log(f"    WARNUNG: Original nicht gefunden: {original_path}")
-        return False
 
-    with open(original_path, 'rb') as f:
-        original = f.read()
+def assemble_file(cparun, cpm_name):
+    """Eine Quelldatei mit M80 assemblieren und PRN-Pfad zurueckgeben."""
+    log(f"\n    Assembliere {cpm_name}.MAC ...")
 
-    if built_data == original:
-        log(f"    IDENTISCH mit Original ({len(original)} Bytes)")
-        return True
-    else:
-        # Unterschiede finden
-        min_len = min(len(built_data), len(original))
-        diffs = []
-        for i in range(min_len):
-            if built_data[i] != original[i]:
-                diffs.append(i)
-        if len(built_data) != len(original):
-            log(f"    UNTERSCHIEDLICH: Groesse {len(built_data)} vs. {len(original)}")
-        if diffs:
-            log(f"    UNTERSCHIEDLICH: {len(diffs)} Byte(s) weichen ab")
-            for offset in diffs[:20]:
-                log(f"      Offset {offset:04X}H: gebaut={built_data[offset]:02X}H "
-                    f"original={original[offset]:02X}H")
-            if len(diffs) > 20:
-                log(f"      ... und {len(diffs) - 20} weitere")
-        return False
+    # M80 Aufruf: objfile,lstfile=source
+    result = run(
+        [cparun, 'm80',
+         f'{cpm_name},{cpm_name}={cpm_name}'],
+        cwd=BUILD_DIR, check=False
+    )
+
+    prn_path = find_prn_file(cpm_name)
+
+    if not prn_path:
+        # Alternativer Aufruf
+        log(f"    PRN nicht gefunden, versuche alternativen Aufruf...")
+        result = run(
+            [cparun, 'm80',
+             f'={cpm_name}/L'],
+            cwd=BUILD_DIR, check=False
+        )
+        prn_path = find_prn_file(cpm_name)
+
+    if not prn_path:
+        raise RuntimeError(
+            f"M80 hat kein PRN-Listing fuer {cpm_name} erzeugt.\n"
+            "Vorhandene Dateien: " +
+            ", ".join(os.listdir(BUILD_DIR))
+        )
+
+    log(f"    Listing: {os.path.basename(prn_path)}")
+    return prn_path
 
 
 def main():
     log("=" * 60)
-    log("CPA780 SYL-Bootlader  --  Build-Skript")
+    log("CPA780 SYL-Bootlader  --  Build-Skript (3-Datei-Version)")
     log("=" * 60)
 
     # --- Schritt 1: Build-Verzeichnis anlegen ---
@@ -265,13 +254,14 @@ def main():
     os.makedirs(BUILD_DIR, exist_ok=True)
     log(f"    {BUILD_DIR}")
 
-    # --- Schritt 2: Quellcode kopieren ---
-    log("\n[STEP 2] Quelldatei nach build/ kopieren (CRLF, Grossbuchstaben)")
-    src_mac = os.path.join(SRC_DIR, SOURCE_MAC)
-    dst_mac = os.path.join(BUILD_DIR, SOURCE_MAC_UP)
-    if not os.path.isfile(src_mac):
-        raise RuntimeError(f"Quelldatei nicht gefunden: {src_mac}")
-    convert_to_crlf(src_mac, dst_mac)
+    # --- Schritt 2: Quelldateien kopieren ---
+    log("\n[STEP 2] Quelldateien nach build/ kopieren (CRLF, CP/M 8.3-Namen)")
+    for src_name, cpm_name in SOURCES:
+        src_path = os.path.join(SRC_DIR, src_name)
+        dst_path = os.path.join(BUILD_DIR, cpm_name + '.MAC')
+        if not os.path.isfile(src_path):
+            raise RuntimeError(f"Quelldatei nicht gefunden: {src_path}")
+        convert_to_crlf(src_path, dst_path)
 
     # --- Schritt 3: M80 kopieren ---
     log("\n[STEP 3] M80 nach build/ kopieren")
@@ -281,64 +271,44 @@ def main():
     shutil.copy2(m80_src, BUILD_DIR)
     log(f"    Kopiert: m80.com")
 
-    # --- Schritt 4: Assemblieren mit M80 ---
+    # --- Schritt 4: Alle drei Dateien assemblieren ---
     cparun = find_cparun()
-    log(f"\n[STEP 4] Assemblieren mit M80 ({SOURCE_MAC_UP} -> PRN + REL)")
+    log(f"\n[STEP 4] Assemblieren mit M80 (3 Quelldateien)")
 
-    # M80 Aufruf: Listing + Objektdatei
-    # Format: M80 objfile,lstfile=source
-    # Wir wollen PRN-Listing UND REL-Datei
-    result = run(
-        [cparun, '-dir', BUILD_DIR, 'm80',
-         f'{SOURCE_NAME_UP},{SOURCE_NAME_UP}={SOURCE_NAME_UP}'],
-        cwd=BUILD_DIR, check=False
-    )
+    memory = {}
+    for src_name, cpm_name in SOURCES:
+        prn_path = assemble_file(cparun, cpm_name)
 
-    # PRN erzeugt? (cparun erstellt lowercase Dateinamen auf Linux)
-    prn_path = None
-    for name in [SOURCE_NAME_UP + '.PRN', SOURCE_NAME + '.prn',
-                 SOURCE_NAME_UP + '.prn', SOURCE_NAME + '.PRN']:
-        p = os.path.join(BUILD_DIR, name)
-        if os.path.isfile(p):
-            prn_path = p
-            break
+        # PRN parsen und in gemeinsames Memory-Image einfuegen
+        file_memory = parse_prn_listing(prn_path)
 
-    if not prn_path:
-        # Versuche alternativen M80-Aufruf
-        log("    PRN nicht gefunden, versuche alternativen Aufruf...")
-        result = run(
-            [cparun, '-dir', BUILD_DIR, 'm80',
-             f'={SOURCE_NAME_UP}/L'],
-            cwd=BUILD_DIR, check=False
-        )
-        for name in [SOURCE_NAME_UP + '.PRN', SOURCE_NAME + '.prn',
-                     SOURCE_NAME_UP + '.prn', SOURCE_NAME + '.PRN']:
-            p = os.path.join(BUILD_DIR, name)
-            if os.path.isfile(p):
-                prn_path = p
-                break
+        if not file_memory:
+            raise RuntimeError(
+                f"Keine Binaerdaten im PRN-Listing fuer {cpm_name}!"
+            )
 
-    if not prn_path:
-        raise RuntimeError(
-            "M80 hat kein PRN-Listing erzeugt. Bitte Assembler-Ausgabe pruefen.\n"
-            "Vorhandene Dateien: " +
-            ", ".join(os.listdir(BUILD_DIR))
-        )
-    log(f"    Listing: {os.path.basename(prn_path)}")
+        min_addr = min(file_memory.keys())
+        max_addr = max(file_memory.keys())
+        log(f"    {cpm_name}: {min_addr:04X}H-{max_addr:04X}H "
+            f"({len(file_memory)} Bytes)")
 
-    # --- Schritt 5: PRN-Listing parsen ---
-    log(f"\n[STEP 5] PRN-Listing parsen: Binaerdaten extrahieren")
-    memory = parse_prn_listing(prn_path)
+        # Pruefung auf Ueberlappungen
+        overlap = set(memory.keys()) & set(file_memory.keys())
+        if overlap:
+            log(f"    WARNUNG: {len(overlap)} Adress-Ueberlappungen!")
+            for addr in sorted(overlap)[:5]:
+                log(f"      {addr:04X}H: alt={memory[addr]:02X}H "
+                    f"neu={file_memory[addr]:02X}H")
 
-    if not memory:
-        raise RuntimeError("Keine Binaerdaten im PRN-Listing gefunden!")
+        memory.update(file_memory)
 
+    # --- Schritt 5: Gesamtstatistik ---
+    log(f"\n[STEP 5] Gesamtes Speicherabbild")
     min_addr = min(memory.keys())
     max_addr = max(memory.keys())
     log(f"    Adressbereich: {min_addr:04X}H - {max_addr:04X}H")
-    log(f"    Bytes gefunden: {len(memory)}")
+    log(f"    Bytes gesamt: {len(memory)}")
 
-    # Erwarteter Bereich: 0000H-0CFFH und 0D00H-19FFH
     expected_bytes = (TRACK0_RAM_END - TRACK0_RAM_START) + \
                      (TRACK2_RAM_END - TRACK2_RAM_START)
     if len(memory) < expected_bytes * 0.95:
@@ -361,32 +331,60 @@ def main():
         f.write(bootsec)
     log(f"    Geschrieben: {output_path} ({len(bootsec)} Bytes)")
 
-    # --- Schritt 7: Vergleich mit Original ---
-    log(f"\n[STEP 7] Vergleich mit Original")
-    match = compare_with_original(bootsec, PREBUILT)
+    # --- Schritt 7: Nach prebuilt kopieren ---
+    log("\n[STEP 7] Kopiere nach prebuilt/bc_a5120/bootsec.bin")
+    os.makedirs(os.path.dirname(PREBUILT), exist_ok=True)
+    shutil.copy2(output_path, PREBUILT)
+    log(f"    Ueberschrieben: {PREBUILT}")
 
     # --- Schritt 8: Aufraeumen ---
     log("\n[STEP 8] Temporaere Dateien loeschen")
-    for pattern in ['*.MAC', '*.mac', '*.REL', '*.rel', '*.PRN', '*.prn',
-                    '*.SYM', '*.sym', 'm80.com', 'M80.COM']:
-        for f in glob.glob(os.path.join(BUILD_DIR, pattern)):
-            os.remove(f)
-            log(f"    Geloescht: {os.path.basename(f)}")
+    # Nur die eigenen Dateien loeschen (nicht fremde im gemeinsamen build/)
+    cleanup_names = []
+    for _, cpm_name in SOURCES:
+        for ext in ['.MAC', '.mac', '.REL', '.rel', '.PRN', '.prn', '.SYM', '.sym']:
+            cleanup_names.append(cpm_name + ext)
+            cleanup_names.append(cpm_name.lower() + ext)
+    cleanup_names.extend(['m80.com', 'M80.COM'])
+    for fname in sorted(set(cleanup_names)):
+        p = os.path.join(BUILD_DIR, fname)
+        if os.path.isfile(p):
+            os.remove(p)
+            log(f"    Geloescht: {fname}")
 
     # --- Fertig ---
     log("\n" + "=" * 60)
-    if match:
-        log("FERTIG: bootsec.bin ist IDENTISCH mit dem Original!")
-    else:
-        log("FERTIG: bootsec.bin erzeugt (weicht vom Original ab)")
+    log("FERTIG: bootsec.bin erzeugt und prebuilt/bc_a5120 aktualisiert")
     log(f"Pfad:   {output_path}")
     log(f"Groesse: {len(bootsec)} Bytes")
     log("=" * 60)
 
-    return 0 if match else 1
+    return 0
+
+
+def parse_args():
+    """Kommandozeilenargumente parsen.
+
+    Ohne Argumente: Standalone-Modus (Vorgabe-Pfade).
+    Mit Argumenten: von cpa_builder.py gesteuerte Pfade.
+    """
+    parser = argparse.ArgumentParser(
+        description='CPA780 SYL-Bootlader Build-Skript (3-Datei-Version)')
+    parser.add_argument('--build-dir',
+        help='Build-Verzeichnis fuer Zwischendateien und Ausgabe')
+    parser.add_argument('--project-dir',
+        help='Projektverzeichnis (CPA_Workbench)')
+    return parser.parse_args()
 
 
 if __name__ == '__main__':
+    args = parse_args()
+    if args.project_dir:
+        PROJECT_DIR = os.path.abspath(args.project_dir)
+        TOOLS_DIR = os.path.join(PROJECT_DIR, 'tools')
+        PREBUILT = os.path.join(PROJECT_DIR, 'prebuilt', 'bc_a5120', 'bootsec.bin')
+    if args.build_dir:
+        BUILD_DIR = os.path.abspath(args.build_dir)
     try:
         sys.exit(main())
     except RuntimeError as e:
