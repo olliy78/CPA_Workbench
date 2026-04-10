@@ -151,7 +151,7 @@ def run_patch_mac(mode, config_path, system_variant):
     Wirft subprocess.CalledProcessError bei Fehlern.
     """
     args = [
-        sys.executable, os.path.join("config", "patch_mac.py"), mode, config_path, system_variant
+        sys.executable, os.path.join("tools", "patch_mac.py"), mode, config_path, system_variant
     ]
     if loglevel:
         args.append(f"loglevel={loglevel}")

@@ -443,7 +443,7 @@ class CPABuilder:
         'extract': Liest aktuelle Werte aus den .mac-Dateien in die .config.
         'patch': Schreibt .config-Werte in die .mac-Dateien zurück.
         """
-        script = os.path.join(self.project_dir, 'config', 'patch_mac.py')
+        script = os.path.join(self.project_dir, 'tools', 'patch_mac.py')
         if not os.path.isfile(script):
             self.log(f"[WARNUNG] patch_mac.py nicht gefunden: {script}")
             return

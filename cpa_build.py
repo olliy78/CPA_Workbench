@@ -37,11 +37,11 @@ import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 
 # ---------------------------------------------------------------------------
-# Projektverzeichnis ermitteln und config/-Verzeichnis in den Importpfad
+# Projektverzeichnis ermitteln und tools/-Verzeichnis in den Importpfad
 # aufnehmen, damit cpa_kconfig_parser und cpa_builder importiert werden können
 # ---------------------------------------------------------------------------
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(PROJECT_DIR, 'config'))
+sys.path.insert(0, os.path.join(PROJECT_DIR, 'tools'))
 
 # Kconfig-Parser für die hierarchische Konfigurationsstruktur
 from cpa_kconfig_parser import parse_kconfig, KconfigConfig, KconfigChoice, KconfigMenu
