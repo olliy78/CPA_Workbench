@@ -79,7 +79,7 @@ sudo pacman -S python tk
 **CPA Workbench starten:**
 
 ```sh
-python3 cpa_build.py
+python3 cpa_workbench.py
 ```
 
 Für die CP/M-Tools `cpmcp` und `cpmls` liegen im Ordner `tools/` unter Debian Linux kompilierte Versionen bei. Sollten diese nicht funktionieren, wird empfohlen, die CP/M-Tools aus dem Quelltext zu übersetzen. Das mit Debian ausgelieferte Binärpaket ist fehlerhaft und verhält sich bei den hier verwendeten Diskettenformaten nicht wie erwartet.
@@ -100,13 +100,13 @@ Hinweis zu Administratorrechten:
 3. Die CPA Workbench starten:
 
 ```bat
-start.bat
+start_cpa_workbench.bat
 ```
 
 oder direkt:
 
 ```
-python3 cpa_build.py
+python3 cpa_workbench.py
 ```
 
 Im Ordner `tools` befinden sich außerdem die Windows-Versionen der CP/M-Tools (`cpmcp.exe`, `cpmls.exe`) sowie `cparun.exe`.
@@ -114,6 +114,36 @@ Im Ordner `tools` befinden sich außerdem die Windows-Versionen der CP/M-Tools (
 Greaseweazle-Hinweis:
 - Für den normalen Betrieb ist keine manuelle Greaseweazle-Installation nötig.
 - Sobald eine Funktion Greaseweazle benötigt (z.B. HFE/SCP oder direktes Schreiben/Lesen), wird die Windows-Version automatisch nachgeladen und lokal im Projekt abgelegt.
+
+### Windows-Installer (Wizard) erstellen
+
+Für die Weitergabe an Windows-Anwender gibt es im Projekt ein Inno-Setup-Skript:
+
+- `installer/CPA_Workbench_Windows.iss`
+- `installer/build_installer.bat`
+
+Variante B (kleine Setup-Datei):
+- Python wird nur bei Bedarf per `winget` nachinstalliert.
+- Greaseweazle wird bei Bedarf automatisch durch die Anwendung nachgeladen.
+
+**Inno Setup installieren:**
+
+```powershell
+winget install --id JRSoftware.InnoSetup -e --scope user
+```
+
+Hinweis zu Administratorrechten:
+- Mit `--scope user` ist in der Regel keine Administrator-PowerShell erforderlich.
+- Für eine systemweite Installation kann eine Administrator-PowerShell erforderlich sein.
+
+**Installer bauen:**
+
+```bat
+installer\build_installer.bat
+```
+
+Ausgabe:
+- `installer\Output\CPA_Workbench_Setup.exe`
 
 ### macOS
 
@@ -129,7 +159,8 @@ brew install python python-tk
 
 ```
 CPA_Workbench/
-├── cpa_build.py          – Hauptprogramm (startet die GUI)
+├── cpa_workbench.py      – Hauptprogramm (startet die GUI)
+├── start_cpa_workbench.bat – Windows-Startskript für die GUI
 ├── diskdefs              – CP/M-Dateisystem-Definitionen (cpmtools-Format)
 ├── cpaFormates.cfg       – Physikalische Diskettengeometrien (Greaseweazle-Format)
 ├── src/                  – Quelltexte für BIOS, Makros und Systemteile
@@ -164,7 +195,7 @@ Das CPA Workbench Build-System bietet eine grafische Benutzeroberfläche (GUI) z
 ### Starten der CPA Workbench
 
 ```sh
-python3 cpa_build.py
+python3 cpa_workbench.py
 ```
 
 Es öffnet sich ein grafisches Fenster mit drei Tabs, einem Log-Bereich und einer Menüleiste.
@@ -350,13 +381,13 @@ Die extrahierten Dateien werden im Ordner `Disketten/<ImageName>/` abgelegt. Um 
            Datenadresse für Drucker 1. Mögliche Anschlüsse: 0Ch, 0Dh, 14h, 15h …
    ```
 
-3. **Build starten:** GUI mit `python3 cpa_build.py` öffnen und neue Variante im Tab „Systemvariante" auswählen.
+3. **Build starten:** GUI mit `python3 cpa_workbench.py` öffnen und neue Variante im Tab „Systemvariante" auswählen.
 
 **Tipp:** Starte mit einer Kopie einer lauffähigen Variante (z.B. `bc_a5120`) und passe die Dateien schrittweise an.
 
 ### Hinweise zum Build-System
 
-- Die Build-Engine (`config/cpa_builder.py`) erkennt die Hauptquelldatei automatisch anhand der `Kconfig.system`-Einträge oder des Dateisystems (`biop.mac` hat Priorität vor `bios.mac`).
+- Die Build-Engine (`tools/cpa_builder.py`) erkennt die Hauptquelldatei automatisch anhand der `Kconfig.system`-Einträge oder des Dateisystems (`biop.mac` hat Priorität vor `bios.mac`).
 - Die Ladeadresse für den Linker wird automatisch aus der M80-Assembler-Ausgabe extrahiert.
 - Die CP/M-Tools können keine Verzeichnisse verarbeiten – alle benötigten Dateien werden vor dem Build ins `build/`-Arbeitsverzeichnis kopiert.
 

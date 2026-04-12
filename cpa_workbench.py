@@ -24,7 +24,7 @@ Autor:   Olaf Krieger
 Lizenz:  MIT (siehe LICENSE)
 
 Verwendung:
-    python cpa_build.py
+    python cpa_workbench.py
 """
 
 import os
@@ -136,10 +136,27 @@ class CPAWorkbenchApp:
 
     def __init__(self):
         """Fenster initialisieren, Builder erstellen, UI aufbauen und Config laden."""
+
         self.root = tk.Tk()
         self.root.title('CP/A Workbench - Konfigurations- und Build-System')
         self.root.geometry('1200x900')
         self.root.minsize(900, 600)
+
+        # Fenster- und Taskleistensymbol setzen
+        import sys
+        if sys.platform == "win32":
+            icon_path = os.path.join(os.path.dirname(__file__), "tools", "cpa_workbench.ico")
+            try:
+                self.root.iconbitmap(icon_path)
+            except Exception:
+                pass  # Ignoriere Fehler auf nicht-Windows-Systemen oder falls Datei fehlt
+        else:
+            icon_path = os.path.join(os.path.dirname(__file__), "tools", "cpa_workbench.png")
+            try:
+                icon_img = tk.PhotoImage(file=icon_path)
+                self.root.iconphoto(True, icon_img)
+            except Exception:
+                pass  # Ignoriere Fehler, falls PNG fehlt oder nicht unterstützt wird
 
         self.config = {}                # Aktuelle Konfiguration (Dict: CONFIG_KEY → Wert)
         self.variant_var = tk.StringVar()  # Gewählte Systemvariante als String
@@ -177,6 +194,9 @@ class CPAWorkbenchApp:
                                command=self._launch_readdisk)
         tools_menu.add_command(label='WriteDisk (Diskette schreiben)',
                                command=self._launch_writedisk)
+        tools_menu.add_separator()
+        tools_menu.add_command(label='Projektverzeichnis öffnen',
+                       command=self._open_project_dir)
         menubar.add_cascade(label='Tools', menu=tools_menu)
 
         # Hilfe-Menü mit README und CP/A-Dokumentation
@@ -595,6 +615,18 @@ class CPAWorkbenchApp:
         """WriteDisk-Tool als separaten Prozess starten (tools/writeDiskUI.py)."""
         script = os.path.join(PROJECT_DIR, 'tools', 'writeDiskUI.py')
         subprocess.Popen([sys.executable, script], cwd=PROJECT_DIR)
+
+    def _open_project_dir(self):
+        """Projektverzeichnis im Dateimanager des Betriebssystems öffnen."""
+        import platform
+        path = PROJECT_DIR
+        system = platform.system()
+        if system == 'Windows':
+            subprocess.Popen(['explorer', path])
+        elif system == 'Darwin':
+            subprocess.Popen(['open', path])
+        else:
+            subprocess.Popen(['xdg-open', path])
 
     def _show_readme(self):
         """README.md mit einfacher Markdown-Formatierung in einem Fenster anzeigen.

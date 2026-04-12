@@ -133,10 +133,26 @@ class WriteDiskApp:
 
     def __init__(self):
         """Fenster initialisieren, Tools konfigurieren, Formate laden und UI aufbauen."""
+
         self.root = tk.Tk()
         self.root.title('CP/M Disketten-Schreiber')
         self.root.geometry('900x650')
         self.root.minsize(700, 500)
+
+        # Fenster- und Taskleistensymbol setzen
+        if sys.platform == "win32":
+            icon_path = os.path.join(os.path.dirname(__file__), "cpa_workbench.ico")
+            try:
+                self.root.iconbitmap(icon_path)
+            except Exception:
+                pass
+        else:
+            icon_path = os.path.join(os.path.dirname(__file__), "cpa_workbench.png")
+            try:
+                icon_img = tk.PhotoImage(file=icon_path)
+                self.root.iconphoto(True, icon_img)
+            except Exception:
+                pass
 
         self.log_queue = queue.Queue()  # Thread-sichere Log-Warteschlange
         self.running = False             # Flag: läuft gerade eine Operation?

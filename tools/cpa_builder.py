@@ -17,7 +17,7 @@ Die Build-Engine arbeitet plattformübergreifend:
   - Linux: M80/LINKMT werden über cparun (eigener CP/M-Emulator) ausgeführt
   - Windows: M80/LINKMT laufen über cparun.exe
 
-Die Klasse CPABuilder wird von der GUI (cpa_build.py) instanziiert und
+Die Klasse CPABuilder wird von der GUI (cpa_workbench.py) instanziiert und
 über einen Log-Callback mit der Oberfläche verbunden.
 
 Autor:   Olaf Krieger
