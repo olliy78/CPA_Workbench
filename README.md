@@ -53,7 +53,8 @@ Durch die automatisierte Erstellung und das Schreiben von bootfähigen Systemdis
 - **Python 3.8 oder neuer** mit `tkinter` (wird bei den meisten Installationen mitgeliefert)
 - **CP/M-Tools `cpmcp` und `cpmls`** (liegen als vorkompilierte Binaries im Ordner `tools/`)
 - **CP/M-Emulator `cparun` / `cparun.exe`** (liegt im Ordner `tools/`, Quelltext im Projekt enthalten)
-- Optional: **Greaseweazle** (`gw`) für das Lesen/Schreiben physikalischer Disketten und die Konvertierung in HFE/SCP-Formate – wird bei Bedarf automatisch in eine virtuelle Umgebung (`.venv`) installiert
+- Optional: **Greaseweazle** (`gw`) für das Lesen/Schreiben physikalischer Disketten und die Konvertierung in HFE/SCP-Formate
+   - Eine manuelle Installation.Das Tool wird bei Bedarf automatisch im Projekt unter `.venv/greaseweazle/` nachgeladen.
 
 ### Linux
 
@@ -85,9 +86,17 @@ Für die CP/M-Tools `cpmcp` und `cpmls` liegen im Ordner `tools/` unter Debian L
 
 ### Windows
 
-1. Das Projekt als .zip-Datei herunterladen oder per `git clone` klonen.
-2. Im Ordner `tools` die Datei `win_tools.7z` mit 7-Zip entpacken. Sie enthält unter anderem:
-   - **greaseweazle**: Tool zum Lesen/Schreiben von Disketten und zur Konvertierung von Image-Formaten
+1. **Python installieren (winget):**
+
+```powershell
+winget install --id Python.Python.3.12 -e --scope user
+```
+
+Hinweis zu Administratorrechten:
+- Für die Installation nur für den aktuellen Benutzer (`--scope user`) sind keine Admin-Rechte erforderlich.
+- Für eine systemweite Installation (alle Benutzer) sind Admin-Rechte erforderlich.
+
+2. Das Projekt als .zip-Datei herunterladen oder per `git clone` klonen.
 3. Die CPA Workbench starten:
 
 ```bat
@@ -101,6 +110,10 @@ python3 cpa_build.py
 ```
 
 Im Ordner `tools` befinden sich außerdem die Windows-Versionen der CP/M-Tools (`cpmcp.exe`, `cpmls.exe`) sowie `cparun.exe`.
+
+Greaseweazle-Hinweis:
+- Für den normalen Betrieb ist keine manuelle Greaseweazle-Installation nötig.
+- Sobald eine Funktion Greaseweazle benötigt (z.B. HFE/SCP oder direktes Schreiben/Lesen), wird die Windows-Version automatisch nachgeladen und lokal im Projekt abgelegt.
 
 ### macOS
 
@@ -140,7 +153,6 @@ CPA_Workbench/
 │   ├── readDiskUI.py     – GUI: Disketten einlesen / Dateien extrahieren
 │   ├── writeDiskUI.py    – GUI: Disketten-Image erstellen und schreiben
 │   ├── extract_files     – Kommandozeilen-Tool zum Extrahieren von Dateien
-│   └── win_tools.7z      – Windows-Paket (Greaseweazle u.a.)
 ├── build/                – Build-Artefakte und temporäre Dateien
 └── doc/                  – Dokumentation und Screenshots
 ```

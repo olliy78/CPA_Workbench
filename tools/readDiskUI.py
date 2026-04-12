@@ -48,8 +48,10 @@ from pathlib import Path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
 
-# URL für die automatische Greaseweazle-Installation via pip
-GW_INSTALL_URL = 'git+https://github.com/keirf/greaseweazle@latest'
+GW_VERSION        = '1.23'
+GW_INSTALL_URL    = 'git+https://github.com/keirf/greaseweazle@latest'
+GW_WIN64_ZIP_URL  = f'https://github.com/keirf/greaseweazle/releases/download/v{GW_VERSION}/greaseweazle-{GW_VERSION}-win64.zip'
+GW_WIN64_EXE_PATH = f'greaseweazle-{GW_VERSION}/gw.exe'
 
 
 # ---------------------------------------------------------------------------
@@ -394,7 +396,7 @@ class ExtractApp:
 
         venv_dir = os.path.join(PROJECT_DIR, '.venv')
         if platform.system() == 'Windows':
-            gw_venv = os.path.join(venv_dir, 'Scripts', 'gw.exe')
+            gw_venv = os.path.join(venv_dir, 'greaseweazle', 'gw.exe')
         else:
             gw_venv = os.path.join(venv_dir, 'bin', 'gw')
 
@@ -404,30 +406,55 @@ class ExtractApp:
             return
 
         self._log("[INFO] Greaseweazle nicht gefunden – wird automatisch installiert ...")
-        self._log(f"[STEP] Erstelle virtuelle Umgebung: {venv_dir}")
-        venv.create(venv_dir, with_pip=True)
+        os.makedirs(os.path.dirname(gw_venv), exist_ok=True)
 
         if platform.system() == 'Windows':
-            pip_cmd = os.path.join(venv_dir, 'Scripts', 'pip')
+            import urllib.request
+            import zipfile
+            import tempfile
+            gw_dir = os.path.join(venv_dir, 'greaseweazle')
+            self._log(f"[STEP] Lade Greaseweazle {GW_VERSION} herunter ...")
+            self._log(f"  > {GW_WIN64_ZIP_URL}")
+            with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as tmp:
+                tmp_path = tmp.name
+            try:
+                urllib.request.urlretrieve(GW_WIN64_ZIP_URL, tmp_path)
+                with zipfile.ZipFile(tmp_path) as zf:
+                    prefix = f'greaseweazle-{GW_VERSION}/'
+                    for entry in zf.infolist():
+                        if not entry.filename.startswith(prefix):
+                            continue
+                        rel = entry.filename[len(prefix):]
+                        if not rel:
+                            continue
+                        dest = os.path.join(gw_dir, rel)
+                        if entry.is_dir():
+                            os.makedirs(dest, exist_ok=True)
+                        else:
+                            os.makedirs(os.path.dirname(dest), exist_ok=True)
+                            with zf.open(entry) as src, open(dest, 'wb') as dst:
+                                dst.write(src.read())
+            finally:
+                os.unlink(tmp_path)
         else:
+            venv.create(venv_dir, with_pip=True)
             pip_cmd = os.path.join(venv_dir, 'bin', 'pip')
-
-        self._log("[STEP] Installiere Greaseweazle ...")
-        result = subprocess.run(
-            [pip_cmd, 'install', GW_INSTALL_URL],
-            capture_output=True, text=True, errors='replace'
-        )
-        if result.stdout.strip():
-            for line in result.stdout.strip().splitlines():
-                self._log(f"    {line}")
-        if result.returncode != 0:
-            if result.stderr.strip():
-                for line in result.stderr.strip().splitlines():
-                    self._log(f"    {line}")
-            raise RuntimeError(
-                "Greaseweazle-Installation fehlgeschlagen. "
-                "Bitte manuell installieren: pip install greaseweazle"
+            self._log("[STEP] Installiere Greaseweazle via pip ...")
+            result = subprocess.run(
+                [pip_cmd, 'install', GW_INSTALL_URL],
+                capture_output=True, text=True, errors='replace'
             )
+            if result.stdout.strip():
+                for line in result.stdout.strip().splitlines():
+                    self._log(f"    {line}")
+            if result.returncode != 0:
+                if result.stderr.strip():
+                    for line in result.stderr.strip().splitlines():
+                        self._log(f"    {line}")
+                raise RuntimeError(
+                    "Greaseweazle-Installation fehlgeschlagen. "
+                    f"Bitte manuell installieren: pip install {GW_INSTALL_URL}"
+                )
 
         if not os.path.isfile(gw_venv):
             raise RuntimeError("Greaseweazle-Installation fehlgeschlagen.")

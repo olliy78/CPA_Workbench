@@ -34,6 +34,34 @@ and CMake scripts on Linux.
 - CMake 3.16 or newer
 - Linux, macOS, Windows (MSVC or MinGW/MSYS2), or WSL
 
+### Windows Setup (Required Programs)
+
+To build `cparun` on Windows with MSVC, install the following programs:
+
+- **CMake** (3.16+)
+- **Visual Studio 2022 Build Tools** with the **Desktop development with C++** workload
+
+The easiest installation method is `winget` from an elevated PowerShell:
+
+> Run these installation commands in an **Administrator PowerShell**.
+
+```powershell
+winget install --id Kitware.CMake -e --source winget
+winget install --id Microsoft.VisualStudio.2022.BuildTools -e --source winget --override "--wait --passive --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+After installation, open a new shell and verify:
+
+```powershell
+cmake --version
+```
+
+If `cmake` is not found in `PATH`, run it via:
+
+```powershell
+"C:\Program Files\CMake\bin\cmake.exe" --version
+```
+
 ---
 
 ## Build
@@ -59,20 +87,32 @@ cmake --install build --prefix /usr/local
 Open a **Developer Command Prompt for VS** (or a terminal with the MSVC
 environment loaded), then:
 
+> For the build itself, a **normal (non-admin) PowerShell** is sufficient.
+
+The binary is created at `build\Release\cparun.exe`.
+
+Full example from repository root:
+
 ```bat
-cd cparun
+cd tools\emulator
 cmake -B build -G "Visual Studio 17 2022"
 cmake --build build --config Release
 ```
 
-The binary is created at `build\Release\cparun.exe`.
+If `cmake` is not in `PATH`:
+
+```bat
+cd tools\emulator
+"C:\Program Files\CMake\bin\cmake.exe" -B build -G "Visual Studio 17 2022"
+"C:\Program Files\CMake\bin\cmake.exe" --build build --config Release
+```
 
 ### Windows — MinGW / MSYS2
 
 In an MSYS2 MINGW64 shell:
 
 ```sh
-cd cparun
+cd tools\emulator
 cmake -B build -G "MinGW Makefiles"
 cmake --build build
 ```

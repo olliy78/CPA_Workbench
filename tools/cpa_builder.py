@@ -51,7 +51,10 @@ class CPABuilder:
     BUILD_DIR = 'build'               # Ausgabeverzeichnis für Build-Artefakte
     ADDITIONS_DIR = 'additions'        # Zusätzliche Dateien für die Diskette
     TOOLS_DIR = 'tools'                # cparun, cpmcp, cpmls, m80.com, linkmt.com
-    GW_INSTALL_URL = 'git+https://github.com/keirf/greaseweazle@latest'
+    GW_VERSION        = '1.23'
+    GW_INSTALL_URL    = 'git+https://github.com/keirf/greaseweazle@latest'
+    GW_WIN64_ZIP_URL  = f'https://github.com/keirf/greaseweazle/releases/download/v{GW_VERSION}/greaseweazle-{GW_VERSION}-win64.zip'
+    GW_WIN64_EXE_PATH = f'greaseweazle-{GW_VERSION}/gw.exe'  # Pfad der exe im ZIP
     CFG_FILE = 'cpaFormates.cfg'       # Greaseweazle-Formatdefinitionen
 
     # Vorgabe-Diskettenformat (780k ohne separaten Bootsektor)
@@ -97,8 +100,10 @@ class CPABuilder:
 
         Prüft in drei Schritten:
         1. gw im System-PATH vorhanden?
-        2. gw im lokalen .venv bereits installiert?
-        3. Falls nicht: Neue .venv erstellen und Greaseweazle per pip installieren.
+        2. gw im lokalen .venv/Scripts/ (Windows) bzw. .venv/bin/ (Linux) vorhanden?
+        3. Falls nicht: Auf Windows direkt das offizielle win64-Binär-ZIP herunterladen
+           und gw.exe extrahieren (kein pip, kein git nötig). Auf Linux/macOS wird
+           Greaseweazle per pip aus dem Git-Repository installiert.
 
         Nach erfolgreicher Prüfung/Installation wird self.gw_cmd gesetzt.
         """
@@ -111,10 +116,10 @@ class CPABuilder:
             self.log("[INFO] Greaseweazle gefunden: gw (System)")
             return
 
-        # 2. Bereits vorhandenes virtuelles Environment prüfen
+        # 2. Bereits vorhandene lokale Installation prüfen
         venv_dir = os.path.join(self.project_dir, '.venv')
         if platform.system() == 'Windows':
-            gw_venv = os.path.join(venv_dir, 'Scripts', 'gw.exe')
+            gw_venv = os.path.join(venv_dir, 'greaseweazle', 'gw.exe')
         else:
             gw_venv = os.path.join(venv_dir, 'bin', 'gw')
 
@@ -123,23 +128,54 @@ class CPABuilder:
             self.log(f"[INFO] Greaseweazle gefunden: {gw_venv}")
             return
 
-        # 3. Neues venv erstellen und Greaseweazle installieren
+        # 3. Installation
         self.log("[INFO] Greaseweazle nicht gefunden – wird automatisch installiert ...")
-        self.log(f"[STEP] Erstelle virtuelle Umgebung: {venv_dir}")
-        venv.create(venv_dir, with_pip=True)
+        os.makedirs(os.path.dirname(gw_venv), exist_ok=True)
 
         if platform.system() == 'Windows':
-            pip_cmd = os.path.join(venv_dir, 'Scripts', 'pip')
+            # Auf Windows: Offizielles Binär-ZIP herunterladen und vollständig
+            # entpacken. gw.exe benötigt python311.dll und weitere DLLs aus dem
+            # Paket – nur die exe allein genügt nicht.
+            import urllib.request
+            import zipfile
+            import tempfile
+            gw_dir = os.path.join(venv_dir, 'greaseweazle')
+            self.log(f"[STEP] Lade Greaseweazle {self.GW_VERSION} herunter ...")
+            self.log(f"  > {self.GW_WIN64_ZIP_URL}")
+            with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as tmp:
+                tmp_path = tmp.name
+            try:
+                urllib.request.urlretrieve(self.GW_WIN64_ZIP_URL, tmp_path)
+                with zipfile.ZipFile(tmp_path) as zf:
+                    # Alle Einträge in gw_dir entpacken, dabei das ZIP-Unterverzeichnis
+                    # (greaseweazle-X.Y/) abschneiden
+                    prefix = f'greaseweazle-{self.GW_VERSION}/'
+                    for entry in zf.infolist():
+                        if not entry.filename.startswith(prefix):
+                            continue
+                        rel = entry.filename[len(prefix):]
+                        if not rel:  # Verzeichnis-Eintrag selbst
+                            continue
+                        dest = os.path.join(gw_dir, rel)
+                        if entry.is_dir():
+                            os.makedirs(dest, exist_ok=True)
+                        else:
+                            os.makedirs(os.path.dirname(dest), exist_ok=True)
+                            with zf.open(entry) as src, open(dest, 'wb') as dst:
+                                dst.write(src.read())
+            finally:
+                os.unlink(tmp_path)
         else:
+            # Auf Linux/macOS: per pip aus dem Git-Repository installieren.
+            venv.create(venv_dir, with_pip=True)
             pip_cmd = os.path.join(venv_dir, 'bin', 'pip')
-
-        self.log("[STEP] Installiere Greaseweazle ...")
-        self._run([pip_cmd, 'install', self.GW_INSTALL_URL])
+            self.log("[STEP] Installiere Greaseweazle via pip ...")
+            self._run([pip_cmd, 'install', self.GW_INSTALL_URL])
 
         if not os.path.isfile(gw_venv):
             raise RuntimeError(
                 "Greaseweazle-Installation fehlgeschlagen. "
-                "Bitte manuell installieren: pip install greaseweazle"
+                f"Bitte manuell installieren: pip install {self.GW_INSTALL_URL}"
             )
 
         self.gw_cmd = gw_venv
