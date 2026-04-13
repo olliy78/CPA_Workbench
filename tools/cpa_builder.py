@@ -500,6 +500,38 @@ class CPABuilder:
     # OS bauen - Z80-Assemblierung und Linken zu @OS.COM
     # -----------------------------------------------------------------------
 
+    def _os_is_up_to_date(self, paths, os_target):
+        """Prüft ob @OS.COM noch aktuell ist (wie Make: Ziel vs. Quelldateien).
+
+        Vergleicht den Timestamp von build/@os.com mit allen relevanten
+        Quelldateien in src/ und prebuilt/. Gibt True zurück wenn @os.com
+        neuer ist als alle Quelldateien – ein Neu-Build ist dann nicht nötig.
+
+        Geprüfte Quelldateien:
+          - src/*.mac             (gemeinsame Quellen)
+          - src/<variant>/*.mac   (variantenspezifische Quellen)
+          - prebuilt/<variant>/*.erl  (vorkompilierte Module)
+        """
+        os_abs = self._abs(os_target)
+        if not os.path.isfile(os_abs):
+            return False
+        os_mtime = os.path.getmtime(os_abs)
+
+        source_patterns = [
+            os.path.join(self._abs(paths['src_common']), '*.mac'),
+            os.path.join(self._abs(paths['src_common']), '*.MAC'),
+            os.path.join(self._abs(paths['src_dir']), '*.mac'),
+            os.path.join(self._abs(paths['src_dir']), '*.MAC'),
+            os.path.join(self._abs(paths['prebuilt_dir']), '*.erl'),
+            os.path.join(self._abs(paths['prebuilt_dir']), '*.ERL'),
+        ]
+        for pattern in source_patterns:
+            for src_file in glob.glob(pattern):
+                if os.path.getmtime(src_file) > os_mtime:
+                    self.log(f"  [NEU] {os.path.relpath(src_file, self.project_dir)}")
+                    return False
+        return True
+
     def build_os(self, config):
         """Betriebssystem @OS.COM bauen.
 
@@ -527,6 +559,11 @@ class CPABuilder:
         build_dir = paths['build_dir']
         build_abs = self._abs(build_dir)
         os.makedirs(build_abs, exist_ok=True)
+
+        # Aktualitätsprüfung: Build nur wenn Quelldateien neuer als @os.com sind
+        if self._os_is_up_to_date(paths, paths['os_target']):
+            self.log("[INFO] @OS.COM ist aktuell – Build übersprungen.")
+            return
 
         # STEP 1: .mac-Dateien kopieren:
         # Zuerst gemeinsame Quellen aus src/, dann variantenspezifische aus src/<variante>/
