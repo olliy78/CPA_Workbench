@@ -75,6 +75,21 @@ START:
     LD   R11, #0x000C       ; MB_PARAM2
     LD   R10, @R11          ; R10 = Phase (1-5)
 
+    ; Laufstatus in Mailbox schreiben (0xA0xx, xx=Phase)
+    LD   R7, #0x0010        ; STATUS
+    LD   R1, #0xA000
+    OR   R1, R10
+    LD   @R7, R1
+    ; Initiale Debugwerte
+    INC  R7, #2             ; RESULT1
+    LD   R1, #0xD100        ; Debug-Marker "D1 alive"
+    LD   @R7, R1
+    INC  R7, #2             ; RESULT2
+    LD   R1, #0xFFFF        ; Offset noch unbekannt
+    LD   @R7, R1
+    INC  R7, #2             ; RESULT3
+    LD   @R7, R10           ; aktuelle Phase (1..5)
+
     ; Startadresse bestimmen
     CP   R8, #0x0000        ; Segment 0?
     JR   NE, OTHER_SEG
@@ -84,6 +99,9 @@ OTHER_SEG:
     LD   R3, #0x0000        ; Seg 1-3: ab 0x0000 (komplett)
 SETUP_OK:
     LD   R4, #0xFFFE        ; Endadresse (letztes Wort)
+    ; Initialen Fortschritt publizieren
+    LD   R7, #0x0018        ; RESULT4 = aktueller Offset
+    LD   @R7, R3
 
     ; Phasen-Dispatch
     CP   R10, #1
@@ -96,7 +114,7 @@ SETUP_OK:
     JR   EQ, DO_P4
     CP   R10, #5
     JR   EQ, DO_P5
-    JR   T, DONE            ; ungueltige Phase -> fertig
+    JP   T, DONE            ; ungueltige Phase -> fertig
 
 ; ---------------------------------------------------------------
 ; Phase 1: Aufwaerts mit 0x0000 fuellen (nur Schreiben)
@@ -105,9 +123,20 @@ DO_P1:
     LD   R1, #0x0000
     LD   R9, R3
 P1_LOOP:
+    LD   R5, R9
+    AND  R5, #0x0FFF        ; Heartbeat alle 4 KB
+    JR   NE, P1_NHB
+    LD   R7, #0x0014        ; RESULT2
+    LD   @R7, R9            ; aktueller Offset
+    INC  R7, #2             ; RESULT3
+    LD   R11, #0x0101       ; P1: write-up
+    LD   @R7, R11
+    LD   R7, #0x0018
+    LD   @R7, R9
+P1_NHB:
     LD   @RR8, R1
     CP   R9, R4
-    JR   EQ, DONE
+    JP   EQ, DONE
     INC  R9, #2
     JR   T, P1_LOOP
 
@@ -119,6 +148,17 @@ DO_P2:
     LD   R6, #0xFFFF        ; neues Muster
     LD   R9, R3
 P2_LOOP:
+    LD   R5, R9
+    AND  R5, #0x0FFF
+    JR   NE, P2_NHB
+    LD   R7, #0x0014
+    LD   @R7, R9
+    INC  R7, #2
+    LD   R11, #0x0201       ; P2: read/write-up
+    LD   @R7, R11
+    LD   R7, #0x0018
+    LD   @R7, R9
+P2_NHB:
     LD   R5, @RR8
     XOR  R5, R1             ; R5 = Fehler-Bits (0 wenn OK)
     JR   EQ, P2_OK
@@ -131,7 +171,7 @@ P2_NF:
 P2_OK:
     LD   @RR8, R6           ; neues Muster schreiben
     CP   R9, R4
-    JR   EQ, DONE
+    JP   EQ, DONE
     INC  R9, #2
     JR   T, P2_LOOP
 
@@ -142,6 +182,17 @@ DO_P3:
     LD   R1, #0xFFFF
     LD   R9, R3
 P3_LOOP:
+    LD   R5, R9
+    AND  R5, #0x0FFF
+    JR   NE, P3_NHB
+    LD   R7, #0x0014
+    LD   @R7, R9
+    INC  R7, #2
+    LD   R11, #0x0301       ; P3: read-up
+    LD   @R7, R11
+    LD   R7, #0x0018
+    LD   @R7, R9
+P3_NHB:
     LD   R5, @RR8
     XOR  R5, R1
     JR   EQ, P3_OK
@@ -153,7 +204,7 @@ P3_NF:
     INC  R13, #1
 P3_OK:
     CP   R9, R4
-    JR   EQ, DONE
+    JP   EQ, DONE
     INC  R9, #2
     JR   T, P3_LOOP
 
@@ -165,6 +216,17 @@ DO_P4:
     LD   R6, #0x0000
     LD   R9, R4             ; von Ende
 P4_LOOP:
+    LD   R5, R9
+    AND  R5, #0x0FFF
+    JR   NE, P4_NHB
+    LD   R7, #0x0014
+    LD   @R7, R9
+    INC  R7, #2
+    LD   R11, #0x0401       ; P4: read/write-down
+    LD   @R7, R11
+    LD   R7, #0x0018
+    LD   @R7, R9
+P4_NHB:
     LD   R5, @RR8
     XOR  R5, R1
     JR   EQ, P4_OK
@@ -177,7 +239,7 @@ P4_NF:
 P4_OK:
     LD   @RR8, R6
     CP   R9, R3
-    JR   EQ, DONE
+    JP   EQ, DONE
     DEC  R9, #2
     JR   T, P4_LOOP
 
@@ -188,6 +250,17 @@ DO_P5:
     LD   R1, #0x0000
     LD   R9, R4
 P5_LOOP:
+    LD   R5, R9
+    AND  R5, #0x0FFF
+    JR   NE, P5_NHB
+    LD   R7, #0x0014
+    LD   @R7, R9
+    INC  R7, #2
+    LD   R11, #0x0501       ; P5: read-down
+    LD   @R7, R11
+    LD   R7, #0x0018
+    LD   @R7, R9
+P5_NHB:
     LD   R5, @RR8
     XOR  R5, R1
     JR   EQ, P5_OK
@@ -199,7 +272,7 @@ P5_NF:
     INC  R13, #1
 P5_OK:
     CP   R9, R3
-    JR   EQ, DONE
+    JP   EQ, DONE
     DEC  R9, #2
     JR   T, P5_LOOP
 
@@ -222,4 +295,6 @@ WR_STATUS:
     LD   @R7, R13           ; RESULT2 = Fehleranzahl
     INC  R7, #2
     LD   @R7, R14           ; RESULT3 = erste Fehleradresse
+    LD   R7, #0x0018
+    LD   @R7, R9            ; RESULT4 = letzter Offset
     JR   T, $               ; Endlosschleife -> wartet auf TRQ8

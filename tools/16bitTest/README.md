@@ -1,7 +1,7 @@
 # EM256 Comprehensive Test Program – Design Document
 
-**Version:** 1.8  
-**Datum:** 2026-04-09  
+**Version:** 1.9  
+**Datum:** 2026-04-11  
 **Autor:** Olaf Krieger  
 **Lizenz:** MIT  
 **Zielplattform:** BC A5120 mit EM256-Karte (U8001, 256 KB DRAM)
@@ -28,7 +28,7 @@ Das fertige Programm `em256ful.com` umfasst ~6400 Bytes und enthält:
 - **Gruppenweise Ausführung** mit Seitenpause nach ~23 Zeilen (PAGELEN=23)
 - **Kompakte Ausgabe:** Status rechts ausgerichtet: `[OK]`, `[FEHLER]`, `[INFO]`, `[TIMEOUT]`
 - Bei Fehler: Detailzeile(n) mit Soll/Ist-Werten
-- Bei Timeout: Debug-Ausgabe mit PIO-A-Status, Mailbox-STATUS, RESULT1, Reset-Vektor und Opcode
+- Bei Timeout: Debug-Ausgabe mit PIO-A-Status und Mailbox-STATUS/RESULT1-4
 - **Kapazitätserkennung:** 64/128/256 KB automatisch bestimmen
 - **Z8001-Firmware:** Als DB-Blöcke im Z80-Programm, erzeugt durch Python-Cross-Assembler
 
@@ -108,6 +108,19 @@ am Anfang von Segment 0 (= Z80-Fenster `0x4000` bei Page 0):
 | 0x0001 | OK – Test bestanden |
 | 0x0002 | FEHLER – Test fehlgeschlagen (Details in RESULTx) |
 | 0x00FF | Bereit (Firmware initialisiert, wartet auf Kommando) |
+| 0xA0xx | Laufstatus in March-C (Debug): xx = aktuelle Phase (01..05) |
+
+**March-C Laufzeit-Debug (nur waehrend D1 aktiv):**
+
+| Feld | Laufzeitbedeutung (STATUS=0xA0xx) |
+|------|-----------------------------------|
+| RESULT1 | 0xD100 = Firmware laeuft |
+| RESULT2 | Aktueller Offset (Heartbeat, alle 4 KB) |
+| RESULT3 | Loop-Code: 0x0101=P1 up write, 0x0201=P2 up rd/wr, 0x0301=P3 up read, 0x0401=P4 down rd/wr, 0x0501=P5 down read |
+| RESULT4 | Letzter Heartbeat-Offset |
+
+> Nach regularem Abschluss werden RESULT1-4 wieder mit den finalen Testergebnissen
+> belegt (Fehlermaske, Fehleranzahl, erste Fehleradresse, letzter Offset).
 
 **Ablauf:**
 1. Z80 schreibt Z8001-Code (Reset-Vektor + Firmware) in Seite 0
@@ -266,13 +279,13 @@ CALL WAIT_READY               ; PIOB_TRQ senden, TREN/INT16 pollen
 JR C, TIMEOUT                 ; CF=1: kein TREN erkannt
 CALL STOP_U8000               ; OUT PIOB_IDLE (0x14): reset16=1
 CALL RAMON_S0                 ; DRAM wieder einblenden
-CALL READ_MAILBOX             ; STATUS + RESULT1-3 in lokalen Puffer lesen
+CALL READ_MAILBOX             ; STATUS + RESULT1-4 in lokalen Puffer lesen
 CALL RAMOFF
 ; CF=0: Ergebnis in MB_STATUS_xx und MB_RESx_xx verfügbar
 ```
 
-> **Bei Timeout** wird `DBG_TOUT` aufgerufen, das PIO-A-Status, Mailbox-Inhalt,
-> Resetvektor-PC und ersten Opcode bei 0x0040 als Diagnose ausgibt.
+> **Bei Timeout** wird `DBG_TOUT` aufgerufen, das PIO-A-Status sowie
+> Mailbox-STATUS/RESULT1-4 als Diagnose ausgibt.
 
 ### Gruppe D: Autonomer DRAM-Test (U8001) (1 Test, alle 4 Segmente, phasenweise)
 
@@ -427,9 +440,10 @@ Der Segment-Parameter wird vom Z80-Programm vor dem Start des U8001 in die
 Mailbox (MB_PARAM1, Offset 0x000A) geschrieben. Die Firmware liest ihn über
 ein ungerades Register: `LD R11, #0x000A; LD R8, @R11`.
 
-### 5.3 DRAM-Test-Firmware (Gruppe D – March-C, v1.8)
+### 5.3 DRAM-Test-Firmware (Gruppe D – March-C, v1.9)
 
-Die Firmware führt eine **einzelne Phase** pro Aufruf aus und akkumuliert Fehler.
+Die Firmware fuehrt eine **einzelne Phase** pro Aufruf aus, akkumuliert Fehler und
+schreibt zusaetzliche Heartbeat-Debugwerte in die Mailbox.
 
 ```z8001
 ; Register-Konventionen (fw_march.s v1.8):
@@ -471,7 +485,14 @@ Px_OK:
     ; RESULT1 = Fehlermaske (16 Bit: jedes gesetzte Bit = defekte Datenleitung)
     ; RESULT2 = Fehleranzahl
     ; RESULT3 = Offset der ersten Fehlerstelle
+   ; RESULT4 = letzter bearbeiteter Offset
 ```
+
+**Laufzeit-Heartbeat (v1.9):**
+- STATUS = 0xA0xx (xx = Phase 1..5)
+- RESULT2 = aktueller Offset (alle 4 KB aktualisiert)
+- RESULT3 = Loop-Code (0x0101..0x0501)
+- RESULT4 = letzter Heartbeat-Offset
 
 **Fehlermaske → IC-Zuordnung (Z80-seitig):**
 Die 16-Bit-Fehlermaske wird vom Z80 in je 8 Bit für unteres/oberes Datenbyte
@@ -610,11 +631,11 @@ python3 16bitTest/build.py clean              # build/ leeren
 | `STOP_U8000` | U8001 stoppen: OUT PIOB_IDLE (0x14 = reset16 + n_ramen) |
 | `WAIT_READY` | TRQ8 senden → TREN pollen (kurzer Timeout ~2s, Doppelschleife) |
 | `WAIT_READY_LONG` | TRQ8 senden → TREN pollen (langer Timeout ~16s, für March-C) |
-| `READ_MAILBOX` | STATUS + RESULT1–3 (Big-Endian) aus EM256-RAM in lokalen Puffer |
+| `READ_MAILBOX` | STATUS + RESULT1–4 (Big-Endian) aus EM256-RAM in lokalen Puffer |
 | `CHECK_RESULT1` | Vergleicht RESULT1 (Hi/Lo) mit DE-Register, ZF=1 bei Übereinstimmung |
 | `RUN_FW_TEST` | Gesamtablauf: RAMON_S0 → LDIR → STATUS nullen → RAMOFF → START → Delay → WAIT_READY → STOP → RAMON_S0 → READ_MAILBOX → RAMOFF |
 | `RUN_FW_TEST_LONG` | Wie RUN_FW_TEST mit langer Vor-Verzögerung (~4s) + langem Timeout |
-| `DBG_TOUT` | Debug bei Timeout: PIO-A + Mailbox + Resetvektor + Opcode ausgeben |
+| `DBG_TOUT` | Debug bei Timeout: PIO-A + Mailbox (STATUS + RESULT1-4) ausgeben |
 | `COUNT_PASS` | Bestanden-Zähler (global + Gruppe) inkrementieren |
 | `COUNT_INFO` | Info-Zähler (global + Gruppe) inkrementieren |
 | `COUNT_FAIL_xx` | Fehler-Zähler + Test-ID (2 Bytes) in FAIL_LIST eintragen |
@@ -644,13 +665,11 @@ MB_RES2_HI:   DB 0      ; RESULT2 High
 MB_RES2_LO:   DB 0      ; RESULT2 Low
 MB_RES3_HI:   DB 0      ; RESULT3 High
 MB_RES3_LO:   DB 0      ; RESULT3 Low
+MB_RES4_HI:   DB 0      ; RESULT4 High
+MB_RES4_LO:   DB 0      ; RESULT4 Low
 
-; Debug-Variablen (gefüllt von DBG_TOUT bei Timeout)
+; Debug-Variablen (gefuellt von DBG_TOUT bei Timeout)
 DBG_PA:     DB  0       ; PIO-A Status zum Zeitpunkt des Timeouts
-DBG_V6:     DB  0       ; Reset-Vektor Byte 6 (PC Offset High)
-DBG_V7:     DB  0       ; Reset-Vektor Byte 7 (PC Offset Low)
-DBG_C0:     DB  0       ; Erster Opcode-Byte bei 0x0040
-DBG_C1:     DB  0       ; Zweites Opcode-Byte bei 0x0041
 
 ; Sonstige
 SAVED_SP:   DW  0       ; Gesicherter SP für sauberes RET nach CP/M
@@ -672,25 +691,29 @@ Wenn `WAIT_READY` oder `WAIT_READY_LONG` mit Timeout zurückkehrt, wird `DBG_TOU
 aufgerufen. Diese Routine gibt eine kompakte Diagnosezeile aus:
 
 ```
-   PA=xx ST=xxxx R1=xxxx
-   VEC=xxxx CD=xxxx
+   PA=xx ST=xxxx R1=xxxx R2=xxxx R3=xxxx R4=xxxx
 ```
 
 | Feld | Bedeutung |
 |------|-----------|
 | PA | PIO-A Registerwert (Bit 7=TREN, Bit 4=INT16) |
-| ST | Mailbox-STATUS (0x0000=nicht gestartet, 0x0001=OK, 0x0002=FEHLER) |
-| R1 | Mailbox-RESULT1 |
-| VEC | Reset-Vektor PC-Offset (Bytes 6–7, erwartet 0x0040) |
-| CD | Erster Opcode bei 0x0040 (erwartet 0x21xx für LD R15,#imm) |
+| ST | Mailbox-STATUS (0x0000=nicht gestartet, 0x0001=OK, 0x0002=FEHLER, 0xA0xx=laeuft in Phase xx) |
+| R1 | Mailbox-RESULT1 (final: Fehlermaske, Laufzeit: 0xD100 Heartbeat-Marker) |
+| R2 | Mailbox-RESULT2 (final: Fehleranzahl, Laufzeit: aktueller Offset) |
+| R3 | Mailbox-RESULT3 (final: erste Fehleradresse, Laufzeit: Loop-Code 0x0101..0x0501) |
+| R4 | Mailbox-RESULT4 (letzter Heartbeat-/Abschluss-Offset) |
 
-**Diagnose-Beispiel (vor dem FCW-Fix):**
+**Diagnose-Beispiel (Firmware haengt in Phase 4):**
 ```
-   PA=28 ST=0000 R1=0000
-   VEC=0040 CD=210F
+   PA=28 ST=A004 R1=D100 R2=8A00 R3=0401 R4=8A00
 ```
-PA=0x28 → Bit 7=0 (TREN nicht gesetzt) → MSET hat MO-Pin nicht assertiert.
-Ursache: FCW=0x0000 (Normal Mode), MSET ist privilegiert → Privilege Violation Trap.
+
+Interpretation:
+- ST=A004: U8001 lief in Phase 4 (abwaerts lesen/schreiben).
+- R3=0401: letzter gemeldeter Loop war P4 (down rd/wr).
+- R2/R4=8A00: letzter sicher erreichter Offset war 0x8A00.
+- PA=28 (TREN=0): U8001 hat den Bus nicht freigegeben -> vermutlich Absturz/Haenger,
+  nicht nur ein normaler Speichervergleichsfehler.
 
 ---
 

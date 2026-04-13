@@ -1,4 +1,4 @@
-	TITLE	'EM256 Full Test v1.8'
+	TITLE	'EM256 Full Test v1.9'
 	.Z80
 ;
 ; em256ful.mac - Umfassendes Testprogramm fuer die EM256 16-Bit-Erweiterung
@@ -822,6 +822,8 @@ D1_SEG_LOOP:
 	LD	A, 1
 	LD	(D1_PHASE), A
 D1_PH_LOOP:
+	XOR	A
+	LD	(D1_POLL_TO), A
 	; Firmware laden
 	CALL	RAMON_S0
 	LD	HL, FW_MARCH_CODE
@@ -866,18 +868,27 @@ D1PL_I:	LD	B, 0
 	LD	C, PIOA
 	IN	A, (C)
 	BIT	TREN, A
-	JR	NZ, D1_RDY
+	JR	NZ, D1_RDY_OK
 	BIT	INT16, A
-	JR	NZ, D1_RDY
+	JR	NZ, D1_RDY_OK
 	DEC	E
 	JR	NZ, D1PL_I
 	DEC	D
 	JR	NZ, D1PL_O
+	LD	A, 1
+	LD	(D1_POLL_TO), A
+	JR	D1_RDY
+D1_RDY_OK:
+	XOR	A
+	LD	(D1_POLL_TO), A
 D1_RDY:
 	CALL	STOP_U8000
 	CALL	RAMON_S0
 	CALL	READ_MAILBOX
 	CALL	RAMOFF
+	LD	A, (D1_POLL_TO)
+	OR	A
+	JP	NZ, D1_TOUT
 	; Ergebnis pruefen
 	LD	A, (MB_STATUS_HI)
 	OR	A
@@ -997,6 +1008,7 @@ D1_TOUT:
 	ADD	A, '0'
 	LD	E, A
 	CALL	PUTC
+	CALL	DBG_TOUT
 	CALL	PRINT_TIMEOUT
 	CALL	COUNT_FAIL_D1
 	JP	D_DONE
@@ -1716,6 +1728,10 @@ READ_MAILBOX:
 	LD	(MB_RES3_HI), A
 	LD	A, (EM256ADR + MB_RES3 + 1)
 	LD	(MB_RES3_LO), A
+	LD	A, (EM256ADR + MB_RES4)
+	LD	(MB_RES4_HI), A
+	LD	A, (EM256ADR + MB_RES4 + 1)
+	LD	(MB_RES4_LO), A
 	RET
 
 ; =============================================================================
@@ -1985,10 +2001,18 @@ PRINT_MARCH_DETAIL:
 ; DBG_TOUT - Debug-Ausgabe bei Firmware-Timeout (STATUS=0)
 ;
 ; Mailbox ist bereits gelesen (MB_STATUS_xx/MB_RESx_xx).
-; Gibt kompakte Info aus: STATUS + RESULT1.
+; Gibt kompakte Info aus: STATUS + RESULT1..RESULT4.
 ; =============================================================================
 DBG_TOUT:
-	; Zeile: ST=xxxx R1=xxxx
+	; Zeile: PA=xx ST=xxxx R1=xxxx R2=xxxx R3=xxxx R4=xxxx
+	LD	B, 0
+	LD	C, PIOA
+	IN	A, (C)
+	LD	(DBG_PA), A
+	LD	DE, MD_PA
+	CALL	PUTS
+	LD	A, (DBG_PA)
+	CALL	PUTHEX
 	LD	DE, MD_ST
 	CALL	PUTS
 	LD	A, (MB_STATUS_HI)
@@ -2000,6 +2024,24 @@ DBG_TOUT:
 	LD	A, (MB_RES1_HI)
 	CALL	PUTHEX
 	LD	A, (MB_RES1_LO)
+	CALL	PUTHEX
+	LD	DE, MD_R2
+	CALL	PUTS
+	LD	A, (MB_RES2_HI)
+	CALL	PUTHEX
+	LD	A, (MB_RES2_LO)
+	CALL	PUTHEX
+	LD	DE, MD_R3
+	CALL	PUTS
+	LD	A, (MB_RES3_HI)
+	CALL	PUTHEX
+	LD	A, (MB_RES3_LO)
+	CALL	PUTHEX
+	LD	DE, MD_R4
+	CALL	PUTS
+	LD	A, (MB_RES4_HI)
+	CALL	PUTHEX
+	LD	A, (MB_RES4_LO)
 	CALL	PUTHEX
 	LD	DE, MSG_CRLF
 	JP	PUTS
@@ -2163,7 +2205,7 @@ GS_NOFAIL:
 ; =============================================================================
 MSG_BANNER:
 	DB	0DH, 0AH
-	DB	'EM256 Full Test v1.7', 0DH, 0AH
+	DB	'EM256 Full Test v1.9', 0DH, 0AH
 	DB	'(c) 2026 Olaf Krieger', 0DH, 0AH
 	DB	'============================', 0DH, 0AH, '$'
 
@@ -2284,6 +2326,9 @@ MSG_CRLF:
 MD_PA:	DB	'   PA=', '$'
 MD_ST:	DB	' ST=', '$'
 MD_R1:	DB	' R1=', '$'
+MD_R2:	DB	' R2=', '$'
+MD_R3:	DB	' R3=', '$'
+MD_R4:	DB	' R4=', '$'
 MD_VC:	DB	'   VEC=', '$'
 MD_CD:	DB	' CD=', '$'
 
@@ -2357,6 +2402,8 @@ MB_RES2_HI:	DB	0
 MB_RES2_LO:	DB	0
 MB_RES3_HI:	DB	0
 MB_RES3_LO:	DB	0
+MB_RES4_HI:	DB	0
+MB_RES4_LO:	DB	0
 
 ; Statistik
 PASS_CNT:	DB	0
@@ -2380,6 +2427,7 @@ DBG_C1:		DB	0
 ; March-C Segment-Test
 D1_SEGIDX:	DB	0
 D1_PHASE:	DB	0
+D1_POLL_TO:	DB	0
 D1_HAD_ERROR:	DB	0
 DEFECT_RAS:	DB	0, 0, 0, 0	; RAS0, RAS1, RAS2, RAS3
 
