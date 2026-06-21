@@ -560,10 +560,18 @@ class CPABuilder:
         build_abs = self._abs(build_dir)
         os.makedirs(build_abs, exist_ok=True)
 
-        # Aktualitätsprüfung: Build nur wenn Quelldateien neuer als @os.com sind
+        # M80-Listing (build/bios.prn) erzeugen, wenn in den Build-Optionen aktiviert
+        make_listing = config.get('CONFIG_BUILD_LISTING') == 'y'
+        listing_rel = os.path.join(build_dir, 'bios.prn')
+
+        # Aktualitätsprüfung: Build nur wenn Quelldateien neuer als @os.com sind.
+        # Fehlt das gewünschte Listing noch, wird trotzdem neu gebaut.
         if self._os_is_up_to_date(paths, paths['os_target']):
-            self.log("[INFO] @OS.COM ist aktuell – Build übersprungen.")
-            return
+            if make_listing and not os.path.isfile(self._abs(listing_rel)):
+                self.log("[INFO] @OS.COM ist aktuell, aber bios.prn fehlt – Build wird ausgeführt.")
+            else:
+                self.log("[INFO] @OS.COM ist aktuell – Build übersprungen.")
+                return
 
         # STEP 1: .mac-Dateien kopieren:
         # Zuerst gemeinsame Quellen aus src/, dann variantenspezifische aus src/<variante>/
@@ -597,11 +605,19 @@ class CPABuilder:
                 shutil.copy2(src, build_abs)
 
         # STEP 4: Assemblieren mit M80 - Listing erzeugen (für /p:-Wert-Extraktion)
-        # Das Listing enthält den /p:-Wert, der für den Linker benötigt wird
-        self.log("[STEP 4] Assemblieren mit M80")
+        # Das Listing enthält den /p:-Wert, der für den Linker benötigt wird.
+        # Ist die Listing-Option aktiv, wird das vollständige Listing zusätzlich in
+        # die Datei bios.prn geschrieben (M80-Syntax: ,listing=quelle). Der /p:-Wert
+        # wird unabhängig davon weiterhin über die Konsolenausgabe (.printx) ermittelt.
         cparun_abs = self._abs(self.cparun)
+        if make_listing:
+            self.log("[STEP 4] Assemblieren mit M80 (Listing -> bios.prn)")
+            m80_arg = f',bios.prn={main_src}/L'
+        else:
+            self.log("[STEP 4] Assemblieren mit M80")
+            m80_arg = f'={main_src}/L'
         result = self._run(
-            [cparun_abs, 'm80', f'={main_src}/L'],
+            [cparun_abs, 'm80', m80_arg],
             cwd=build_abs, check=False
         )
 
@@ -627,6 +643,8 @@ class CPABuilder:
         )
 
         # STEP 7: Temporäre Dateien aufräumen (alles außer @os.com entfernen)
+        # Das Listing bios.prn (*.prn) ist bewusst nicht in den Mustern enthalten
+        # und bleibt daher erhalten.
         self.log("[STEP 7] Aufräumen temporärer Dateien")
         for pattern in ['*.syp', '*.rel', '*.mac', '*.MAC', '*.erl',
                         'm80.com', 'linkmt.com']:
@@ -634,6 +652,19 @@ class CPABuilder:
                 basename = os.path.basename(f).lower()
                 if basename != '@os.com':
                     os.remove(f)
+
+        # Listing nachbearbeiten: Emulator schreibt den Namen evtl. groß (BIOS.PRN)
+        if make_listing:
+            prn_abs = self._abs(listing_rel)
+            if not os.path.isfile(prn_abs):
+                upper = os.path.join(build_abs, 'BIOS.PRN')
+                if os.path.isfile(upper):
+                    os.replace(upper, prn_abs)
+            if os.path.isfile(prn_abs):
+                size = os.path.getsize(prn_abs)
+                self.log(f"[INFO] M80-Listing erzeugt: {listing_rel} ({size} Bytes)")
+            else:
+                self.log("[WARNUNG] M80-Listing bios.prn wurde nicht erzeugt!")
 
         self.log("[FERTIG] @OS.COM wurde erfolgreich erzeugt.")
 
