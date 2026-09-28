@@ -48,6 +48,18 @@ diskdef scpxprg640
   os 2.2
 end
 
+# Diskdefinition für SCPXA5120640 (5" 80T double sided) mit 4 Bootsektoren für A5120
+diskdef SCPXA5120640
+  seclen 256
+  tracks 160
+  sectrk 16
+  blocksize 2048
+  maxdir 128
+  skew 0
+  boottrk 4
+  os 2.2
+end
+
 # Diskdefinition für CPA780 (5" 80T double sided) mit 3 Bootsektoren
 diskdef cpa780
   seclen 1024
