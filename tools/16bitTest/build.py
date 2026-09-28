@@ -12,6 +12,7 @@ cparun ausgefuehrt werden.
 Unterstuetzte Quelldateien:
   - em256tst.mac  (Original-Test, direkt assemblierbar)
   - em256full.mac (Volltest, enthaelt ;%INCLUDE-Direktiven fuer Z8001-Firmware)
+  - em256adr.mac  (G1: Portbasis/Attributspeicher, reiner U880-Code)
 
 Arbeitsweise
 ------------
@@ -37,6 +38,7 @@ Aufruf
     python3 tools/16bitTest/build.py               # em256full (Standard)
     python3 tools/16bitTest/build.py em256tst      # Original-Test
     python3 tools/16bitTest/build.py em256full     # Volltest (explizit)
+    python3 tools/16bitTest/build.py em256adr      # Portbasis-Probe (G1)
 """
 
 import glob
@@ -60,6 +62,9 @@ Z8001_ASM   = os.path.join(SCRIPT_DIR, 'z8001asm.py')  # 16bitTest/z8001asm.py
 
 # Standard-Quelle (ueber Kommandozeile aenderbar)
 DEFAULT_SOURCE = 'em256ful'
+
+# Quellen ohne ;%INCLUDE-Firmware (kein z8001asm-Lauf, keine Vorverarbeitung)
+NO_FIRMWARE = {'em256tst', 'em256adr'}
 
 # Ladeadresse fuer CP/M .COM-Programme (immer 0x100)
 LOAD_ADDR   = '100'
@@ -203,7 +208,8 @@ def main():
     source_mac_up  = source_name_up + '.MAC'
     source_erl     = source_name_up + '.ERL'
     target_com     = source_name + '.com'
-    needs_preprocessing = (source_name != 'em256tst')
+    # Reine U880-Programme ohne eingebettete Z8001-Firmware
+    needs_preprocessing = source_name not in NO_FIRMWARE
 
     log("=" * 50)
     log(f"EM256 Test Build  –  {source_name}")
