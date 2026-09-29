@@ -54,7 +54,8 @@ A1:
   INB RL0,%0080              ! gerade Adresse: Byte von AD8-15 = Status-8 (am Geraet
   LD <<0>>%008A,R0           ! 2026-09-29 C3H; der U8001 waehlt die Haelfte nach A0)
   CLR R0
-  INB RL0,%0081              ! ungerade: AD0-7, die niemand treibt (Soll FFH)
+  INB RL0,%0081              ! ungerade: AD0-7, die niemand treibt - sie halten die
+                             ! Portadresse (am Geraet 2026-09-29: 81H, a5120emu G5)
   LD <<0>>%00A6,R0
   CALL UEBERG
 
@@ -140,9 +141,12 @@ C1:
   ! Vorlauf (R7 = 0): A54 kann von einem frueheren Lauf noch freigeben (A53
   ! zaehlt dann jeden Stapelzugriff).  Ein NVI hier wird quittiert, waehrend
   ! A33 Bit 3 = 0 ist - das laedt A53 und haelt ihn geladen (Handbuch 1.12).
+  ! v1.2: R4 VOR dem EI loeschen - am Geraet kam der NVI 2026-09-29 gleich beim
+  ! EI (A54 gab nach Netz-Ein frei, QD war schon L), und R4 stand noch auf %B020
+  ! aus Phase B.  Der Handler legt %8000 + Zahl der PUSH ab, 0 = kein NVI.
   CLR R7
-  EI NVI
   CLR R4
+  EI NVI
 E0:
   INC R4
   PUSH @RR14,R4
@@ -235,7 +239,8 @@ VIH:                         ! VI: Kennung (Vektor low + Status-8 high) ablegen
 NVIH:                        ! NVI: A33 Bit 3 aus, Zaehlerstand ablegen
   CP R7,#0
   JR NE,NVI1
-  LD <<0>>%00A8,R4           ! Vorlauf: nur vermerken, weiter mit Teil a
+  SET R4,#15                 ! Vorlauf: %8000 + Stapelzugriffe vermerken,
+  LD <<0>>%00A8,R4           ! weiter mit Teil a
   JP EV
 NVI1:
   CLR R0

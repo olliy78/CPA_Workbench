@@ -19,10 +19,15 @@
 ;      kreis A54 ueber eine NVI-Quittung in den Ladezustand bringt (sonst haengt
 ;      das Ergebnis vom vorigen Lauf ab).  Am Geraet 2026-09-29: 4 (Vorlast 11 =
 ;      IRET segmentiert, Handbuch 1.12) - v1.0 verlangte faelschlich 5..8.
+;      Vorlauf: 0 = kein NVI, 80nnH = NVI nach nn Stapelzugriffen (v1.1 zeigte
+;      im 1. Lauf nach Netz-Ein B020H = NVI schon beim EI, R4 aus Phase B).
 ;   H  Paritaet (nur Information): /PE beim Start, nach PR, nach PR aus dem
 ;      EM heraus, nach reinen EM-Lesezugriffen, nach reinen K1520-Lese-
-;      zugriffen - klaert, welche Lesezyklen das FF A46 (7474, Takt RDI)
-;      schreiben (a5120emu G4).
+;      zugriffen (a5120emu G4; am Geraet 0 1 1 1 1).  v1.2 (G5): dazu PR im
+;      Ruhezustand von em256ful (dort las E2 nach PR 0), 4 KB nie beschriebene
+;      EM-Zellen lesen (Segment 3, C000H-CFFFH) und danach beschriebene -
+;      Schaltplan 9000/1: A46 ist ein bleibender Merker (Takt = RDI NAND Q),
+;      dann steht zweimal 0.
 ;   F  STOP (PIO B3) haelt den U8001 an (Zaehler in A35 steht).
 ;   G  RESET16 = 1: 8-Bit-Mode, A33 geloescht.
 ;
@@ -37,7 +42,8 @@
 ;
 ; Autor:  (c) 2026 Olaf Krieger
 ; Lizenz: MIT
-; Datum:  2026-09-29  (v1.1: E-Pruefbereich, Vorlauf A54, INB ungerade, H)
+; Datum:  2026-09-29  (v1.1: E-Pruefbereich, Vorlauf A54, INB ungerade, H;
+;                      v1.2: INB ungerade Soll 81H, Vorlauf-Marke, H2)
 ;
 
 ; =============================================================================
@@ -81,6 +87,7 @@ A_TREN	EQU	80H
 WIN	EQU	4000H
 ATTWIN	EQU	0CH		; PEN=1, WE=1 (Bits negiert), A14-8=A15-8=0
 ATTAUS	EQU	07H		; PEN=0, WE=0, /A14-8 wie biosremc (hbemadr 4000H)
+ATTLEER	EQU	02H		; PEN=1, WE=0, A14-8=A15-8=1: Zellen C000..CFFF (H, v1.2)
 
 ; Mailbox (Zelle in Segment 0, wie fw16abl.s)
 MB	EQU	WIN+80H
@@ -785,6 +792,52 @@ PHH1:	LD	A,(HL)
 	JR	NZ,PHH1
 	IN	A,(PB)
 	LD	(PE4),A
+	LD	A,54H		; 5: PR wie em256ful E2 (/RAMEN = 1, STOP, TRQ8, RESET16)
+	OUT	(PB),A
+	LD	A,14H
+	OUT	(PB),A
+	IN	A,(PB)
+	LD	(PE5),A
+	LD	A,(PBV)
+	OUT	(PB),A
+	LD	A,B_PR		; 6: PR, dann 4 KB nie beschriebene Zellen (Segment 3,
+	CALL	PBSET		;    C000H..CFFFH, Fenster schreibgeschuetzt)
+	LD	A,B_PR
+	CALL	PBRES
+	LD	A,3
+	CALL	SETSEG
+	LD	BC,4000H+ATT
+	LD	A,ATTLEER
+	OUT	(C),A
+	LD	HL,WIN
+	LD	BC,1000H
+PHH3:	LD	A,(HL)
+	INC	HL
+	DEC	BC
+	LD	A,B
+	OR	C
+	JR	NZ,PHH3
+	IN	A,(PB)
+	LD	(PE6),A
+	LD	BC,4000H+ATT	; 7: danach beschriebene Zellen (Firmware, Segment 0)
+	LD	A,ATTWIN
+	OUT	(C),A
+	XOR	A
+	CALL	SETSEG
+	LD	HL,WIN+0100H
+	LD	BC,0100H
+PHH4:	LD	A,(HL)
+	INC	HL
+	DEC	BC
+	LD	A,B
+	OR	C
+	JR	NZ,PHH4
+	IN	A,(PB)
+	LD	(PE7),A
+	LD	A,B_PR		; aufraeumen: kein Fehler stehen lassen
+	CALL	PBSET
+	LD	A,B_PR
+	CALL	PBRES
 	LD	DE,M_H1
 	CALL	PUTS
 	LD	HL,PE0
@@ -799,6 +852,21 @@ PHH2:	LD	A,(HL)
 	INC	HL
 	DJNZ	PHH2
 	LD	DE,M_H2
+	CALL	PUTS
+	LD	DE,M_H3
+	CALL	PUTS
+	LD	HL,PE5
+	LD	B,3
+PHH5:	LD	A,(HL)
+	RLCA
+	AND	1
+	ADD	A,'0'
+	CALL	PUTC
+	LD	A,' '
+	CALL	PUTC
+	INC	HL
+	DJNZ	PHH5
+	LD	DE,M_H4
 	JP	PUTS
 
 ; im EM ausgefuehrt (Zelle 0E00H = WIN+0E00H)
@@ -909,7 +977,7 @@ PAUSE:	XOR	A
 ; =============================================================================
 ; Texte
 ; =============================================================================
-M_BAN:	DB	0DH,0AH,'EM16ABL 1.1  Ablaeufe des 16-Bit-Mode (U8001 auf EM256)'
+M_BAN:	DB	0DH,0AH,'EM16ABL 1.2  Ablaeufe des 16-Bit-Mode (U8001 auf EM256)'
 	DB	0DH,0AH,'$'
 M_A1:	DB	'A Start aus Reset (A29 sofort, Vektor Segment 0) $'
 M_A2:	DB	'A Rechnen, Ergebnis im EM-Speicher               $'
@@ -918,7 +986,7 @@ M_A4:	DB	'A Wort-IN: Status-8 im oberen Byte               $'
 M_A5:	DB	'  INB liest untere Haelfte: $'
 M_A5B:	DB	'H (Status-8 war C3H)',0DH,0AH,'$'
 M_A5C:	DB	'  INB %81 (ungerade, AD0-7): $'
-M_A5D:	DB	'H (Soll FFH)',0DH,0AH,'$'
+M_A5D:	DB	'H (Soll 81H = Adressbyte)',0DH,0AH,'$'
 M_A6:	DB	'A Rueckweg TRQ8/MSET/TREN/BUSAK -> A29 beim M1   $'
 M_B1:	DB	'B Segmentweiche Mode 0 (A33 Bit 5/6)             $'
 M_B2:	DB	'B Segmentweiche Mode 1 (INSTR x N/S)             $'
@@ -931,10 +999,12 @@ M_D8:	DB	'D INT-16: kein freier Interruptvektor - uebersprungen',0DH,0AH,'$'
 M_E1:	DB	'E Einzelbefehlszaehler A53 -> NVI                $'
 M_E2:	DB	'  G3: NVI nach $'
 M_E3:	DB	'H Stapelzugriffen (X12)',0DH,0AH,'$'
-M_E4:	DB	'  Vorlauf ohne Bit 3: NVI nach $'
-M_E5:	DB	'H (0 = A54 hielt A53 geladen)',0DH,0AH,'$'
+M_E4:	DB	'  Vorlauf ohne Bit 3: $'
+M_E5:	DB	'H (0 = kein NVI, 80nnH = NVI nach nn)',0DH,0AH,'$'
 M_H1:	DB	'H Paritaet /PE Start,PR,PR-EM,EM,K1520: $'
 M_H2:	DB	'(1 = ok)',0DH,0AH,'$'
+M_H3:	DB	'H PR wie em256ful, Leer-EM lesen, danach: $'
+M_H4:	DB	'(0 0 = Merker)',0DH,0AH,'$'
 M_F1:	DB	'F STOP haelt den U8001 an                        $'
 M_G1:	DB	'G RESET16: 8-Bit-Mode, A33 geloescht             $'
 M_OK:	DB	'OK',0DH,0AH,'$'
@@ -981,6 +1051,9 @@ PE1:	DB	0
 PE2:	DB	0
 PE3:	DB	0
 PE4:	DB	0
+PE5:	DB	0		; v1.2: PR im em256ful-Ruhezustand, nach Leer-EM, danach
+PE6:	DB	0
+PE7:	DB	0
 I16A:	DB	0
 	DS	256
 STACK:
