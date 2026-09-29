@@ -1,56 +1,56 @@
-; fw_stack.s - C6: Stack-Test (PUSH/POP)
-;
-; Z8001-Firmware fuer EM256 Testprogramm
-; Testet die Stack-Operationen des U8001 (PUSH/POP) auf LIFO-Korrektheit.
-; Pusht 0xBEEF und 0xCAFE, poppt in umgekehrter Reihenfolge zurueck.
-;
-; Erwartung: RESULT1 = 0xBEEF, RESULT2 = 0xCAFE, STATUS = 0x0001
-;
-; (c) 2026 Olaf Krieger - MIT Lizenz
+! fw_stack.s - C6: Stapel PUSH/POP
+!
+! U8001-Firmware fuer EM256FUL (A5120.16), Gruppe C.  Assembler: z8kasm aus
+! a5120emu (NICHT z8001asm.py - der kodiert segmentierte Spruenge einwortig).
+! Segmentiert, System (FCW %C000).  Der U880 laedt das Abbild ab Zelle 0 in
+! Segment 0; RESET16 = 0 loescht A33 (Mode 0, Segment 0), der U8001 holt FCW/PC
+! aus Segment 0 (Plan 17 Par. 7.4).
+!
+! Speicher (Segment 0):
+!   0000  Resetvektor (FCW %C000, PC <<0>>%0040)
+!   0008  Mailbox: 000A PARAM1, 000C PARAM2, 0010 STATUS, 0012..0018 RESULT1..4
+!   0040  Programm;  FFF0 Stapel (RR14, abwaerts)
+!
+! Zeiger im segmentierten Modus nur als Registerpaar (@RRn), Mailbox mit
+! direkter Adresse <<0>>.  Ende: auf uI (= /TRQ8) warten, MSET (TREN) - der U880
+! uebernimmt im naechsten M1 den Bus und setzt danach RESET16.
+!
+! PUSH %BEEF, PUSH %CAFE, POP in umgekehrter Folge (Stapelzeiger RR14).
+! Erwartung: RESULT1 = %BEEF, RESULT2 = %CAFE, STATUS = %0001
+! (c) 2026 Olaf Krieger - MIT Lizenz
 
-    ORG  0x0000
+  SEG
+  ORG <<0>>%0000
+  DW %0000,%C000,%0000,%0040
 
-    ; Z8001 Reset-Vektor (FCW=0xC000: Segmented + System Mode)
-    DW   0x0000, 0xC000, 0x0000, 0x0040
-
-    ; Mailbox
-    DS   56
-
-    ; Code ab 0x0040
-    LD   R15, #0xFFF0       ; SP (Stack waechst nach unten)
-
-    LD   R1, #0xBEEF
-    LD   R2, #0xCAFE
-    PUSH @R15, R1           ; Push 0xBEEF
-    PUSH @R15, R2           ; Push 0xCAFE
-
-    ; Pop in umgekehrter Reihenfolge
-    POP  R3, @R15           ; Pop -> R3 = 0xCAFE (LIFO)
-    POP  R4, @R15           ; Pop -> R4 = 0xBEEF (LIFO)
-
-    ; Pruefen
-    CP   R4, R1             ; R4 soll 0xBEEF sein
-    JR   NZ, FAIL
-    CP   R3, R2             ; R3 soll 0xCAFE sein
-    JR   NZ, FAIL
-
-    ; Ergebnis -> Mailbox
-    LD   R5, #0x0012
-    LD   @R5, R4            ; RESULT1 = 0xBEEF
-    INC  R5, #2
-    LD   @R5, R3            ; RESULT2 = 0xCAFE
-    ; STATUS = OK
-    LD   R1, #0x0001
-    LD   R5, #0x0010
-    LD   @R5, R1
-    JR   T, $
-
+  ORG <<0>>%0040
+START:
+  LDL RR14,#<<0>>%FFF0
+  LD R1,#%BEEF
+  LD R2,#%CAFE
+  PUSH @RR14,R1
+  PUSH @RR14,R2
+  POP R3,@RR14               ! %CAFE
+  POP R4,@RR14               ! %BEEF
+  LD <<0>>%0012,R4           ! RESULT1
+  LD <<0>>%0014,R3           ! RESULT2
+  CP R4,R1
+  JR NZ,FAIL
+  CP R3,R2
+  JR NZ,FAIL
+  LD R0,#%0001              ! STATUS = OK
+  LD <<0>>%0010,R0
+  JR FERTIG
 FAIL:
-    LD   R5, #0x0010
-    LD   R6, #0x0002        ; STATUS = FEHLER
-    LD   @R5, R6
-    INC  R5, #2
-    LD   @R5, R4            ; RESULT1 = was als 0xBEEF rauskam
-    INC  R5, #2
-    LD   @R5, R3            ; RESULT2 = was als 0xCAFE rauskam
-    JR   T, $
+  LD R0,#%0002               ! STATUS = FEHLER
+  LD <<0>>%0010,R0
+  JR FERTIG
+
+! --- Uebergabe an den U880: uI abwarten, MSET -> TREN -> BUSRQ/BUSAK -> A29 ---
+FERTIG:
+  MBIT                       ! S = 1: uI H = keine Anforderung
+  JR MI,FERTIG
+  MSET
+HALTEN:
+  JR HALTEN                  ! der U880 setzt RESET16
+  END

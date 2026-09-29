@@ -1,39 +1,43 @@
-; fw_byte.s - C8: Byte-Operationen (CLR, LDB)
-;
-; Z8001-Firmware fuer EM256 Testprogramm
-; Testet Byte-Zugriff auf Teilregister (RH/RL) des U8001.
-;
-; Ablauf:
-;   1. CLR R1            - Ganzes 16-Bit-Register loeschen
-;   2. LDB RH1, #0x75   - High-Byte (Bits 15-8) laden
-;   3. LDB RL1, #0x10   - Low-Byte (Bits 7-0) laden
-;   4. R1 als Wort lesen -> sollte 0x7510 sein
-;
-; Erwartung: RESULT1 = 0x7510, STATUS = 0x0001
-;
-; (c) 2026 Olaf Krieger - MIT Lizenz
+! fw_byte.s - C8: Byte-Operationen (CLR, LDB auf RH/RL)
+!
+! U8001-Firmware fuer EM256FUL (A5120.16), Gruppe C.  Assembler: z8kasm aus
+! a5120emu (NICHT z8001asm.py - der kodiert segmentierte Spruenge einwortig).
+! Segmentiert, System (FCW %C000).  Der U880 laedt das Abbild ab Zelle 0 in
+! Segment 0; RESET16 = 0 loescht A33 (Mode 0, Segment 0), der U8001 holt FCW/PC
+! aus Segment 0 (Plan 17 Par. 7.4).
+!
+! Speicher (Segment 0):
+!   0000  Resetvektor (FCW %C000, PC <<0>>%0040)
+!   0008  Mailbox: 000A PARAM1, 000C PARAM2, 0010 STATUS, 0012..0018 RESULT1..4
+!   0040  Programm;  FFF0 Stapel (RR14, abwaerts)
+!
+! Zeiger im segmentierten Modus nur als Registerpaar (@RRn), Mailbox mit
+! direkter Adresse <<0>>.  Ende: auf uI (= /TRQ8) warten, MSET (TREN) - der U880
+! uebernimmt im naechsten M1 den Bus und setzt danach RESET16.
+!
+! CLR R1, LDB RH1,#%75, LDB RL1,#%10.  Erwartung: RESULT1 = %7510, STATUS = %0001
+! (c) 2026 Olaf Krieger - MIT Lizenz
 
-    ORG  0x0000
+  SEG
+  ORG <<0>>%0000
+  DW %0000,%C000,%0000,%0040
 
-    ; Z8001 Reset-Vektor (FCW=0xC000: Segmented + System Mode)
-    DW   0x0000, 0xC000, 0x0000, 0x0040
+  ORG <<0>>%0040
+START:
+  LDL RR14,#<<0>>%FFF0
+  CLR R1
+  LDB RH1,#%75
+  LDB RL1,#%10
+  LD <<0>>%0012,R1           ! RESULT1
+  LD R0,#%0001              ! STATUS = OK
+  LD <<0>>%0010,R0
+  JR FERTIG
 
-    ; Mailbox (0x0008 - 0x003F)
-    DS   56
-
-    ; Code ab 0x0040
-    LD   R15, #0xFFF0       ; Stack-Pointer
-
-    CLR  R1                 ; R1 = 0x0000 (alle Bits loeschen)
-    LDB  RH1, #0x75         ; High-Byte: R1 = 0x75xx
-    LDB  RL1, #0x10         ; Low-Byte:  R1 = 0x7510
-
-    ; Ergebnis 0x7510 in Mailbox schreiben (ueber ungerades Register)
-    LD   R3, #0x0012        ; R3 ungerade -> non-segmented -> RESULT1 Offset
-    LD   @R3, R1            ; RESULT1 = 0x7510
-
-    ; STATUS = OK
-    LD   R1, #0x0001
-    LD   R3, #0x0010        ; STATUS Offset
-    LD   @R3, R1
-    JR   T, $               ; Endlosschleife (wartet auf Bus-Uebernahme)
+! --- Uebergabe an den U880: uI abwarten, MSET -> TREN -> BUSRQ/BUSAK -> A29 ---
+FERTIG:
+  MBIT                       ! S = 1: uI H = keine Anforderung
+  JR MI,FERTIG
+  MSET
+HALTEN:
+  JR HALTEN                  ! der U880 setzt RESET16
+  END

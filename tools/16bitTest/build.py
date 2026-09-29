@@ -69,7 +69,12 @@ NO_FIRMWARE = {'em256tst', 'em256adr'}
 # Quellen, deren U8001-Firmware mit z8kasm (a5120emu) gebaut wird - NICHT mit
 # z8001asm.py, der segmentierte Spruenge einwortig kodiert (a5120emu Plan Par. 8).
 # Quelle -> Firmware-Quelldateien in src/ (je eine .inc mit DB-Zeilen).
-Z8KASM_FIRMWARE = {'em16abl': ['fw16abl.s']}
+Z8KASM_FIRMWARE = {
+    'em16abl': ['fw16abl.s'],
+    # em256ful ab v2.0 (G2b): alle Bloecke mit z8kasm
+    'em256ful': ['fw_add.s', 'fw_sub.s', 'fw_logic.s', 'fw_memrw.s', 'fw_loop.s',
+                 'fw_stack.s', 'fw_add32.s', 'fw_byte.s', 'fw_march.s'],
+}
 # z8kasm: Umgebungsvariable Z8KASM, sonst der Bau im Nachbarbaum a5120emu_ui.
 Z8KASM = os.environ.get('Z8KASM') or os.path.join(
     os.path.dirname(PROJECT_DIR), 'a5120emu_ui', 'build', 'z8kasm')

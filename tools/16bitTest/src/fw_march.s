@@ -1,300 +1,187 @@
-; fw_march.s - March-C DRAM-Test, phasenweise mit Fehlerakkumulation
-;
-; Z8001-Firmware fuer EM256 Testprogramm
-; Fuehrt eine einzelne March-C Phase auf dem angegebenen Segment aus.
-; Bei Fehlern wird NICHT abgebrochen, sondern eine Bitmaske der
-; fehlerhaften Datenleitungen (XOR Soll/Ist) akkumuliert.
-;
-; March-C Algorithmus (5 Phasen, je ein Aufruf):
-;   Phase 1: Aufwaerts alle Worte mit 0x0000 fuellen (nur Schreiben)
-;   Phase 2: Aufwaerts lesen (soll 0x0000), dann 0xFFFF schreiben
-;   Phase 3: Aufwaerts lesen (soll 0xFFFF)
-;   Phase 4: Abwaerts lesen (soll 0xFFFF), dann 0x0000 schreiben
-;   Phase 5: Abwaerts lesen (soll 0x0000)
-;
-; Erkennt: Stuck-At-Fehler, Koppelfehler zwischen benachbarten Zellen
-;
-; Eingabe (Mailbox):
-;   MB_PARAM1 (0x000A) = Ziel-Segment im Z8001-Format:
-;     0x0000=Seg0, 0x0100=Seg1, 0x0200=Seg2, 0x0300=Seg3
-;   MB_PARAM2 (0x000C) = Phasennummer (1-5)
-;
-; Testbereich:
-;   Segment 0: 0x0200 bis 0xFFFE (0x0000-0x01FF = Code+Mailbox)
-;   Segment 1-3: 0x0000 bis 0xFFFE (komplett, 64 KB)
-;
-; Segmentierte Adressierung:
-;   RR8 = {R8=Segment, R9=Offset} -> LD @RR8, Rn adressiert
-;   das Ziel-Segment, waehrend Code+Mailbox in Segment 0 bleiben.
-;   Mailbox-Zugriff erfolgt ueber ungerade Register (R7, R11)
-;   im non-segmented Modus (= immer Segment 0).
-;
-; Mailbox-Ergebnis:
-;   STATUS  = 0x0001 (OK) oder 0x0002 (Fehler gefunden)
-;   RESULT1 = Fehlermaske (OR aller XOR Soll/Ist), 0 wenn OK
-;   RESULT2 = Anzahl Wort-Fehler
-;   RESULT3 = Offset der ersten Fehlerstelle (0xFFFF wenn OK)
-;
-; Register-Konventionen:
-;   R1  = Testmuster (Soll-Wert)
-;   R2  = Fehlermasken-Akkumulator (OR aller XOR Soll/Ist)
-;   R3  = Startoffset
-;   R4  = Endoffset (0xFFFE)
-;   R5  = gelesener Wert (Scratch)
-;   R6  = neues Muster (fuer Phasen 2,4)
-;   R7  = Mailbox-Zeiger (ungerade -> non-segmented -> Seg 0)
-;   RR8 = Segmentierte Adresse (R8=Segment, R9=Offset)
-;   R10 = Phasennummer
-;   R11 = Mailbox-Hilfsregister (ungerade -> Seg 0)
-;   R13 = Fehleranzahl
-;   R14 = Offset der ersten Fehlerstelle
-;
-; (c) 2026 Olaf Krieger - MIT Lizenz
+! fw_march.s - D1: March-C DRAM-Test, eine Phase je Aufruf, Fehlerakkumulation
+!
+! U8001-Firmware fuer EM256FUL (A5120.16), Gruppe D.  Assembler: z8kasm aus
+! a5120emu (NICHT z8001asm.py - der kodiert segmentierte Spruenge einwortig und
+! sprang so nach Segment 1).  Segmentiert, System (FCW %C000).
+!
+! Segmentwahl (Plan 17 Par. 7.3): die Karte sieht die Segmentnummer SN0/SN1 des
+! U8001 NUR in Segmentweichen-Mode 2 (A33 Bit 7/6 = 11).  Nach RESET16 ist A33
+! geloescht (Mode 0, Segment aus A33 Bit 5/6 = 0).  Die Firmware schaltet daher
+! als erstes per Wort-OUT auf Mode 2 (OUT %0080 schreibt A33 <- low und
+! A35 <- high gleichzeitig) - danach liegen Code und Mailbox in <<0>>, das
+! Pruefsegment wird ueber das Registerpaar RR8 (R8 = Segmentwort) erreicht.
+!
+! Bei Fehlern wird NICHT abgebrochen, sondern eine Bitmaske der fehlerhaften
+! Datenleitungen (XOR Soll/Ist) akkumuliert.
+!   Phase 1: aufwaerts %0000 schreiben
+!   Phase 2: aufwaerts lesen %0000, %FFFF schreiben
+!   Phase 3: aufwaerts lesen %FFFF
+!   Phase 4: abwaerts  lesen %FFFF, %0000 schreiben
+!   Phase 5: abwaerts  lesen %0000
+!
+! Eingabe (Mailbox, Segment 0):
+!   000A PARAM1 = Segmentwort (%0000, %0100, %0200, %0300)
+!   000C PARAM2 = Phase (1..5)
+! Pruefbereich: Segment 0 ab STAPEL (Code, Mailbox, Stapel bleiben), sonst 0..FFFE.
+! Ausgabe:
+!   0010 STATUS  = %A00p waehrend der Phase, dann %0001 (OK) / %0002 (Fehler)
+!   0012 RESULT1 = Fehlermaske, 0014 RESULT2 = Anzahl Fehlworte,
+!   0016 RESULT3 = Offset der ersten Fehlerstelle (%FFFF = keine),
+!   0018 RESULT4 = zuletzt bearbeiteter Offset (Fortschritt, alle 4 KB)
+! Ende: uI (= /TRQ8) abwarten, MSET - der U880 uebernimmt und setzt RESET16.
+!
+! Register: R1 Soll, R2 Fehlermaske, R3 Start, R4 Ende, R5 gelesen, R6 neues
+! Muster, RR8 Pruefadresse, R10 Phase, R12 erste Fehlerstelle, R13 Fehleranzahl,
+! RR14 Stapel (v1.x benutzte R14 als Datenregister - der Stapel lag dann in Segment 3).
+!
+! (c) 2026 Olaf Krieger - MIT Lizenz
 
-    ORG  0x0000
+  SEG
+  ORG <<0>>%0000
+  DW %0000,%C000,%0000,%0040
 
-    ; Z8001 Reset-Vektor (FCW=0xC000: Segmented + System Mode)
-    DW   0x0000, 0xC000, 0x0000, 0x0040
-
-    ; Mailbox (0x0008 - 0x003F)
-    DS   56
-
-; === Code ab 0x0040 ===
-
+  ORG <<0>>%0040
 START:
-    ; Fehler-Tracking initialisieren
-    LD   R2, #0x0000        ; Fehlermaske = leer
-    LD   R13, #0x0000       ; Fehleranzahl = 0
-    LD   R14, #0xFFFF       ; erste Fehleradresse = keine
+  LDL RR14,#STAPEL           ! Stapel (CALR) in Segment 0, hinter dem Code
+  LD R0,#%00C0               ! A33 = %C0: Segmentweiche Mode 2 (SN0/SN1)
+  OUT %0080,R0               ! A35 = %00
+  CLR R2
+  CLR R13
+  LD R12,#%FFFF
+  LD R8,<<0>>%000A           ! Segmentwort
+  LD R10,<<0>>%000C          ! Phase
+  LD R1,#%A000               ! Laufstatus %A00p
+  OR R1,R10
+  LD <<0>>%0010,R1
+  LD R3,#%0000
+  TEST R8
+  JR NZ,SETUP
+  LD R3,#OFF(STAPEL)         ! Segment 0: hinter Code, Mailbox und Stapel
+SETUP:
+  LD R4,#%FFFE
+  LD <<0>>%0018,R3
+  CP R10,#1
+  JR EQ,DO_P1
+  CP R10,#2
+  JR EQ,DO_P2
+  CP R10,#3
+  JR EQ,DO_P3
+  CP R10,#4
+  JR EQ,DO_P4
+  CP R10,#5
+  JP EQ,DO_P5
+  JP DONE                    ! ungueltige Phase
 
-    ; Segment-Parameter aus Mailbox lesen (non-segmented, Segment 0)
-    LD   R11, #0x000A       ; MB_PARAM1
-    LD   R8, @R11           ; R8 = Ziel-Segment
-
-    ; Phasen-Parameter lesen
-    LD   R11, #0x000C       ; MB_PARAM2
-    LD   R10, @R11          ; R10 = Phase (1-5)
-
-    ; Laufstatus in Mailbox schreiben (0xA0xx, xx=Phase)
-    LD   R7, #0x0010        ; STATUS
-    LD   R1, #0xA000
-    OR   R1, R10
-    LD   @R7, R1
-    ; Initiale Debugwerte
-    INC  R7, #2             ; RESULT1
-    LD   R1, #0xD100        ; Debug-Marker "D1 alive"
-    LD   @R7, R1
-    INC  R7, #2             ; RESULT2
-    LD   R1, #0xFFFF        ; Offset noch unbekannt
-    LD   @R7, R1
-    INC  R7, #2             ; RESULT3
-    LD   @R7, R10           ; aktuelle Phase (1..5)
-
-    ; Startadresse bestimmen
-    CP   R8, #0x0000        ; Segment 0?
-    JR   NE, OTHER_SEG
-    LD   R3, #0x0200        ; Seg 0: ab 0x0200 (Code 332 Bytes endet bei 0x014C)
-    JR   T, SETUP_OK
-OTHER_SEG:
-    LD   R3, #0x0000        ; Seg 1-3: ab 0x0000 (komplett)
-SETUP_OK:
-    LD   R4, #0xFFFE        ; Endadresse (letztes Wort)
-    ; Initialen Fortschritt publizieren
-    LD   R7, #0x0018        ; RESULT4 = aktueller Offset
-    LD   @R7, R3
-
-    ; Phasen-Dispatch
-    CP   R10, #1
-    JR   EQ, DO_P1
-    CP   R10, #2
-    JR   EQ, DO_P2
-    CP   R10, #3
-    JR   EQ, DO_P3
-    CP   R10, #4
-    JR   EQ, DO_P4
-    CP   R10, #5
-    JR   EQ, DO_P5
-    JP   T, DONE            ; ungueltige Phase -> fertig
-
-; ---------------------------------------------------------------
-; Phase 1: Aufwaerts mit 0x0000 fuellen (nur Schreiben)
-; ---------------------------------------------------------------
+! --- Phase 1 ------------------------------------------------------------------
 DO_P1:
-    LD   R1, #0x0000
-    LD   R9, R3
+  CLR R1
+  LD R9,R3
 P1_LOOP:
-    LD   R5, R9
-    AND  R5, #0x0FFF        ; Heartbeat alle 4 KB
-    JR   NE, P1_NHB
-    LD   R7, #0x0014        ; RESULT2
-    LD   @R7, R9            ; aktueller Offset
-    INC  R7, #2             ; RESULT3
-    LD   R11, #0x0101       ; P1: write-up
-    LD   @R7, R11
-    LD   R7, #0x0018
-    LD   @R7, R9
-P1_NHB:
-    LD   @RR8, R1
-    CP   R9, R4
-    JP   EQ, DONE
-    INC  R9, #2
-    JR   T, P1_LOOP
+  CALR HERZ
+  LD @RR8,R1
+  CP R9,R4
+  JP EQ,DONE
+  INC R9,#2
+  JR P1_LOOP
 
-; ---------------------------------------------------------------
-; Phase 2: Aufwaerts lesen 0x0000, schreiben 0xFFFF
-; ---------------------------------------------------------------
+! --- Phase 2 ------------------------------------------------------------------
 DO_P2:
-    LD   R1, #0x0000        ; Erwartung
-    LD   R6, #0xFFFF        ; neues Muster
-    LD   R9, R3
+  CLR R1
+  LD R6,#%FFFF
+  LD R9,R3
 P2_LOOP:
-    LD   R5, R9
-    AND  R5, #0x0FFF
-    JR   NE, P2_NHB
-    LD   R7, #0x0014
-    LD   @R7, R9
-    INC  R7, #2
-    LD   R11, #0x0201       ; P2: read/write-up
-    LD   @R7, R11
-    LD   R7, #0x0018
-    LD   @R7, R9
-P2_NHB:
-    LD   R5, @RR8
-    XOR  R5, R1             ; R5 = Fehler-Bits (0 wenn OK)
-    JR   EQ, P2_OK
-    OR   R2, R5             ; Fehlermaske akkumulieren
-    OR   R13, R13            ; Z-Flag: R13==0 → erster Fehler?
-    JR   NE, P2_NF
-    LD   R14, R9            ; erste Fehleradresse merken
-P2_NF:
-    INC  R13, #1
-P2_OK:
-    LD   @RR8, R6           ; neues Muster schreiben
-    CP   R9, R4
-    JP   EQ, DONE
-    INC  R9, #2
-    JR   T, P2_LOOP
+  CALR HERZ
+  LD R5,@RR8
+  CALR PRUEF
+  LD @RR8,R6
+  CP R9,R4
+  JP EQ,DONE
+  INC R9,#2
+  JR P2_LOOP
 
-; ---------------------------------------------------------------
-; Phase 3: Aufwaerts lesen 0xFFFF
-; ---------------------------------------------------------------
+! --- Phase 3 ------------------------------------------------------------------
 DO_P3:
-    LD   R1, #0xFFFF
-    LD   R9, R3
+  LD R1,#%FFFF
+  LD R9,R3
 P3_LOOP:
-    LD   R5, R9
-    AND  R5, #0x0FFF
-    JR   NE, P3_NHB
-    LD   R7, #0x0014
-    LD   @R7, R9
-    INC  R7, #2
-    LD   R11, #0x0301       ; P3: read-up
-    LD   @R7, R11
-    LD   R7, #0x0018
-    LD   @R7, R9
-P3_NHB:
-    LD   R5, @RR8
-    XOR  R5, R1
-    JR   EQ, P3_OK
-    OR   R2, R5
-    OR   R13, R13
-    JR   NE, P3_NF
-    LD   R14, R9
-P3_NF:
-    INC  R13, #1
-P3_OK:
-    CP   R9, R4
-    JP   EQ, DONE
-    INC  R9, #2
-    JR   T, P3_LOOP
+  CALR HERZ
+  LD R5,@RR8
+  CALR PRUEF
+  CP R9,R4
+  JP EQ,DONE
+  INC R9,#2
+  JR P3_LOOP
 
-; ---------------------------------------------------------------
-; Phase 4: Abwaerts lesen 0xFFFF, schreiben 0x0000
-; ---------------------------------------------------------------
+! --- Phase 4 ------------------------------------------------------------------
 DO_P4:
-    LD   R1, #0xFFFF
-    LD   R6, #0x0000
-    LD   R9, R4             ; von Ende
+  LD R1,#%FFFF
+  CLR R6
+  LD R9,R4
 P4_LOOP:
-    LD   R5, R9
-    AND  R5, #0x0FFF
-    JR   NE, P4_NHB
-    LD   R7, #0x0014
-    LD   @R7, R9
-    INC  R7, #2
-    LD   R11, #0x0401       ; P4: read/write-down
-    LD   @R7, R11
-    LD   R7, #0x0018
-    LD   @R7, R9
-P4_NHB:
-    LD   R5, @RR8
-    XOR  R5, R1
-    JR   EQ, P4_OK
-    OR   R2, R5
-    OR   R13, R13
-    JR   NE, P4_NF
-    LD   R14, R9
-P4_NF:
-    INC  R13, #1
-P4_OK:
-    LD   @RR8, R6
-    CP   R9, R3
-    JP   EQ, DONE
-    DEC  R9, #2
-    JR   T, P4_LOOP
+  CALR HERZ
+  LD R5,@RR8
+  CALR PRUEF
+  LD @RR8,R6
+  CP R9,R3
+  JP EQ,DONE
+  DEC R9,#2
+  JR P4_LOOP
 
-; ---------------------------------------------------------------
-; Phase 5: Abwaerts lesen 0x0000
-; ---------------------------------------------------------------
+! --- Phase 5 ------------------------------------------------------------------
 DO_P5:
-    LD   R1, #0x0000
-    LD   R9, R4
+  CLR R1
+  LD R9,R4
 P5_LOOP:
-    LD   R5, R9
-    AND  R5, #0x0FFF
-    JR   NE, P5_NHB
-    LD   R7, #0x0014
-    LD   @R7, R9
-    INC  R7, #2
-    LD   R11, #0x0501       ; P5: read-down
-    LD   @R7, R11
-    LD   R7, #0x0018
-    LD   @R7, R9
-P5_NHB:
-    LD   R5, @RR8
-    XOR  R5, R1
-    JR   EQ, P5_OK
-    OR   R2, R5
-    OR   R13, R13
-    JR   NE, P5_NF
-    LD   R14, R9
-P5_NF:
-    INC  R13, #1
-P5_OK:
-    CP   R9, R3
-    JP   EQ, DONE
-    DEC  R9, #2
-    JR   T, P5_LOOP
+  CALR HERZ
+  LD R5,@RR8
+  CALR PRUEF
+  CP R9,R3
+  JP EQ,DONE
+  DEC R9,#2
+  JR P5_LOOP
 
-; ---------------------------------------------------------------
-; Ergebnis in Mailbox schreiben (non-segmented -> Segment 0)
-; ---------------------------------------------------------------
+! PRUEF - R5 (gelesen) gegen R1 (Soll); Fehler in R2/R13/R14 verbuchen
+PRUEF:
+  XOR R5,R1
+  RET Z
+  OR R2,R5
+  TEST R13
+  JR NZ,PR1
+  LD R12,R9                  ! erste Fehlerstelle
+PR1:
+  INC R13,#1
+  RET
+
+! HERZ - Fortschritt alle 4 KB nach RESULT4
+HERZ:
+  LD R5,R9
+  AND R5,#%0FFF
+  RET NZ
+  LD <<0>>%0018,R9
+  RET
+
+! --- Ergebnis -----------------------------------------------------------------
 DONE:
-    LD   R7, #0x0010        ; STATUS-Offset
-    OR   R13, R13
-    JR   NE, HAS_ERRORS
-    LD   R1, #0x0001        ; STATUS = OK
-    JR   T, WR_STATUS
-HAS_ERRORS:
-    LD   R1, #0x0002        ; STATUS = FEHLER
+  LD R1,#%0001
+  TEST R13
+  JR Z,WR_STATUS
+  LD R1,#%0002
 WR_STATUS:
-    LD   @R7, R1            ; STATUS
-    INC  R7, #2
-    LD   @R7, R2            ; RESULT1 = Fehlermaske
-    INC  R7, #2
-    LD   @R7, R13           ; RESULT2 = Fehleranzahl
-    INC  R7, #2
-    LD   @R7, R14           ; RESULT3 = erste Fehleradresse
-    LD   R7, #0x0018
-    LD   @R7, R9            ; RESULT4 = letzter Offset
-    JR   T, $               ; Endlosschleife -> wartet auf TRQ8
+  LD <<0>>%0012,R2           ! RESULT1 = Fehlermaske
+  LD <<0>>%0014,R13          ! RESULT2 = Fehleranzahl
+  LD <<0>>%0016,R12          ! RESULT3 = erste Fehlerstelle
+  LD <<0>>%0018,R9           ! RESULT4 = letzter Offset
+  LD <<0>>%0010,R1           ! STATUS zuletzt (der U880 wertet ihn aus)
+
+! --- Uebergabe an den U880: uI abwarten, MSET -> TREN -> BUSRQ/BUSAK -> A29 ---
+FERTIG:
+  MBIT                       ! S = 1: uI H = keine Anforderung
+  JR MI,FERTIG
+  MSET
+HALTEN:
+  JR HALTEN                  ! der U880 setzt RESET16
+
+  EVEN
+  DS 64                      ! Stapelbereich (Nullen, mitgeladen)
+STAPEL:
+  END

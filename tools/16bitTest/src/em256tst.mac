@@ -13,12 +13,11 @@
 ;   5. Alle Schritte als CP/M-Konsolenausgabe protokollieren
 ;
 ; WICHTIG - I/O-Zugriffe:
-;   Alle PIO-Datenzugriffe (Port A Lesen, Port B Lesen/Schreiben)
-;   muessen via OUT (C),A / IN A,(C) mit B=0 erfolgen!
-;   OUT (n),A legt den Akkumulator auf A8-A15 des Adressbusses.
-;   Die EM256-Karte dekodiert A8-A15 fuer das 16*4-RAM-Register.
-;   Unpassende obere Adressbytes verhindern den Zugriff auf die PIO.
-;   OUT (C),A mit B=0,C=port erzeugt saubere Adressen 0x00nn.
+;   Die Karte wertet AB8-AB15 NICHT aus (Schaltplan 9005/2, a5120emu
+;   Plan 17 Par. 7.2) - die PIO ist mit jedem oberen Adressbyte erreichbar.
+;   Nur der Attributspeicher (AFH) nimmt AB12-15 als Seitenadresse, deshalb
+;   dort OUT (C),A mit B = Seite.  (Fruehere Fassung dieses Kopfes behauptete,
+;   die Karte dekodiere A8-A15 - falsch.)
 ;
 ; Assemblierung:
 ;   m80  em256tst.erl=em256tst
