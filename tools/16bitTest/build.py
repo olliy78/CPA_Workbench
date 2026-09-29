@@ -66,6 +66,14 @@ DEFAULT_SOURCE = 'em256ful'
 # Quellen ohne ;%INCLUDE-Firmware (kein z8001asm-Lauf, keine Vorverarbeitung)
 NO_FIRMWARE = {'em256tst', 'em256adr'}
 
+# Quellen, deren U8001-Firmware mit z8kasm (a5120emu) gebaut wird - NICHT mit
+# z8001asm.py, der segmentierte Spruenge einwortig kodiert (a5120emu Plan Par. 8).
+# Quelle -> Firmware-Quelldateien in src/ (je eine .inc mit DB-Zeilen).
+Z8KASM_FIRMWARE = {'em16abl': ['fw16abl.s']}
+# z8kasm: Umgebungsvariable Z8KASM, sonst der Bau im Nachbarbaum a5120emu_ui.
+Z8KASM = os.environ.get('Z8KASM') or os.path.join(
+    os.path.dirname(PROJECT_DIR), 'a5120emu_ui', 'build', 'z8kasm')
+
 # Ladeadresse fuer CP/M .COM-Programme (immer 0x100)
 LOAD_ADDR   = '100'
 
@@ -190,6 +198,29 @@ def assemble_z8001_firmware():
         log(f"    Assembliert: {basename} (Label: {label_prefix}_CODE)")
 
 
+def assemble_z8kasm_firmware(sources):
+    """U8001-Firmware mit z8kasm (segmentiert) bauen und als .inc (DB-Zeilen)
+    ablegen.  Das Abbild beginnt bei Zelle 0 des Segments."""
+    if not os.path.isfile(Z8KASM):
+        raise RuntimeError(
+            f"z8kasm nicht gefunden: {Z8KASM}\n"
+            "In a5120emu_ui: tools/dev.sh build  (oder Z8KASM=... setzen)")
+    for src in sources:
+        stem = os.path.splitext(src)[0]
+        bin_path = os.path.join(BUILD_DIR, stem + '.bin')
+        inc_path = os.path.join(BUILD_DIR, stem + '.inc')
+        run([Z8KASM, '-s', '-o', bin_path, os.path.join(SRC_DIR, src)], cwd=BUILD_DIR)
+        with open(bin_path, 'rb') as f:
+            data = f.read()
+        lines = [f'; {src} - {len(data)} Bytes, z8kasm -s']
+        for i in range(0, len(data), 12):
+            chunk = data[i:i + 12]
+            lines.append('\tDB\t' + ','.join(f'0{b:02X}H' for b in chunk))
+        with open(inc_path, 'w', encoding='ascii') as f:
+            f.write('\n'.join(lines) + '\n')
+        log(f"    Assembliert (z8kasm): {src} ({len(data)} Bytes)")
+
+
 def main():
     # --- Quellname aus Kommandozeile oder Standard ---
     if len(sys.argv) > 1:
@@ -221,7 +252,10 @@ def main():
     log(f"    {BUILD_DIR}")
 
     # --- Schritt 2: Z8001-Firmware assemblieren (nur fuer em256full) ---
-    if needs_preprocessing:
+    if source_name in Z8KASM_FIRMWARE:
+        log("\n[STEP 2] U8001-Firmware assemblieren (z8kasm)")
+        assemble_z8kasm_firmware(Z8KASM_FIRMWARE[source_name])
+    elif needs_preprocessing:
         log("\n[STEP 2] Z8001-Firmware assemblieren")
         assemble_z8001_firmware()
     else:
