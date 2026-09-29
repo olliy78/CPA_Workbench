@@ -9,7 +9,7 @@
 !   0000  Resetvektor (FCW %C000, PC <<0>>%0100)
 !   0080  Mailbox (s. EM16ABL.MAC, MB_*)
 !   0100  Programm, Phasen A..F, dazwischen Uebergabe an den U880 (UEBERG)
-!   0300  SC-Handler, 0320 VI-Handler, 0340 NVI-Handler, 0380 FALSCH
+!   0460  SC-, VI-, NVI-Handler, 0500 FALSCH (hinter der PSA)
 !   0400  Program Status Area
 !   0F00  Segmentmarken (0F10 = %B0s0 vom U880 je Segment s vorbelegt)
 !   0FF0  Systemstapel (abwaerts)
@@ -51,8 +51,11 @@ A1:
   IN R0,%0080                ! Status-8 im oberen Byte
   LD <<0>>%0088,R0
   CLR R0
-  INB RL0,%0080              ! untere Haelfte: Status-8 liegt NICHT dort
-  LD <<0>>%008A,R0
+  INB RL0,%0080              ! gerade Adresse: Byte von AD8-15 = Status-8 (am Geraet
+  LD <<0>>%008A,R0           ! 2026-09-29 C3H; der U8001 waehlt die Haelfte nach A0)
+  CLR R0
+  INB RL0,%0081              ! ungerade: AD0-7, die niemand treibt (Soll FFH)
+  LD <<0>>%00A6,R0
   CALL UEBERG
 
 ! --- Phase B: Segmentweiche, alle drei Modi -----------------------------------
@@ -132,7 +135,21 @@ C1:
   LD <<0>>%00A0,R0
   LD <<0>>%00A2,R0
   LD <<0>>%00A4,R0
+  LD <<0>>%00A8,R0
   LDL RR12,RR14              ! Stapelzeiger merken
+  ! Vorlauf (R7 = 0): A54 kann von einem frueheren Lauf noch freigeben (A53
+  ! zaehlt dann jeden Stapelzugriff).  Ein NVI hier wird quittiert, waehrend
+  ! A33 Bit 3 = 0 ist - das laedt A53 und haelt ihn geladen (Handbuch 1.12).
+  CLR R7
+  EI NVI
+  CLR R4
+E0:
+  INC R4
+  PUSH @RR14,R4
+  CP R4,#20
+  JR ULT,E0
+EV:
+  LDL RR14,RR12
   EI NVI
   LD R7,#1                   ! a) ohne A33 Bit 3: darf nie ausloesen
   CLR R4
@@ -186,41 +203,6 @@ U2:
   MRES
   RET
 
-! --- Handler ------------------------------------------------------------------
-  ORG <<0>>%0300
-SCH:                         ! SC: Rahmen (4 Worte) verwerfen
-  ADD R15,#8
-  JP BWEIT
-
-  ORG <<0>>%0320
-VIH:                         ! VI: Kennung (Vektor low + Status-8 high) ablegen
-  LD R10,@RR14
-  LD R11,<<0>>%0090
-  ADD R11,R11
-  LD <<0>>%0092(R11),R10
-  LD R11,<<0>>%0090
-  INC R11
-  LD <<0>>%0090,R11
-  IRET
-
-  ORG <<0>>%0340
-NVIH:                        ! NVI: A33 Bit 3 aus, Zaehlerstand ablegen
-  CLR R0
-  OUT %0080,R0
-  LD <<0>>%00A0,R4
-  LD R0,<<0>>%00A2
-  INC R0
-  LD <<0>>%00A2,R0
-  LD <<0>>%00A4,R7
-  LDL RR14,RR12
-  JP E9
-
-  ORG <<0>>%0380
-FALSCH:                      ! Resetvektor der Segmente 1..3 zeigt hierher
-  LD R0,#%DEAD
-  LD <<0>>%008C,R0
-  HALT
-
 ! --- Program Status Area (Z8001: je Eintrag res, FCW, Seg, Off) ----------------
   ORG <<0>>%0400+%1A
   DW %C000,%0000,SCH&%FFFF
@@ -232,6 +214,44 @@ FALSCH:                      ! Resetvektor der Segmente 1..3 zeigt hierher
   DW %0000,VIH&%FFFF
   ORG <<0>>%0400+%3C+2*6     ! Vektor 6
   DW %0000,VIH&%FFFF
-  ORG <<0>>%0400+%3C+2*8     ! Ende der Tabelle (Abbild bis hier)
+  ORG <<0>>%0400+%3C+2*8     ! Ende der Tabelle
   DW %0000
+! --- Handler ------------------------------------------------------------------
+  ORG <<0>>%0460             ! hinter der PSA (v1.1: Hauptteil reicht ueber %0300)
+SCH:                         ! SC: Rahmen (4 Worte) verwerfen
+  ADD R15,#8
+  JP BWEIT
+
+VIH:                         ! VI: Kennung (Vektor low + Status-8 high) ablegen
+  LD R10,@RR14
+  LD R11,<<0>>%0090
+  ADD R11,R11
+  LD <<0>>%0092(R11),R10
+  LD R11,<<0>>%0090
+  INC R11
+  LD <<0>>%0090,R11
+  IRET
+
+NVIH:                        ! NVI: A33 Bit 3 aus, Zaehlerstand ablegen
+  CP R7,#0
+  JR NE,NVI1
+  LD <<0>>%00A8,R4           ! Vorlauf: nur vermerken, weiter mit Teil a
+  JP EV
+NVI1:
+  CLR R0
+  OUT %0080,R0
+  LD <<0>>%00A0,R4
+  LD R0,<<0>>%00A2
+  INC R0
+  LD <<0>>%00A2,R0
+  LD <<0>>%00A4,R7
+  LDL RR14,RR12
+  JP E9
+
+  ORG <<0>>%0500             ! em16abl.mac: FALSCH EQU 0500H
+FALSCH:                      ! Resetvektor der Segmente 1..3 zeigt hierher
+  LD R0,#%DEAD
+  LD <<0>>%008C,R0
+  HALT
+
   END

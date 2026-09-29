@@ -15,7 +15,14 @@
 ;      PIO A3 (/VI) meldet die Abholung.
 ;   D  INT-16 zum U880: A33 Bit 4 -> PIO A4 -> Interrupt (IM 2).
 ;   E  Einzelbefehlszaehler A53 -> NVI: Stapelzugriffe bis NVI (Brueckenfeld
-;      X12, G3), ohne A33 Bit 3 nie.
+;      X12, G3), ohne A33 Bit 3 nie.  Vorher ein Vorlauf, der den Selbsthalte-
+;      kreis A54 ueber eine NVI-Quittung in den Ladezustand bringt (sonst haengt
+;      das Ergebnis vom vorigen Lauf ab).  Am Geraet 2026-09-29: 4 (Vorlast 11 =
+;      IRET segmentiert, Handbuch 1.12) - v1.0 verlangte faelschlich 5..8.
+;   H  Paritaet (nur Information): /PE beim Start, nach PR, nach PR aus dem
+;      EM heraus, nach reinen EM-Lesezugriffen, nach reinen K1520-Lese-
+;      zugriffen - klaert, welche Lesezyklen das FF A46 (7474, Takt RDI)
+;      schreiben (a5120emu G4).
 ;   F  STOP (PIO B3) haelt den U8001 an (Zaehler in A35 steht).
 ;   G  RESET16 = 1: 8-Bit-Mode, A33 geloescht.
 ;
@@ -30,7 +37,7 @@
 ;
 ; Autor:  (c) 2026 Olaf Krieger
 ; Lizenz: MIT
-; Datum:  2026-09-29
+; Datum:  2026-09-29  (v1.1: E-Pruefbereich, Vorlauf A54, INB ungerade, H)
 ;
 
 ; =============================================================================
@@ -77,7 +84,7 @@ ATTAUS	EQU	07H		; PEN=0, WE=0, /A14-8 wie biosremc (hbemadr 4000H)
 
 ; Mailbox (Zelle in Segment 0, wie fw16abl.s)
 MB	EQU	WIN+80H
-FALSCH	EQU	0380H		; Offset der Falle in fw16abl.s
+FALSCH	EQU	0500H		; Offset der Falle in fw16abl.s
 
 TMO	EQU	0		; Zeitgrenze: 65536 Durchlaeufe (~1 s)
 
@@ -92,6 +99,8 @@ START:	LD	(SAVSP),SP
 	JP	NC,TOOBIG
 	CALL	KARTE
 	JP	NZ,NOKART
+	IN	A,(PB)		; /PE, wie das BIOS es hinterliess (vor jedem PR)
+	LD	(PE0),A
 	CALL	INIT
 	CALL	LADEN
 	CALL	PHASEA
@@ -101,6 +110,7 @@ START:	LD	(SAVSP),SP
 	CALL	NZ,PHASEE
 	CALL	NZ,PHASEF
 	CALL	PHASEG
+	CALL	PHASEH
 	CALL	ENDE
 	LD	DE,M_ERG
 	CALL	PUTS
@@ -410,6 +420,12 @@ PHASEA:	LD	DE,M_A1
 	CALL	PHEX2
 	LD	DE,M_A5B
 	CALL	PUTS
+	LD	DE,M_A5C	; INB an UNGERADER Adresse: AD0-7 (treibt niemand)
+	CALL	PUTS
+	LD	A,(MB+27H)
+	CALL	PHEX2
+	LD	DE,M_A5D
+	CALL	PUTS
 
 	LD	DE,M_A6		; Rueckweg: bis hier gekommen = OK
 	CALL	ZEILE
@@ -649,12 +665,12 @@ PHASEE:	CALL	FREI
 	LD	HL,MB+24H	; und zwar im Teil mit A33 Bit 3
 	LD	DE,2
 	CALL	CMPW
-	LD	A,(MB+20H)	; Zaehlerstand 5..8 (Vorlast 12..15)
-	OR	A
+	LD	A,(MB+20H)	; Zaehlerstand 1..8 (Vorlast 8..15: nur A3 fest H,
+	OR	A		; A0..A2 ueber X12; am Geraet 4 = Vorlast 11)
 	JR	NZ,PHE1
 	LD	A,(MB+21H)
-	SUB	5
-	CP	4
+	DEC	A
+	CP	8
 	JR	C,PHE2
 PHE1:	LD	E,0		; ausserhalb: als Fehler
 	CALL	CMPA
@@ -667,6 +683,15 @@ PHE2:	CALL	ERGZ
 	LD	L,A
 	CALL	PHEX4
 	LD	DE,M_E3
+	CALL	PUTS
+	LD	DE,M_E4		; Vorlauf: 0 = A54 hielt A53 schon geladen
+	CALL	PUTS
+	LD	HL,(MB+28H)
+	LD	A,H
+	LD	H,L
+	LD	L,A
+	CALL	PHEX4
+	LD	DE,M_E5
 	CALL	PUTS
 	OR	0FFH
 	RET
@@ -724,6 +749,70 @@ PHASEG:	LD	DE,M_G1
 	LD	E,A_816+A_NVI
 	CALL	CMPA
 	JP	ERGZ
+
+; =============================================================================
+; Phase H - Paritaet, nur Information.  Das FF A46 der Speicherkarte (7474,
+; Handbuch 2.7) wird bei JEDEM Lesezyklus mit Takt RDI neu beschrieben, /PR
+; setzt es nur (= kein Fehler).  Gemessen wird, welche Lesezyklen es schreiben:
+; die Stubs laufen dafuer IM EM-Fenster (Befehlsholen = EM-Lesezugriffe).
+; Alle Werte erst sammeln, dann ausgeben (BDOS liest K1520-RAM).
+; =============================================================================
+PHASEH:	LD	HL,HSTUB	; Stubs nach Zelle 0E00H (Segment 0, Fenster)
+	LD	DE,WIN+0E00H
+	LD	BC,HSTUBL
+	LDIR
+	LD	A,B_PR		; 1: PR-Impuls vom K1520-RAM aus
+	CALL	PBSET
+	LD	A,B_PR
+	CALL	PBRES
+	IN	A,(PB)
+	LD	(PE1),A
+	LD	A,(PBV)		; 2: PR-Impuls aus dem EM heraus
+	LD	C,A
+	OR	B_PR
+	LD	B,A
+	CALL	WIN+0E00H+HSPR-HSTUB
+	LD	(PE2),A
+	CALL	WIN+0E00H	; 3: nur EM-Lesezugriffe bis zum IN
+	LD	(PE3),A
+	LD	HL,0100H	; 4: 4096 K1520-Lesezugriffe
+	LD	BC,1000H
+PHH1:	LD	A,(HL)
+	INC	HL
+	DEC	BC
+	LD	A,B
+	OR	C
+	JR	NZ,PHH1
+	IN	A,(PB)
+	LD	(PE4),A
+	LD	DE,M_H1
+	CALL	PUTS
+	LD	HL,PE0
+	LD	B,5
+PHH2:	LD	A,(HL)
+	RLCA
+	AND	1
+	ADD	A,'0'
+	CALL	PUTC
+	LD	A,' '
+	CALL	PUTC
+	INC	HL
+	DJNZ	PHH2
+	LD	DE,M_H2
+	JP	PUTS
+
+; im EM ausgefuehrt (Zelle 0E00H = WIN+0E00H)
+HSTUB:	DB	3AH		; LD A,(WIN+0100H)  - Firmware, beschrieben
+	DW	WIN+0100H
+	DB	0DBH,PB		; IN A,(PB)
+	DB	0C9H		; RET
+HSPR:	DB	78H		; LD A,B  (mit PR)
+	DB	0D3H,PB		; OUT (PB),A
+	DB	79H		; LD A,C  (ohne PR)
+	DB	0D3H,PB
+	DB	0DBH,PB		; IN A,(PB)
+	DB	0C9H
+HSTUBL	EQU	$-HSTUB
 
 ; ENDE - Seiten aus, Ruhezustand
 ENDE:	LD	BC,ATT
@@ -820,7 +909,7 @@ PAUSE:	XOR	A
 ; =============================================================================
 ; Texte
 ; =============================================================================
-M_BAN:	DB	0DH,0AH,'EM16ABL 1.0  Ablaeufe des 16-Bit-Mode (U8001 auf EM256)'
+M_BAN:	DB	0DH,0AH,'EM16ABL 1.1  Ablaeufe des 16-Bit-Mode (U8001 auf EM256)'
 	DB	0DH,0AH,'$'
 M_A1:	DB	'A Start aus Reset (A29 sofort, Vektor Segment 0) $'
 M_A2:	DB	'A Rechnen, Ergebnis im EM-Speicher               $'
@@ -828,6 +917,8 @@ M_A3:	DB	'A Wort-OUT: A33 -> PIO A0-2, A35 -> AEH          $'
 M_A4:	DB	'A Wort-IN: Status-8 im oberen Byte               $'
 M_A5:	DB	'  INB liest untere Haelfte: $'
 M_A5B:	DB	'H (Status-8 war C3H)',0DH,0AH,'$'
+M_A5C:	DB	'  INB %81 (ungerade, AD0-7): $'
+M_A5D:	DB	'H (Soll FFH)',0DH,0AH,'$'
 M_A6:	DB	'A Rueckweg TRQ8/MSET/TREN/BUSAK -> A29 beim M1   $'
 M_B1:	DB	'B Segmentweiche Mode 0 (A33 Bit 5/6)             $'
 M_B2:	DB	'B Segmentweiche Mode 1 (INSTR x N/S)             $'
@@ -840,6 +931,10 @@ M_D8:	DB	'D INT-16: kein freier Interruptvektor - uebersprungen',0DH,0AH,'$'
 M_E1:	DB	'E Einzelbefehlszaehler A53 -> NVI                $'
 M_E2:	DB	'  G3: NVI nach $'
 M_E3:	DB	'H Stapelzugriffen (X12)',0DH,0AH,'$'
+M_E4:	DB	'  Vorlauf ohne Bit 3: NVI nach $'
+M_E5:	DB	'H (0 = A54 hielt A53 geladen)',0DH,0AH,'$'
+M_H1:	DB	'H Paritaet /PE Start,PR,PR-EM,EM,K1520: $'
+M_H2:	DB	'(1 = ok)',0DH,0AH,'$'
 M_F1:	DB	'F STOP haelt den U8001 an                        $'
 M_G1:	DB	'G RESET16: 8-Bit-Mode, A33 geloescht             $'
 M_OK:	DB	'OK',0DH,0AH,'$'
@@ -881,6 +976,11 @@ FIST:	DW	0
 VEKT:	DB	0
 VEKTAD:	DW	0
 I16F:	DB	0
+PE0:	DB	0		; /PE (PIO B7): Start, PR, PR aus EM, EM-, K1520-Lesen
+PE1:	DB	0
+PE2:	DB	0
+PE3:	DB	0
+PE4:	DB	0
 I16A:	DB	0
 	DS	256
 STACK:
