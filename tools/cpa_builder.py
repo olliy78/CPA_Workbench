@@ -65,6 +65,10 @@ class CPABuilder:
     # Bootsektor-Quellen (nach tools/bootsec verschoben)
     BOOTSEC_SRC_DIR = os.path.join('tools', 'bootsec', 'src')
     BOOTSEC_PREBUILT_FIXED = os.path.join('prebuilt', 'bc_a5120', 'bootsec.bin')
+    # Varianten mit EIGENEM Bootkopf.  Der PC 1715 bootet nicht mit dem SYL-Lader des
+    # A5120: sein Urlader (S502) erwartet das Wort F003H am Anfang von Spur 0 Sektor 1
+    # (prebuilt/pc_1715/bootsec.bin, 128 B, enthaelt zugleich den Verzeichniseintrag @OS.COM).
+    BOOTSEC_PER_VARIANT = ('pc_1715',)
 
     def __init__(self, project_dir, log_callback=None):
         """
@@ -396,8 +400,11 @@ class CPABuilder:
             'additions_dir': self.ADDITIONS_DIR,
             'tools_dir': self.TOOLS_DIR,
             'os_target': os.path.join(self.BUILD_DIR, '@os.com'),
-            # Fuer Diskettenbau immer die feste Prebuilt-Version verwenden
-            'bootsector': self.BOOTSEC_PREBUILT_FIXED,
+            # Fuer Diskettenbau die feste Prebuilt-Version verwenden (A5120-SYL-Lader),
+            # ausser die Variante hat einen eigenen Bootkopf (BOOTSEC_PER_VARIANT).
+            'bootsector': (os.path.join('prebuilt', variant, 'bootsec.bin')
+                           if variant in self.BOOTSEC_PER_VARIANT
+                           else self.BOOTSEC_PREBUILT_FIXED),
             'bootsector_prebuilt': os.path.join('prebuilt', variant, 'bootsec.bin'),
         }
 
