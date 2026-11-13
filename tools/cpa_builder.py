@@ -69,6 +69,11 @@ class CPABuilder:
     # A5120: sein Urlader (S502) erwartet das Wort F003H am Anfang von Spur 0 Sektor 1
     # (prebuilt/pc_1715/bootsec.bin, 128 B, enthaelt zugleich den Verzeichniseintrag @OS.COM).
     BOOTSEC_PER_VARIANT = ('pc_1715',)
+    # Varianten, deren Kconfig.system hauptsaechlich eine ANDERE Datei patcht (GIDE-CP/A:
+    # die Einstellungen stehen in setup.mac, assembliert wird bios.mac, das setup.mac einbindet).
+    MAIN_SOURCE_OVERRIDE = {'gide_a5120': 'bios'}
+    # Unterordner src/<variante>/urlader/: Lade-ROM (EPROM) der Variante, wird als build/<name>.bin gebaut.
+    URLADER_SUBDIR = 'urlader'
 
     def __init__(self, project_dir, log_callback=None):
         """
@@ -350,6 +355,8 @@ class CPABuilder:
         Methode 1: Kconfig.system parsen - die häufigste source=-Datei ist die Hauptdatei.
         Methode 2: Dateisystem prüfen - biop.mac hat Priorität vor bios.mac.
         """
+        if variant in self.MAIN_SOURCE_OVERRIDE:
+            return self.MAIN_SOURCE_OVERRIDE[variant]
         # Methode 1: Kconfig.system parsen und häufigste source=-Datei suchen
         kconfig_path = os.path.join(
             self.project_dir, 'config', variant, 'Kconfig.system'
@@ -674,6 +681,40 @@ class CPABuilder:
                 self.log("[WARNUNG] M80-Listing bios.prn wurde nicht erzeugt!")
 
         self.log("[FERTIG] @OS.COM wurde erfolgreich erzeugt.")
+        self.build_urlader(variant)
+
+    def build_urlader(self, variant):
+        """Lade-ROM (Urlader-EPROM) der Variante bauen, falls src/<variante>/urlader/*.mac existiert.
+
+        Ergebnis: build/<name>.bin (z. B. k2526ul4.bin = Inhalt fuer einen 2708/2716).
+        Ablauf wie das Original (make_URLADER_4.cmd): m80 -> m80 .erl -> linkmt -> .com = .bin.
+        """
+        paths = self._paths(variant)
+        ul_dir = os.path.join(self._abs(paths['src_dir']), self.URLADER_SUBDIR)
+        if not os.path.isdir(ul_dir):
+            return
+        build_abs = self._abs(paths['build_dir'])
+        cparun_abs = self._abs(self.cparun)
+        for mac in sorted(glob.glob(os.path.join(ul_dir, '*.mac'))):
+            name = os.path.splitext(os.path.basename(mac))[0]
+            self.log(f"[URLADER] {name}.bin bauen")
+            for tool in ['m80.com', 'linkmt.com']:
+                shutil.copy2(os.path.join(self._abs(paths['tools_dir']), tool), build_abs)
+            shutil.copy2(mac, os.path.join(build_abs, name + '.mac'))
+            self._run([cparun_abs, 'm80', f'={name}/L'], cwd=build_abs, check=False)
+            self._run([cparun_abs, 'm80', f'{name}.erl={name}'], cwd=build_abs)
+            self._run([cparun_abs, 'linkmt', f'{name}={name}'], cwd=build_abs)
+            com = os.path.join(build_abs, name + '.com')
+            if not os.path.isfile(com):
+                raise RuntimeError(f"Urlader {name}: linkmt hat keine .com erzeugt")
+            os.replace(com, os.path.join(build_abs, name + '.bin'))
+            for pat in (name + '.mac', name + '.erl', name + '.rel', name + '.syp', name + '.prn',
+                        'm80.com', 'linkmt.com'):
+                f = os.path.join(build_abs, pat)
+                if os.path.isfile(f):
+                    os.remove(f)
+            self.log(f"[URLADER] build/{name}.bin ({os.path.getsize(os.path.join(build_abs, name + '.bin'))} Bytes)"
+                     " - auf einen EPROM brennen")
 
     @staticmethod
     def _extract_p_value(asm_output):

@@ -1,0 +1,228 @@
+;BIOSCHK.MAC
+;
+;-----------------------------------------------------------
+; Variantenkontrolle und -protokoll ; Version 05.06.89
+; Aufruf nur im Pass1 des Assemblers, daher fehlen if1-Klammern
+;-----------------------------------------------------------
+;
+; 18.01.2019 Klaus Wilfling
+; - Ergänzungen von Textausgaben (Online Protokoll) für GIDE und RTC
+;
+;
+; Hilfsmakros fuer 4 stellige Hexadezimal-Aufbereitung
+; Aufruf: <Tab>hexout<Tab>Wert
+hexout	MACRO	hv
+	.RADIX	16
+	hexdb	%(hv)
+	.RADIX	10
+	ENDM
+
+hexdb	MACRO	hv
+	db	'&hv','H'
+	ENDM
+
+; Hilfsmakro fuer Dezimal-Aufbereitung
+; Aufruf: <Tab>decout<Tab>Wert
+decout	MACRO	dv
+	decdb	%(dv)
+	ENDM
+
+decdb	MACRO	dv
+	db	'&dv'
+	ENDM
+
+; Hilfsmakro fuer Versionsaufbereitung
+version	MACRO
+	chardb	%verst
+	db	'.'
+	chardb	%versm
+	db	'.'
+	chardb	%versj
+	ENDM
+
+chardb	MACRO	c
+	if	c lt 10
+	db	'0&c'
+	else
+	db	'&c'
+	endif
+	ENDM
+
+; Hilfsmakro fuer Dezimalausgabe
+printd	MACRO	t,n
+	printx	<t>,%(n)
+	ENDM
+
+; Hilfsmakro fuer Hexadezimalausgabe
+printh	MACRO	t,n
+	.RADIX	16
+	printx	<t>,%(n)
+	.RADIX	10
+	ENDM
+
+printx	MACRO	t,n
+ .printx * t n
+	ENDM
+
+
+; Kontrolle der Varianten auf Konsistenz
+;=======================================
+
+ IF ramfl gt 1
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ .printx * nur eine RAM-Floppy erlaubt!
+ .printx * Neuuebersetzung notwendig!
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ ENDIF
+
+ IF (ramfl eq 0) and (wbootv eq 3)
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ .printx * wbootv=3 nur bei definierter RAM-Floppy erlaubt
+ .printx * Neuuebersetzung notwendig!
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ENDIF
+
+ IF kbdbl eq 0
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ .printx * Tastaturpuffer 0 Zeichen gross!
+ .printx * Neuuebersetzung notwendig!
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ ENDIF
+
+ IF dbufsz gt 13
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ .printx * dbufsz > 13    (0<=dbufsz<=13)!
+ .printx * Neuuebersetzung notwendig!
+ .printx *!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ ENDIF
+
+; Online-Protokoll der ausgewaehlten CP/A-Version
+;================================================
+
+ .printx *
+; Hilfsmacro fuer Versionsausgabe
+printv	MACRO	t,m,j
+ .printx * Generierung CP/A, Version t m j *
+	ENDM
+ printv	%(verst),<.>%(versm),<.>%(versj)
+ .printx * Buerocomputer-Variante
+
+ .printx *
+  printd  <Hauptspeicher in Kbytes: >,ramkb
+
+ if oss
+ .printx * mit Unterstuetzung OSS als RAM-Floppy
+ endif
+
+ if kes
+ .printx * mit Unterstuetzung TestRAM als RAM-Floppy
+ endif
+
+ if em256
+ .printx * mit Unterstuetzung EM256 als RAM-Floppy
+ endif
+
+ if mkd256
+ .printx * mit Unterstuetzung MKD256 als RAM-Floppy
+ endif
+
+ if raf
+  if rafpar
+ .printx * mit Unterstuetzung RAF als RAM-Floppy (mit Paritaetskontrolle)
+  else
+ .printx * mit Unterstuetzung RAF als RAM-Floppy (ohne Paritaetskontrolle)
+  endif
+ endif
+
+ if rna
+ .printx * mit Unterstuetzung NANOS-RAF
+ endif
+
+ if wbootv eq 0
+ .printx * CCP Kopie im BIOS (keine Systemspuren notw.)
+ endif
+ if wbootv eq 1
+ .printx * ohne CCP-Kopie, Warmstart=Kaltstart
+ endif
+ if wbootv eq 2
+ .printx * bei Warmstart CCP aus File @OS.COM laden
+ endif
+ if wbootv eq 3
+ .printx * CCP-Kopie in RAM-Floppy (keine Systemspuren notw.)
+ endif
+ if wbootv eq 4
+ .printx * bei Warmstart CCP aus File @CCP.COM laden und vor aktuelles BDOS
+ endif
+ if monitor
+ .printx * mit BIOS-Monitor
+ else
+ .printx * ohne BIOS-Monitor
+ endif
+
+ if mprot
+ .printx * mit Speicherschutz
+ else
+ .printx * ohne Speicherschutz
+ endif
+ 
+ if anzgide gt 0
+ .printx * mit  GIDE Treiber
+ endif
+ 
+;########################################################### 
+ if rtcgun
+ .printx * mit  RTC-Uhr auf GUN-Platine
+ else
+   if uhrvar
+    .printx * mit BIOS-Uhr
+   else
+    .printx * ohne BIOS-Uhr
+   endif
+ endif
+;###########################################################
+
+ if chdvar eq 0
+ .printx * ohne Drucker (dummy)
+ else
+ if iobtty
+  printh  <TTY: Geraet an Portadresse: >,ttydat
+ else
+ .printx * TTY: nicht unterstuetzt
+ endif
+ if ioblpt
+  printh  <LPT: Geraet an Portadresse: >,lptdat
+ else
+ .printx * LPT: nicht unterstuetzt
+ endif
+ if iobuc1
+  printh  <UC1: Geraet an Portadresse: >,uc1dat
+ else
+ .printx * UC1: nicht unterstuetzt
+ endif
+ endif
+
+ if costu
+  printd  <mit NutzerTastenDefinition, Mindesttablng >,costu
+ else
+ .printx * ohne Moeglichkeit der NutzerTastenDefinition
+ endif
+
+ if disk5
+  printd  <Anzahl 5 1/4 Zoll Disketten-Laufwerke: >,disk5
+ endif
+ if disk8
+  printd  <Anzahl   8   Zoll Disketten-Laufwerke: >,disk8 
+ endif
+ if dbufsz gt 7
+  printd  <Groesse Diskettenpuffer: >,<1 shl dbufsz>
+ endif
+ if format
+ .printx * mit automatischer Disketten-Formaterkennung
+ else
+ .printx * ohne automatische Disketten-Formaterkennung
+ endif
+ if umlaut
+ .printx * mit Umlaut-Umkodierung fuer Bildschirmausgabe
+ endif
+O,{
+  

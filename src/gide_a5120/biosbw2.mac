@@ -1,0 +1,1242 @@
+;BIOSCRT.MAC
+;----------------------------------------------
+;Grundlage original CP/A Quellen von 1989
+;----------------------------------------------
+;
+;************************************************************
+; Bildschirm-Ausgabe mit COLOR-BWS nach Heiko Poppe (old K7024)
+;
+; - Fehlerkorrektur Steuerzeichen 18h (es wurden nur 79 Zeichen gel.)
+; - bei Tastenumdefinition auch chr(253) als Begrenzer (dbase)
+; - BAB2 als Standardvariante
+; - 17h (insline) und 19h (delline) eingefuehrt fuer TURBO-PASCAL-Editor
+; - Realisierung der SCP1715-Steuerzeichen 1b 5e xx (Feldattribut)
+;   und 1b 5f xx (Spezialzeichen)
+;   Diese ESC-Folgen fueren beim Buerocomputer i.a. auf '^' (unzulaessig),
+;   ausser Feldattribute invers und hell (Reaktion wie Steuerz. 84..87)
+; - Einfuehrung Umlaut-Umkodierung fuer deutschen Zeichensatz
+;   einschl. SCP1715-Steuerzeichen 0Eh und 0Fh
+; - Einfuehrung MACROS "setbs" und "setram" zum Hin- und Rueckschalten
+;   des Bildschirmpuffers
+; 17.06.88
+; - Zugriff zum Bildschirm aus Interruptroutinen unterdrueckt
+; - Unterstuetzung von Karten mit Bit 7 invers (z.B. DSY5)
+; - Unterst. einer weiteren Variante fuer dtsch. Zeichens. auf 00..1f (ZSIBM)
+; 23.09.88
+; - Einfuehrung der Macros 'crton' und 'crtoff'
+; - di/ei waehrend Bildschirmumschaltung eingefuehrt
+;************************************************************
+;
+; Aenderungen/Ergaenzungen:
+;
+; 13.10.2016 Klaus Wilfling
+; Erweiterung fuer Heikos Color-BWS
+; - Routine für die Ausgabe ueber die Farb-BWS-Karte vom Heiko erweitert
+; - Routinen fuer Farbsetzten und Farbausgabe hinzugefuegt
+; - Routine fuer Inverse/Intensivdarstellung geaendert
+; - Routine fuer Sonderzeichen geaendert
+;
+
+ if1
+; Warmstart-Initialisierung
+;==========================
+crtwarm	MACRO
+;	
+;### BWS ###################################################
+;Farbbyte in Merkern speichern
+;0 in color2=keine BWS gefunden
+   				ld		a,(color2)
+					ld		(color),a
+					and		077h
+					ld		(color1),a
+;### BWS_END ###############################################
+;
+					xor		a
+					ld		(desc),a	;evtl. ESCAPE-Modus beenden
+ 					ld		c,82h		  ;Kursor sichtbar machen
+					call	crto
+				ENDM
+ endif	;if1
+
+ IF crtbfl eq 0
+; Bildschirm-Umschaltung
+;=======================
+; Achtung! kein Reg darf zerstoert werden!
+
+; Bildschirmpuffer zuschalten 
+crton:		di		;auf Grund der Hauptspeicher-Umschaltung keine Interrupts mgl
+					ld		(bssbhl),hl
+					pop		hl
+					ld		(bssbrt),hl
+					ld		(bsspsv),sp	;Hilfsstack, falls Stack im Umschaltbereich
+					ld		sp,bsspst
+					push	bc
+					crton
+					pop		bc
+					ld		hl,0
+bssbhl		equ	$-2
+					jp		0
+bssbrt		equ	$-2
+
+; Bildschirmpuffer abschalten
+crtoff:		ld		(bssrhl),hl
+					pop		hl
+					ld		(bssrrt),hl
+					push	bc
+					crtoff
+					pop		bc
+					ld		sp,0
+bsspsv		equ	$-2
+					ld		hl,0
+bssrhl		equ	$-2
+					ei
+					jp		0
+bssrrt		equ	$-2
+
+					ds	2*5,0f8h	;kleines Hilfsstack waehrend Bildsch.umsch.
+bsspst:
+  IF1
+; Aktivieren Bildschirmpuffer, kein Register darf zerstoert werden
+setbs		MACRO
+					push  hl
+					push  de
+					push  bc
+					push  af
+	  			call	crton
+					pop   af
+					pop   bc
+					pop   de
+					pop   hl
+				ENDM
+; Deaktivieren Bildschirmpuffer, kein Register darf zerstoert werden
+setram	MACRO
+					push  hl
+					push  de
+					push  bc
+					push  af
+					call	crtoff
+					pop   af
+					pop   bc
+					pop   de
+					pop   hl
+				ENDM
+  ENDIF
+ ELSE ;crtbfl ne 0
+  IF1
+;; Bildschirm ist staendig adressierbar
+setbs		MACRO
+				ENDM
+setram	MACRO
+				ENDM
+  ENDIF
+ ENDIF
+
+;**************************************************************************
+crtst			equ		dumst				;CRT:-Status immer ready
+
+crto:			ld		a,0c3h			;jp ...
+					ld		(intcrt),a	;waehrend Bildaufbau Interrupt-Zugriff verb.
+					push	bc					;merken zeichen in c
+					ld		hl,(crtcps)	;Kursorposition	
+					setbs
+					res		7,(hl)			;loeschen Kursor
+					setram
+					call	crtoti			;Zeichen ausgeben
+														;HL danach auf neuer Kursorpositon
+; Setzen Kursor auf (HL)
+					ld	  (crtcps),hl	;cursorposition
+					setbs
+					ld		a,80h
+dcurs			equ	$-1
+					or		(hl)				;Kursor setzen
+					ld		(hl),a
+					setram
+crtonc:		pop		bc					;wiederherstellen c-reg
+					ld		a,021h			;ld hl,...
+					ld		(intcrt),a	;wiederzulassen Zugriff aus Interruptrtn
+
+;
+if (stpvar ne 0)  and (chdvar ne 0)
+; Hardcopy realisieren
+					ld	a,(lampbf)
+					bit	lmphcp,a	;Hardcopy?
+					ret	z		;nein
+					ld	a,c
+					and	7fh
+					cp	20h		;Steuerzeichen?
+					jr	c,crtoe1	;ja
+					cp	7fh
+					ret	c
+crtoe1:		push	bc
+					ld	hl,crtlc	;zugelassene Steuerzeichen
+					ld	bc,crtlcl
+					cpir			;erlaubt?
+					pop	bc
+					ret	z		;ja
+					ld	c,'^'		;sonst Spezialzeichen
+					ret
+
+; bei Hardcopy Bildschirm -> Drucker zugelassene Steuerzeichen
+
+crtlc:		db	08h,0ah,0ch,0dh
+crtlcl		equ	$-crtlc
+
+else
+					ret
+endif	;stpvar and chdvar
+
+;
+;========================================================
+; interner Aufruf Bildschirmtreiber
+; i HL	Zeiger in Bildschirmpuffer auf Kursorposition
+; o HL	neuer Zeiger auf Kursorposition
+;========================================================
+
+crtoti:						
+					ld		a,0					;escape mode
+desc			equ		$-1
+					or		a
+					jp		nz,crto04		;ja
+
+crto02:		ld		a,c
+					ld		(crtcch),a	;merken fuer direkte Ausgabe
+					cp		87h					;07h ist bell!, daher 87h<>07h
+					jp		z,crto09
+					res		7,a					;sonst 1xxxxxxxB  = 0xxxxxxxB
+					cp		20h					;steuerzeichen?
+					jp		c,crto09		;ja
+					cp		7fh
+					jp		nc,crto09
+; 
+IF umlaut
+					call	crtuml			;evtl. Umlaute umkodieren
+ENDIF
+
+;
+crtobs:
+					ex		de,hl
+crtsbl:
+
+	setbs
+
+;####### Invers Mono #####
+        	ld  	hl,invmark
+        	or  	(hl)
+;#########################            	
+
+     			push	af
+        	ld    a,(color)
+          and   077h
+          jr    z,scright   ;keine Farbe, weiter
+          
+          in    a,(bwscr)   ;Farbspeicher ein
+          set   0,a
+          out   (bwscr),a
+          ld    a,(color)  
+          ld    (de),a      ;Farbe ausgeben
+          in    a,(bwscr)   ;Zeichenspeicher ein
+          res   0,a
+          out   (bwscr),a 
+scright:  pop   af
+
+;#########################	
+	
+					ld		(de),a			;Zeichen in Bildspeicher ausgeben
+	
+	setram
+
+crtcur:		ld		hl,0-bsend1
+crtm01		equ	$-2
+	      	add		hl,de				;bs voll?
+	      	ex		de,hl
+					inc		hl	
+					ret		nc
+
+;				
+;BS voll ... scrollen				
+;
+					ld		de,bsend1-bssp1+1
+crtm02		equ	$-2
+
+crto03:		push	de
+
+					ld		hl,bsanf1+bssp1	;aufschieben
+crtm03		equ	$-2
+					ld		de,bsanf1
+crtm04		equ	$-2
+					ld		bc,bsend1-bsanf1-bssp1+1
+crtm05		equ	$-2
+	
+	setbs
+	
+;##########################
+        
+scrloop1: ld    a,(color)
+    			and   077h
+    			jr    z,scrxx1    ;keine Farbe, weiter 
+    			
+    			in    a,(bwscr)   ;Farbspeicher ein
+          set   0,a
+          out   (bwscr),a
+    			ld    a,(hl)      ;Farbe von akt. Pos. holen
+    			ld    (de),a      ;an neue Pos. speichern
+    			in    a,(bwscr)   ;Zeichenspeicher ein
+          res   0,a
+          out   (bwscr),a 
+scrxx1:		ld    a,(hl)      ;Zeichen von akt. Pos. holen
+    			ld    (de),a      ;auf neue Pos. speichern
+    			inc   hl
+    			inc   de
+    			dec   bc
+    			ld    a,b
+    			or    c
+    			jr    nz,scrloop1
+;    
+;--- letzte Zeile loeschen ---
+;			
+					ld		de,bsend1-1 ;BWS Ende-1
+crtm06		equ	$-2
+					ld		bc,bssp1-1  ;Anzahl
+crtm07		equ	$-2
+
+;#######################################
+										;+++ Korrektur wegen ldir Vermeidung
+			    inc 	de	;+++++++++++++++++++
+          inc 	bc 	;+++++++++++++++++++
+
+scrloop2: ld    a,(color)   ;Farbbyte
+    			and   077h
+    			jr    z,scrxx2    ;keine Farbe, weiter 
+          in    a,(bwscr)   ;Farbspeicher ein
+          set   0,a
+          out   (bwscr),a
+          ld    a,(color) 
+          ld    (de),a      ;Farbe an Cursorpos. ausgeben
+          in    a,(bwscr)   ;Zeichenspeicher ein
+          res   0,a
+          out   (bwscr),a 
+scrxx2:   ld    a,020h      ;Leerzeichen
+          ld    (de),a      ;Leerz. an Cursorpos. ausgeben
+          dec   de
+          dec   bc
+          ld    a,b
+          or    c
+          jr    nz,scrloop2  
+
+;######################################
+	
+;				ldir
+;				dec	hl
+;				ld	(hl),' '	;letzte zeile loeschen
+;				ld	de,bsend1-1
+;crtm06	equ	$-2
+;				ld	bc,bssp1-1
+;crtm07	equ	$-2
+;				lddr
+
+	setram
+
+					pop		hl 					; Cursor setzen
+					ret
+
+;------------------------------
+; 84/04,..,86/06,87
+
+IF (crt eq k7024) or (crt eq BWSHP)
+
+;######################################
+crto84:
+;--- normale Darstellung (84h)
+          ld    a,(color)
+          and   077h
+          jr    z,scioff     
+          ld    a,(color1)       
+          and   077h
+          ld    (color),a
+          ld    (color1),a
+					ret								;konvexit
+
+crto85:
+;--- inverse Darstellung (85h)
+          ld    a,(color)
+          and   077h
+          jr    z,scion    
+          ld    a,(color1)       
+          and   077h
+          rrca
+          rrca
+          rrca
+          rrca
+          ld    (color),a
+          ret								;konvexit
+crto86:
+;--- intensive Darstellung (86h)
+          ld    a,(color)
+          and   077h
+          jr    z,scion    
+					ld    a,(color1)
+          and   077h
+          or    08h
+          ld    (color),a
+          ret           		;konvexit
+crto87:
+;--- intensive und inverse Darstellung (87h)
+          ld    a,(color)
+          and   077h
+          jr    z,scion    
+					ld    a,(color1)       
+          and   077h
+          or    08h
+          rrca
+          rrca
+          rrca
+          rrca
+          ld    (color),a
+					ret								;konvexit
+
+;#### Invers Mono ####
+scion:	  ld	  a,80h		    ;---- INVERS -----
+          jr	  scio		    ;Invers ein (bit 7)
+scioff:   xor	  a	  	      ;Invers aus
+scio:	    ld	  (invmark),a
+;#####################	                 
+
+; Ende Steuerzeichenroutinen fuer Bildschirm
+; nichts ausgeben
+
+konvexit:	ret	
+
+konvexz:  ld		a,(crtcch)	;Zeichen direkt ausgeben
+        	res		7,a					;ohne Bit 7
+					jp 		crtsbl						 
+
+konvex:   pop 	af         	;Register aufräumen
+          ret
+;###################################### 
+ 
+;alt 
+;crto84:
+;crto85:
+;crto86:
+;crto87:
+;	ld	a,(crtcch)	;Zeichen direkt ausgeben
+;	res	7,a		;ohne Bit 7
+;	jr	crtobs
+ ENDIF
+ 
+;--------------------------------
+
+; Behandlung Sonderzeichen
+;=========================
+crto09:		ex		de,hl				;test sonderzeichen
+					ld		hl,dszta
+					ld		bc,dsztal
+					cpir
+					jr		z,crto11		;gefunden
+					ld		c,'^'				;nicht-Sonderz. anzeigen
+					ex		de,hl
+			 	 	jp		crto02			;falls nicht gefunden
+
+crto11:		ld		hl,dswe-1
+					or		a
+					sbc		hl,bc
+					sbc		hl,bc
+					ld		b,(hl)
+					dec		hl
+					ld		c,(hl)			;bc:=ansprungadresse
+					push	bc
+					ld		l,e
+					ld		h,d					;bs adresse
+					ld		a,' '				;fuer BS-loeschen
+crtnop:		ret								;ansprung sonderzeichen
+;
+; Behandlung Zeichen innerhalb Escape-Folgen
+;===========================================
+;
+crto04:
+
+if	costu
+					ld		b,0
+cotd2			equ		$-1					;Restzeichenzahl Stringdef.
+					djnz	crttd0			;nicht in Stringdefinition
+					dec		a						;Escape-Rest := 1/0
+					ld		(desc),a
+					ld		a,c					;a:=Tastcode/Stringz.
+					jr		z,cotd5			;im String
+					push	hl					;retten Kursoradresse
+					ld		hl,costrt
+					cp		253					;Nutzerstringspeicher loeschen?
+					jr		z,cotdcl		;ja
+					or		a						;Nutzerstringspeicher loeschen?
+					jr		nz,cotd1		;nein
+cotdcl:		xor		a
+					ld		(desc),a		;sonst Escape zuende
+					dec		a
+					inc		hl
+					ld		(hl),a			;sonst Tabelle leeren
+					pop		hl
+					ret
+cotd1:		call	costdf			;Tastencode in Nutzerstr.sp.
+					pop		hl
+					ret		pe					;ok
+cotd4:		xor		a
+					ld		(desc),a		;beenden Stringdef.
+					jp		crtclk			;und Fehler anzeigen
+cotd5:		cp		253					;Stringende?
+					ret		z						;ja
+					or		a						;Stringende?
+					ret		z						;ja
+					res		7,a
+					push	hl
+					call	costda			;Zeichen eintragen
+					pop		hl
+					jr		z,cotd4			;kein Platz mehr
+					ld		a,1					;sonst naechstes Zeichen abw.
+					ld		(desc),a
+					ret
+crttd0:		cp		2						;Zeichen nach ESC?
+					jr		nz,crttd1		;nein
+					ld		a,c
+					cp		1bh					;Einleitung Stringdef.?
+					ld		a,2
+					jr		nz,crttd1		;nein
+					dec		a						;Flag: in Stringdef.
+					ld		(cotd2),a		;String-Def.-Flag setzen
+					ret
+crttd1:
+endif ;costu
+;
+					dec		a
+					ld		(desc),a		;naechstes escape flag setzen
+;
+IF escpc
+					push 	af
+					cp  	1
+					ld		a,c					;1. Zeichen nach ESC mit offset nach A
+			  	jr  	nz,escz2 
+					ld  	(esc2cod),a
+escz2:		pop 	af
+	      	ld  	a,c		
+ENDIF
+;
+					res		7,c					;loeschen evtl. offset 80h
+	   			jr		z,crto07		;2. (letztes) Zeichen ESC-Folge
+
+; vorletztes Zeichen ESC-Folge
+;-----------------------------
+ 
+IF escpc
+					sub 	58h
+					ret 	z			 			;1b 58	
+					dec 	a
+					ret 	z      			;1b 59
+					dec 	a      
+					ret 	z      			;1b 5a
+					dec 	a 
+					ret 	z      			;1b 5b
+					dec	 	a
+					ret 	z      			;1b 5c
+					dec 	a
+					ret 	z      			;1b 5d
+					dec 	a
+					ret 	z      			;1b 5e
+					dec 	a
+					ret 	z      			;1b 5f
+ENDIF
+;  
+;Positionierung Zeile
+;
+					ld		a,bszl1-1		;letzte zeile
+crtm08		equ	$-1
+					cp		c						;nach letzter zeile?
+					jr		c,crto05		;ja
+					ld		a,c					;sonst auf gewuenschte zeile
+
+crto05:		ld		hl,bsanf1		;zeile adressieren
+crtm09		equ	$-2
+					or		a
+					ret		z
+					ld		de,bssp1
+crtm10		equ	$-2
+					ld		b,a
+crto06:		add		hl,de
+					djnz	crto06			;zeile finden
+					ret
+;
+; letztes Zeichen ESC-Folge
+;--------------------------
+crto07:
+
+IF escpc
+;#####################################################################
+;PSEUDOGRAFIKZEICHEN 
+;ESC+5Fh+(Zeichen)
+;Ausgabe Grafikzeichen aus NANOS/AC1 ZG ( > 80h )
+;
+  				push 	af 					;2. Zeichen nach ESC merken (Grafikzeichen, Farbe, Spalte)
+					
+					ld 		a,(esc2cod) ;1. Zeichen nach ESC
+konv5f:   cp    05fh        ;Grafikzeichen-Routine?
+          jr    nz,konv58   ;NZ=nein
+				  pop 	af
+					jp    crtobs			;Pseudografikzeichen ausgeben
+;
+;FARBAUSGABEN (nur Color-BWS) sonst wird ignoriert
+;--------------------------------------------------
+;ESC+58h+(Standard-Zeichenfarbe+80h) nach Warmboot
+;Einstellen der Zeichenfarbe nach Warmboot (color2)
+;
+konv58:	  cp		058h  			;ZF?
+				 	jp    nz,konv59   ;NZ=nein
+          pop   af					;Farbe	
+          and   00001111b   ;ZF maskieren 
+          ld    b,a					;ZF merken
+          ld    a,(color2)  ;aktuelle Standard-Farbe
+          and   11110000b   ;HF maskieren
+          add   a,b         ;ZF+HF
+          cp    00h
+          jr    z,konv591   ;0 dann monochrom
+          jr    konv592
+;          
+;ESC+5Bh+(Standard-Hintergrundfarbe+80h) nach Warmboot
+;Einstellen der Hintergrundfarbe nach Warmboot (color2)
+;
+konv59:	  cp		059h  			;HF?
+				 	jp    nz,konv5a   ;NZ=nein
+         	pop   af 					;Farbe	  
+          and   00001111b   ;HF maskieren
+          rlca
+          rlca
+          rlca
+          rlca
+          ld    b,a					;HF merken
+          ld    a,(color2)  ;aktuelle Standard-Farbe
+          and   00001111b   ;ZF maskieren 
+          add   a,b         ;ZF+HF
+          cp    00h
+          jr    z,konv591   ;0 dann monochrom
+konv592:  ld    b,a         ;neue ZF+HF 
+          rrca
+          rrca
+          rrca
+          rrca
+          cp    b           ;ZF und HF gleich?
+          ret   z           ;konvexit  Z=Ja, dann ignorieren
+          ld    a,b         ;neue Gesamtfarbe 
+          ld    (color),a 
+          ld    (color2),a  ;Farbe setzen
+          and   077h        ;intensiv maskieren
+          ld    (color1),a  ;Backup
+          ret               ;konvexit
+;         
+konv591:  ld    (color2),a  ;Monochrom einschalten Farbe=0
+          ld    a,bwshz 
+          ld    (color),a   ;Farbe auf Standard setzen
+          and   077h        ;intensiv maskieren
+          ld    (color1),a  ;Backup
+          jp    crtbsl      ;Bildschirm loeschen
+;
+;ESC+5Ah+(Zeichenfarbe+80h) im Betrieb
+;Einstellen der aktuellen Zeichenfarbe (color, color1)
+;
+konv5a:  	cp    05Ah        ;ZF
+          jp    nz,konv5b   ;NZ=nein
+          ld    a,(color)   ;Color-BWS?
+          and   a
+          jp    z,konvex    ;Z=nein
+          pop   af    			;Farbe
+          and   077h				;intensiv maskieren
+          and   00001111b   ;ZF maskieren 
+          ld    b,a					;ZF merken
+          ld    a,(color)   ;aktuelle Farbe
+          and   11110000b   ;HF maskieren
+          jr    konv5b2
+;
+;ESC+5Bh+(Hintergrundfarbe+80h) im Betrieb
+;Einstellen der aktuellen Hintergrundfarbe (color, color1)
+;
+konv5b:  	cp    05Bh        ;HF?
+          jp    nz,konv5d   ;NZ=nein
+          ld    a,(color)   ;Color-BWS?
+          and   a
+          jp    z,konvex    ;Z=nein
+        	pop   af   				;Farbe
+          and   077h				;intensiv maskieren
+          and   00001111b   ;HF maskieren
+          rlca
+          rlca
+          rlca
+          rlca
+          ld    b,a				  ;HF merken
+          ld    a,(color)   ;aktuelle Farbe
+          and   00001111b   ;ZF maskieren 
+konv5b2:  add   a,b         ;ZF+HF
+          cp    00h
+          jr    z,konv591   ;0 dann monochrom
+          ld    b,a         ;neue ZF+HF 
+          rrca
+          rrca
+          rrca
+          rrca
+          cp    b           ;ZF und HF gleich?
+          ret   z           ;konvexit  Z=Ja, dann ignorieren
+          ld    a,b         ;neue Gesamtfarbe 
+          ld    (color),a   ;HF setzen
+          and   077h        ;intensiv maskieren
+          ld    (color1),a  ;Backup
+          ret								;konvexit
+           
+;
+;alte Routine aus Kompatibilitaetsgruenden fue Nutzung des FC u.a.
+;ESC+5Dh+(Farbe)
+;Einstellen der aktuellen Farben im Betrieb          
+           
+konv5d:		cp 		05dh
+					jr 		nz,spalte
+          ld    a,(color)   ;Color-BWS?
+          and   a
+          jp    z,konvex    ;Z=nein
+          pop   af					;Farbe   
+          and   077h        ;intensiv maskieren
+          ld    b,a
+          rrca
+          rrca
+          rrca
+          rrca
+          cp    b           ;Zeichen- und HG-Farbe gleich?
+          ret   z           ;konvexit  Z=Ja, dann ignorieren
+          ld    a,b
+          ld    (color),a   ;Farbe setzen
+          and   077h        ;intensiv maskieren
+          ld    (color1),a  ;Backup
+          ret               ;konvexit
+           
+spalte:		pop 	af					;Spalte
+
+;#############################################################################
+;
+;ld	b,0ffh
+;crtffl	equ	$-1		;auf 00 bei "1b 5e xx"; auf 01 bei "1b 5f xx"
+;	djnz	crtnsp		;nicht 1b 5f xx
+
+;crtfa3:	ld	a,'^'		;Spezialzeichen nicht realisierbar
+
+;	jp	 crtobs
+
+;crtnsp:
+; 	inc	b		;1b 5e xx?
+;	jr	nz,crtnfa	;nein
+;	bit	4,a		;invers?
+;	jr	z,crtfa1	;nein
+;	set	0,b
+;crtfa1:	bit	0,a		;hell?
+;	jr	z,crtfa2	;nein
+;	set	1,b
+;crtfa2:	and	00101110b	;wurden noch andere Funktionen verlangt?
+;	jr	nz,crtfa3	;ja, kann die Hardware nicht
+;	ld	a,84h
+;	or	b		;Steuerzeichen auf 84..87 abbilden
+;	ld	c,a
+;	jp	crto02		;umgewandeltes Steuerzeichen auswerten
+
+;crtnfa:
+ENDIF
+
+; Positionierung Spalte
+
+					ld		a,bssp1-1		;spalte setzen
+crtm11		equ		$-1
+					cp		c						;0 .. letzte spalte
+					jr		nc,crto08		;ja
+					ld		c,a					;sonst auf letzte spalte
+crto08:		ld		b,0
+					add		hl,bc
+					ret
+
+;----------------------------
+
+; ...Realisierung Sonderzeichen...
+;=================================
+crtcr:		ld		bc,bssp1
+crtm12		equ		$-2
+					ld		hl,bsend1
+crtm13		equ		$-2
+crto12:		or		a
+					sbc		hl,bc				;suchen,bis hl < (crtcps)
+					push	hl
+					sbc		hl,de
+					pop		hl
+					jr		nc,crto12		;zeilenanf. noch nicht gefunden
+					inc		hl
+					ret
+;-----------------------------
+crtlf:		ld		hl,bsend1-bssp1
+crtm14		equ		$-2
+					sbc		hl,de				;bs ende (anfang letzte zeile)
+					jp		c,crto03		;aufschieben
+					ld		hl,bssp1
+crtm15		equ		$-2
+					add		hl,de				;naechste zeile
+					ret
+;-----------------------------
+crtdel:	
+  setbs
+	
+;###############################
+	
+scdel:    ld    a,(color)   ;Farbbyte
+          and   077h             
+          jr    z,scdelx    ;keine Farbe, weiter
+          in    a,(bwscr)   ;Farbspeicher ein
+          set   0,a
+          out   (bwscr),a
+          ld    a,(color)
+          ld    (de),a      ;Cursorpos mit akt. Farbe fuellen 
+          in    a,(bwscr)   ;Zeichenspeicher ein
+          res   0,a
+          out   (bwscr),a           
+scdelx: 	ld    a,020h      ;Leerzeichen          
+;###############################	
+	
+					ld		(de),a
+	setram
+crtcl:		ld		hl,bsanf1		;cursor zurueck
+crtm16		equ		$-2
+					sbc		hl,de
+					ex		de,hl
+					ret		z
+					dec		hl
+					ret
+;----------------------------
+crtbsl:		ld		de,bsanf1		;bs loeschen + home
+crtm17		equ		$-2
+crtbsr:		ld		hl,bsend1
+crtm18		equ		$-2
+					sbc		hl,de
+					ex		de,hl
+	setbs
+					ld		(hl),a
+	setram
+					ret		z
+;################################	
+					ld    a,(color)   ;Farbbyte
+          and   077h             
+          jr    z,sceosx1   ;keine Farbe, weiter
+          in    a,(bwscr)   ;Farbspeicher ein
+          set   0,a
+          out   (bwscr),a
+          ld    a,(color)
+          ld    (hl),a      ;Cursorpos mit akt. Farbe fuellen 
+          in    a,(bwscr)   ;Zeichenspeicher ein
+          res   0,a
+          out   (bwscr),a
+sceosx1:  ld    (hl),020h   ;Leerzeichen
+;################################	
+	
+					push	hl
+					ld		b,d	
+					ld		c,e
+					ld		d,h
+					ld		e,l
+					inc		de
+	setbs
+	
+;################################
+sceoslop: ld    a,(color)   ;Farbbyte
+    			and   077h
+    			jr    z,sceosx2   ;keine Farbe, weiter 
+          in    a,(bwscr)   ;Farbspeicher ein
+          set   0,a
+          out   (bwscr),a
+          ld    a,(color) 
+          ld    (de),a      ;Farbe an Cursorpos. ausgeben
+          in    a,(bwscr)   ;Zeichenspeicher ein
+          res   0,a
+          out   (bwscr),a 
+sceosx2:  ld    a,020h      ;Leerzeichen
+					ld    (de),a      ;Leerz. an Cursorpos. ausgeben
+          inc   hl
+          inc   de
+          dec   bc
+          ld    a,b
+          or    c
+          jr    nz,sceoslop           
+;################################
+	
+; ldir
+	setram
+					pop		hl
+ 					ret
+;----------------------------
+crthom:		ld		hl,bsanf1		;home
+crtm19		equ		$-2
+					ret
+;----------------------------
+crtcup:
+
+					ld		hl,bsanf1+bssp1-1  ;eine zeile hoch
+crtm20		equ		$-2
+					sbc		hl,de				;in oberster zeile?
+					ex		de,hl
+					ret		nc					;nicht ausfuehren
+					ld		de,0-bssp1
+crtm21		equ		$-2
+					add		hl,de				;zeilenlaenge abziehen
+					ret
+;-----------------------------
+crtzl:		call	crtcr				;zeile loeschen
+					ex		de,hl
+crtzlr:		push	de					;restzeile loeschen
+					call	crtcr
+					add		hl,bc
+					ld 		a,020h      ;Leerzeichen
+					or		a
+					sbc		hl,de				;zeilenrest
+	setbs
+	
+sceol1:   ld    c,a
+          ld    a,(color)   ;Farbbyte
+          and   077h            
+          jr    z,sceolx
+          in    a,(bwscr)   ;Farbspeicher ein
+          set   0,a
+          out   (bwscr),a
+          ld    a,(color)         
+          ld    (de),a      ;Farbe an Cursorpos ausgeben
+          in    a,(bwscr)   ;Zeichenspeicher ein
+          res   0,a
+          out   (bwscr),a
+sceolx:   ld    a,c
+          ld    (de),a      ;Leerz. an Cursorpos ausgeben 
+          inc   de
+          dec   l
+          jr    nz,sceol1
+   setram
+          pop   hl
+          ret
+
+;crto13:	ld	(de),a
+;	inc	de
+;	dec	l
+;	jr	nz,crto13
+;	setram
+;	pop	hl
+;	ret
+;-----------------------------
+
+IF inslin
+crtinl:		call	crtcr				;Insert line
+					push	hl					;hl auf Zeilenanfang
+					ld		de,bsend2-bssp2+1 ;Anfang letzte Zeile
+crtm44		equ		$-2
+					ex		de,hl
+					or		a
+					sbc		hl,de				;Laenge
+					jr		z,crtil1		;letzte Zeile
+					ld		b,h
+					ld		c,l
+					ld		de,bsend2		;Ziel
+crtm45		equ		$-2
+					ld		hl,bsend2-bssp2	;Quelle
+crtm46		equ		$-2
+	setbs
+					lddr							;eine Zeile nach unten schieben
+	setram
+crtil1:		pop		de
+					ld		h,d
+					ld		l,e
+					jr		crtzlr			;freigewordene Zeile loeschen
+;-----------------------------
+crtdll:		call	crtcr				;Delete Line
+					push	hl
+					ld		de,bsend2-bssp2+1	;Anfang letzte Zeile
+crtm47		equ		$-2
+					ex		de,hl
+					or		a
+					sbc		hl,de				;Laenge
+					jr		z,crtdl1		;letzte Zeile
+					ex		(sp),hl
+					ld		d,h
+					ld		e,l					;de auf Ziel (Zeilenanfang)
+					add		hl,bc				;hl auf Quelle
+					pop		bc
+					push	de
+	setbs
+					ldir							;eine Zeile nach oben schieben
+	setram
+crtdl1:		ld		hl,bsend2-bssp2+1
+crtm48		equ		$-2
+					ld		d,h
+					ld		e,l
+					call	crtzlr			;letzte Zeile loeschen
+					pop		hl
+					ret
+ENDIF	;inslin
+
+;-----------------------------
+;ESC Flag setzen (1Bh)
+crtesc:	
+        	ld		a,2					;escape flag setzen
+					ld		(desc),a
+				
+				if	costu or adm3a
+ 					 xor	a
+	  				if	costu
+	   					ld	(cotd2),a	;keine Stringdef.
+	  				endif
+				endif
+					ret
+
+;-----------------------------
+crtcrt:		ld		a,80h				;cursor an
+					jr		crto14
+;-----------------------------
+crtcof:		xor		a						;cursor aus
+crto14:		ld		(dcurs),a
+					ret
+;-----------------------------
+
+; Realisierung 07h
+; Achtung! Diese Routine wird aus Interruptroutine aufgerufen!
+crtclk:		call	crtcl1			;Fehlerlampe umschalten
+
+crtcl1:		ld		b,25				;0.25 sec warten
+					call	wait10
+; Fehlerlampe wieder zurueck
+; Fehlerlampe umschalten
+; Reg. A, HL bleiben erhalten
+swilmp:		push	af
+					push	hl
+					ld		hl,lampbf
+					ld		a,(hl)
+					xor		1 shl lmperr
+					ld		(hl),a
+					call	lampen
+					pop		hl
+					pop		af
+					ret
+;-----------------------------
+IF umlaut
+; Umschalten auf 2. Zeichensatz
+crt2zs:		push	hl
+					ld		hl,synflg
+					set		umlflg,(hl)
+					pop		hl
+					ret
+; Umschalten auf 1. Zeichensatz
+crt1zs:		push	hl
+					ld		hl,synflg
+					res		umlflg,(hl)
+					pop		hl
+					ret
+ENDIF
+;-----------------------------
+
+ IF stpvar
+ IF chdvar
+;Hardcopy Bildschirm -> LST
+crthrd:		push	hl
+					ld		hl,bsanf1
+crtm22		equ		$-2
+					ld		c,bszl1+1
+crtm23		equ		$-1
+					jr		crthd3			;zu Beginn neue Zeile
+crthd1:		ld		b,bssp1
+crtm24		equ		$-1
+crthd2:		push	bc
+	setbs
+					ld		a,(hl)
+	setram
+					inc		hl
+					push	hl
+					and		7fh
+					cp		20h					;BS-Steuerzeichen?
+					jr		nc,crthd4		;nein
+
+ IF umlaut
+					ld		hl,synflg		;Schalterbyte 
+					bit		umlflg,(hl)	;Umlaute anzeigen ?
+					jr		z,cnuml1		;nein!
+					ld		hl,umltb2		;Umlautcodierung ?
+					ld		bc,umllen
+					cpir
+					jr		nz,cnuml1		;nein !
+					ld		bc,umllen+1	;sonst rueckkodieren
+					or		a
+					sbc		hl,bc
+					ld		a,(hl)			;rueckkodiertes Zeichen
+					jr		crthd4
+cnuml1:
+ ENDIF ;umlaut
+
+					ld		a,'^'				;sonst Sonderzeichen
+crthd4:		ld		c,a
+					call	BIOS0F			;LIST
+					pop		hl
+					pop		bc
+					djnz	crthd2			;bis Zeilenende
+crthd3:		push	bc
+					push	hl
+					ld		c,0dh
+					call	BIOS0F
+					ld		c,0ah
+					call	BIOS0F
+					pop		hl
+					pop		bc
+					dec		c						;Bildschirmende?
+					jr		nz,crthd1		;nein
+					pop		hl
+					ret
+ ENDIF ;chdvar
+ ENDIF ;stpvar
+
+ IF umlaut
+; Umlaute umcodieren fuer Anzeige auf BAB1/BAB2 (Sonder-PROM)
+crtuml:	
+					push 	hl					;retten wegen evtl. ext. Verwendung
+					push 	bc
+					ld		hl,synflg		;Schalterbyte
+					bit		umlflg,(hl)	;Umlaute anzeigen ?
+					jr		z,umlcn1		;nein !
+					ld 		hl,umltb1
+					ld 		bc,umllen
+					cpir							;in Tabelle suchen
+					jr		nz,umlcn1		;nicht gefunden
+					ld		bc,umllen-1	;wegen cpir
+					add 	hl,bc
+					ld		a,(hl)			;umcodieren
+umlcn1:		pop		bc
+					pop		hl
+					ret
+        
+;------------------------------
+; Umcodiertabelle fuer Umlautumcodierung
+
+IF zsuml ;auf freie 7023/24-Steuerzeichen (IH Mittweida, Koll. Geiler)
+;		Ae  Oe  Ue  ae  oe  ue  sz  **2 **3 Par my
+umltb1:		db	5bh,5ch,5dh,7bh,7ch,7dh,7eh,3ch,3eh,40h,5eh
+umltb2:		db	15h,16h,17h,1ch,1dh,1eh,1fh,10h,12h,14h,18h
+umllen		equ	umltb2-umltb1
+ENDIF
+
+IF zsibm ;auf 00..1f erweiterter IBM-Zeichensatz
+;		Ae  Oe  Ue  ae  oe  ue  sz  **2 **3 Par my
+umltb1:		db	5bh,5ch,5dh,7bh,7ch,7dh,7eh
+umltb2:		db	18h,19h,1ah,1bh,1ch,1dh,1eh
+umllen		equ	umltb2-umltb1
+ENDIF	
+
+ENDIF ;umlaut	
+
+
+; Arbeitszellen
+;==============
+
+crtcch:	 	db	0		;direkt auszugebendes BS-Zeichen
+
+;##################
+invmark: 	db	0  	;invers Markierung
+esc2cod: 	db 	0  	;2.Zeichen in ESC Sequenz  
+
+;##################
+
+
+; Tabelle der Sonderzeichen, SCP kompatibel!
+;==========================================
+
+dszta:		db	00h	;nop
+					db	01h	;home
+					db	02h	;(auch 82h) cursor an
+					db	03h	;(auch 83h) cursor aus
+					db	04h ;(auch 84h) normal, nicht inv.
+					db	05h	;(auch 85h) normal,       inv.
+					db	06h	;(auch 86h) hell  , nicht inv.
+									;(nur  87h) hell  ,       inv.
+					db	07h	;bell (akustisches zeichen)
+					db	08h	;cursor zurueck
+					db	0ah	;LF
+					db	0ch	;bs loeschen, cursor links oben
+					db	0dh	;CR
+
+if umlaut
+					db	0eh	;umschalten auf 2. Zeichensatz
+					db	0fh	;umschalten auf 1. Zeichensatz
+endif
+
+					db	14h	;rest bs loeschen
+					db	15h	;cursor vorwaerts
+					db	16h	;rest der zeile loeschen
+
+IF inslin
+					db	17h	;Insert Line
+ENDIF
+
+					db	18h	;zeile loeschen, cursor an zeilanf.
+
+IF inslin
+					db	19h	;Delete Line
+ENDIF
+
+					db	1ah	;eine zeile hoch
+					db	1bh	;escape
+
+;		1b zeile+80h spalte+80h		Kursor posit. SCP
+;		1b zeile+00h spalte+00h		geht auch bei CP/A
+;		1b '='/'Y' zeile+20h spalte+20h	Kursor posit. bei ADM3A
+;		1b 5e xx	Feldattribut setzen (SCP1715 fuer 8275-Contr.)
+;			mit xx= 01urggbh
+;				  u		unterstreichen,
+;				   r		invers,
+;				    gg		Zeichengenerator-Umschaltung,
+;				      b		blinken,
+;				       h	heller 
+;		1b 5f xx	Spezialzeichen setzen (SCP1715 fuer 8275)
+;			mit xx= 01ssssbh
+;				  ssss		Zeichencode (1100 Sonderfkt)
+;				      b		blinken des Sonderzeichens
+;				       h	heller des Sonderzeichens
+	
+					db	7fh	;delete
+					db	87h	;(nicht 07h) hell  ,      inv.
+ dsztal		equ	$-dszta	;Tabellenlaenge
+
+; Reaktionsroutinen fuer Sonderzeichen
+					dw	crtnop	;00
+					dw	crthom	;01
+					dw	crtcrt	;02/82
+					dw	crtcof	;03/83
+					dw	crto84	;04/84
+					dw	crto85	;05/85
+					dw	crto86	;06/86
+					dw	crtclk	;07
+					dw	crtcl		;08
+					dw	crtlf		;0A
+					dw	crtbsl	;0C
+					dw	crtcr		;0D
+
+if umlaut
+					dw	crt2zs	;0E
+					dw	crt1zs	;0F
+endif
+
+					dw	crtbsr	;14
+					dw	crtcur	;15
+					dw	crtzlr	;16
+
+IF inslin
+					dw	crtinl	;17
+ENDIF
+
+					dw	crtzl		;18
+
+IF inslin
+					dw	crtdll	;19
+ENDIF
+
+					dw	crtcup	;1A
+					dw	crtesc	;1B
+					dw	crtdel	;7F
+					dw	crto87	;87
+
+dswe 			equ	$	;tabellenende
+;

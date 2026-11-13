@@ -1,0 +1,125 @@
+# Kconfig fuer das GIDE-CP/A (A5120 / K8924) - Einstellungen der SETUP.MAC
+# Quelle: Klaus Wilfling, "GIDE CPA mit HPBWS 2FDD RTC 8GIDE" (31.07.2025)
+
+mainmenu "GIDE-CP/A System Konfiguration - SETUP.MAC [? fuer Hilfe]"
+config HINT_INFO
+    bool "=== Hinweise zur Konfiguration [? fuer Hilfe] ==="
+    help
+        Hier stehen die Einstellungen der SETUP.MAC des GIDE-CP/A.  Weitere
+        Einstellungen (Kaltstart-Kommando, Drucker, RAM-Floppys, Laufwerkstypen)
+        stehen in der bios.mac und werden von Hand geaendert.
+        Die Basisadresse der GIDE-Karte muss zum Urlader-EPROM (K2526UL4: D0H)
+        und zu den GIDE-Werkzeugen (GIDEHPD0, HDFORMAT, SYSWRCPA: D0H) passen.
+        Der Uebersetzungslauf muss mit "No Fatal error(s)" enden.
+    default n
+
+menu "Hardware"
+choice
+    prompt "Bildschirmkarte"
+    default SYSTEM_CRT_BWSHP
+    config SYSTEM_CRT_BWSHP
+        bool "Farb-BWS nach Heiko Poppe (bwshp)"
+        help
+            source=setup.mac crt=bwshp
+            80x24 oder 64x32 Zeichen (Jumper 64/80), Farbe ueber SETCOLOR.COM
+    config SYSTEM_CRT_K7024
+        bool "K7024 (k7024)"
+        help
+            source=setup.mac crt=k7024
+            Original-Bildschirmkarte 80x24
+endchoice
+
+choice
+    prompt "Floppy-Karte"
+    default SYSTEM_FDC_K5122
+    config SYSTEM_FDC_K5120
+        bool "K5120 (0)"
+        help
+            source=setup.mac fdc=k5120
+    config SYSTEM_FDC_K5122
+        bool "K5122 (1)"
+        help
+            source=setup.mac fdc=k5122
+endchoice
+
+choice
+    prompt "Prozessor-Takt (MHz)"
+    default SYSTEM_CPUCLK_25
+    config SYSTEM_CPUCLK_25
+        bool "2,5 MHz (cpuclk=25)"
+        help
+            source=setup.mac cpuclk=25
+    config SYSTEM_CPUCLK_40
+        bool "4,0 MHz (cpuclk=40)"
+        help
+            source=setup.mac cpuclk=40
+endchoice
+
+config SYSTEM_ANZDISK
+    string "anzdisk (Anzahl Floppy-Laufwerke, 1..4)"
+    help
+        source=setup.mac anzdisk=hexstring
+        Anzahl der Diskettenlaufwerke, 1 bis 4 (nicht 0).  Bei nur einem
+        Laufwerk wird B: wie A: angesprochen, das erste GIDE-Laufwerk ist
+        dann mindestens C:.
+endmenu
+
+menu "GIDE und RTC"
+config SYSTEM_ANZGIDE
+    string "anzgide (Anzahl GIDE-Laufwerke, 0..8)"
+    help
+        source=setup.mac anzgide=hexstring
+        0 = ohne GIDE-Treiber; 1..8 = so viele Laufwerke zu je 8 MB.
+        Das erste GIDE-Laufwerk folgt auf die Floppy-Laufwerke.
+
+config SYSTEM_GIDEADR
+    string "GIDEADR (E/A-Basisadresse der GIDE-Karte)"
+    help
+        source=setup.mac GIDEADR=hexstring
+        Hex mit abschliessendem h, z. B. 0D0h.  Die RTC liegt bei Basis+5.
+
+config SYSTEM_HDTIM
+    string "hdtim (Wartezeit Platten-Hochlauf in s)"
+    help
+        source=setup.mac hdtim=hexstring
+        1 = DOM-Modul, 5-7 = 2,5"-Platte, 7-10 = 3,5"-Platte.
+
+config SYSTEM_RTCGUNX
+    bool "RTC (BCD-Uhr) der GUN-Karte verwenden"
+    help
+        source=setup.mac rtcgunx=1
+        Die Uhrzeit erscheint in der rechten oberen Bildschirmecke.
+    default y
+endmenu
+
+menu "CCP"
+choice
+    prompt "CCP nachladen"
+    default SYSTEM_CCPLOAD_0
+    config SYSTEM_CCPLOAD_0
+        bool "CCP-Kopie im BIOS (ccpload=0, ca. 2 KB mehr Speicher)"
+        help
+            source=setup.mac ccpload=0
+    config SYSTEM_CCPLOAD_2
+        bool "CCP aus @OS.COM nachladen (ccpload=2)"
+        help
+            source=setup.mac ccpload=2
+            Beim Boot von GIDE muss @OS.COM zusaetzlich auf dem ersten
+            GIDE-Laufwerk liegen und mit den Systemspuren identisch sein.
+endchoice
+endmenu
+
+menu "Version"
+config SYSTEM_VERST
+    string "verst (Tag)"
+    help
+        source=setup.mac verst=hexstring
+config SYSTEM_VERSM
+    string "versm (Monat)"
+    help
+        source=setup.mac versm=hexstring
+config SYSTEM_VERSJ
+    string "versj (Jahr, zweistellig)"
+    help
+        source=setup.mac versj=hexstring
+endmenu

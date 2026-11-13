@@ -1,0 +1,132 @@
+;SETUP.MAC
+;=====================================================================
+; Einige Grundeinstellungen um ein neues CP/A zu geenerieren
+;  - weitere Einstellungen in der BIOS.MAC moeglich 
+;  - Versionshistory in der BIOS.MAC bzw. in den geaenderten Dateien
+;=====================================================================
+; 
+;----------------
+; Versionsangabe:
+;----------------
+verst	equ	31 ;original 25	;Tag
+versm	equ	07 ;original 09	;Monat
+versj	equ	25 ;original 89	;Jahr
+;
+;*********************************************************************
+;=====================================================================
+; Vereinbarungen fuer Hardware - Achtung! equ's nicht veraendern!!!!
+;=====================================================================
+; CPU
+;====
+K2521		equ	1
+K2526		equ	6
+C1715		equ	7
+; Floppy-Karte
+;=============
+K5120		equ	0 ;K5120
+K5122		equ	1 ;K5122
+K5126		equ	6 ;K5126
+F1715		equ	7 ;PC1715
+FDC3		equ	11
+; Bildschirm
+;===========
+K7024		equ	0 ;Bildschirm-Karte mit Kursor durch Bit 7
+DSY5		equ	1 ;Bildschirm-Karte mit Invers durch Bit 7
+		  				;z.B. VDE Buch oder geaenderte K7024-Karte
+B1715		equ	7 ;PC1715
+BWSHP 	equ 9 ;Color-BWS nach Heiko Poppe
+; Geraeteversion
+;===============
+oem			equ	0 ;OEM-Geraet
+cpd			equ	1 ;Hardware-Variante CP/D
+k8915		equ	2 ;Hardware-Variante K8915
+;*********************************************************************
+
+;Ab hier koennen Systemeinstellungen druchgefuehrt werden
+
+;=====================================================================
+; Vereinbarungen fuer aktuelle Variante
+; Buerocomputer A5120/K8924
+;=====================================================================
+dev			equ	oem				;NICHT AENDERN !!!
+cpu			equ	k2526			;NICHT AENDERN !!!	
+cpuclk	equ	25				;Takt der CPU; 25 bei 2,5Mhz; 40 bei 4,0Mhz
+fdc			equ	k5122     ;K5120 oder K5122
+crt     equ bwshp     ;BWSHP oder K7024
+;
+;=====================================================================
+;
+;Anzahl Floppylaufwerke festlegen
+anzdisk   equ 2       ;=1 bis 4 = Anzahl Floppy-LW (darf nicht 0 sein!)
+;Falls nur 1 Floppy LW (A:) festgelegt wird, dann wird auch LW B: als LW A: angesprochen.
+;Das ist sinnvoll, damit das erste GIDE LW mindestens LW C: wird!   
+;
+;---------------------------------------------------------------------
+;Anzahl GIDE Laufwerke festelegen (falls GIDE verwendet wird)
+;Beginn dann mit LW C:
+anzgide   equ 8       ;=1 bis 8 .. GIDE-LW (GIDE Treiber wird integriert) 
+											;=0 ohne  .. GIDE-LW (Es wird kein GIDE Treiber integriert)
+						; !! Wird hier Anzahl = 0 gewaehlt, wird kein GIDE Treiber installiert !!
+;
+hdtim	  	equ 1				;maximale Wartezeit in Sekunden 
+;											;zum Hochfahren der Festplatte
+;					Richtwerte:	1 = DOM-Modul
+;			 								5-7  = 2,5" Festplatte
+;			 								7-10 = 3,5" Festplatte
+;
+;---------------------------------------------------------------------
+;Festlegen ob eine Uhr (RTC auf der GUN-Platine) verwendet werden soll
+rtcgunx		equ	1				;=1: mit BCD-Uhr 
+											;=0: ohne														
+;---------------------------------------------------------------------
+;GIDE Basisiadresse 
+GIDEADR   equ 0D0h	    ;GIDE Basisadresse 
+;
+;falls eine GUN-Karte nach Heiko Poppe o.ae. verwendet wird
+;Software fuer die RTC im GIDE-CP/A 5120/8924 derzeit nicht eingebaut
+RTCADR	  equ GIDEADR+5 ;Adresse der RTC (Real-Time Clock) falls verwendet
+;
+;=====================================================================
+;Festlegen von wo der CCP nachgeladen wird
+;Hier moeglichst nur 0 oder 2 auswaehlen !!!!
+
+ccpload	  equ	0				;=0 oder 2 !!!     
+
+; Bei "ccpload" = 0 wird ca. 2kb mehr TPA Speicher verbraucht,
+; aber das System arbeit etwas schneller und laedt den CCP nur 
+; im Speicher um
+
+; Bei "ccpload" = 2 wird der CCP aus der Datei @OS.COM nachgeladen
+; Wird von GIDE gebootet, muss die @OS.COM mit auf dem ersten
+; GIDE Laufwerk sein, von dem gebootet wird
+
+; Bei "ccpload" <> 0 und Arbeit ohne Diskettenpuffer kann der
+; Kaltstart-Code u.U. bis in den Bildschirmpuffer reichen,
+; wodurch der Bildschirm beim Kaltstart kurzzeitig undefi-
+; niert sein kann.
+
+               				;=0:	CCP-Kopie im BIOS (2K grosser Puffer)
+											;=1:	keine CCP-Kopie, Warmstart=Kaltstart
+											;			(Kaltstart-Kommando sollte leer sein!)
+											;=2:	keine CCP-Kopie, CCP aus File '@os.com'
+											;=3:	CCP-Kopie in RAM-Floppy (RAM-Floppy
+											;			dann um 2K kleiner),
+											;			wenn keine RAM-Floppy vorhanden
+											;			(siehe "Hauptspeicher"), so wie wbootv=1
+											;=4:	keine CCP-Kopie, CCP aus File '@ccp.com'
+											;			selbstversch. vor BDOS o. Treiber geladen
+											
+;=====================================================================
+; ACHTUNG:
+; Weitere Einstellungen zu Bildschirmkarte BWSHP (falls verwendet)...
+; ... Kaltstart- Warmstart-Kommandos, RAM-Floppys, Druckern,... 
+; ... Rechnerkopplung, Typ der Floppy-LW, Monitor und vieles mehr...
+; koennen in der BIOS.MAC vorgenommen werden. 
+; Bitte diese vor Aenderungen sichern und beim Uebersetzungslauf auf evtl. Fehlermedungen achten
+; Ein Uebersetzungslauf sollte immer mit der Assembler-Meldung   
+; No Fatal error(s) 
+; und beim Linker mit
+; No Undefined Symbols 
+; enden. Sonst ist im Code u.U. ein Fehler/Schreibfehler.
+;=====================================================================
+; ENDE SETUP.MAC .... weiter mit BIOS.MAC

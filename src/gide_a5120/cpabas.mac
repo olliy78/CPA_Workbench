@@ -1,0 +1,79 @@
+;--------------------------
+;CPABAS original
+;--------------------------
+;
+title   CPABAS 2nd Loader
+        name    ('CPABAS')
+        .z80
+;
+EXTRN   CCP
+EXTRN   BIOS
+EXTRN   BIOSCE
+;
+DEFAULT equ     0004h                   ; default Laufwerk
+;
+START:          												; Start auf Adresse 0100h 
+        LD      HL,CCPKOP-START+0100h   ; Offset CCP im File
+        LD      A,(DEFAULT)             ; default Laufwerk nach A
+        JR      LOADER
+        ;
+        DEFS    24,0				;
+        LD      HL,3800H 		;?
+        DI									;?
+        LD      A,(03FCH)		;?
+        LD      B,3					;?
+L0129:  RLCA								;?
+        JR      NC,L012E		;?
+        DJNZ    L0129				;?
+L012E:  LD      A,B					;?
+				;
+LOADER: DI
+        LD      SP,CCP  		; Ladeadresse CCP, Stack abwaerts (z.B.0B300h)
+        PUSH    HL      		; Ofsett sichern
+        ;AND     3       		; ausmaskieren der hoeheren Bits des aktuellen Laufwerks
+        AND     7						; neu für GIDE Boot
+        PUSH    AF      		; sichern
+        LD      BC,1603H		; Laenge CCP,BDOS+3 = 1603h
+        ADD     HL,BC   		; 180h Ofsett dazu = 1783h
+        EX      DE,HL   		; Adresse nach DE
+        LD      HL,CCP  		; CCP Ladeadresse
+        ADD     HL,BC   		; (z.B. 0B300h) + 1603h = 0D303h
+        LD      BC,30H  		; Laenge fuer Ueberpruefung jungfrl. Start
+LVERG:  LD      A,(DE)  		; Daten aus geladenem File
+        INC     DE      		; erhoehen
+        CPI             		; Vergleich A,(HL)
+        JR      NZ,LJUNG		; Nicht gleich, neu laden, jungfrl. Start
+        LD      A,B
+        OR      C
+        JR      NZ,LVERG		; 30h verglichen?
+        POP     AF      		; ja identisch, restauriere akt. Laufw.
+        SET     7,A     		; Flag setzten fuer nicht jungfrl. Start
+        PUSH    AF
+LJUNG:                  		; Neu laden
+        IN      A,(0AH) 		; Datenbort B ZVE PIO
+        AND     0F6H    		; ausblenden Lade ROM und WAIT-ZVE2
+        OUT     (0AH),A 		; Standardverhalten herstellen
+        LD      A,3
+        OUT     (9),A   		; Interrrupts Kanal A (B?) ZVE PIO gesperrt
+        OUT     (0CH),A 		; Kanalreset aller CTC Kanal 0 der ZVE-CTC
+        OUT     (0DH),A			; Kanalreset aller CTC Kanal 1 der ZVE-CTC
+        OUT     (0EH),A			; Kanalreset aller CTC Kanal 2 der ZVE-CTC
+        OUT     (0FH),A			; Kanalreset aller CTC Kanal 3 der ZVE-CTC
+        OUT     (11H),A 		; Interrupts Kanal A SteuerPIO der AMF gesperrt
+        OUT     (13H),A			; Interrupts Kanal B SteuerPIO der AMF gesperrt
+        LD      A,0FFH
+        OUT     (18H),A 		; Ruecksetzten des Signalregisters 8121 auf der AMF
+        POP     AF      		; aktives Laufwerk zurueck nach A
+        LD      DE,CCP  		; CCP Ladeadresse
+        LD      HL,BIOSCE   ; Endadresse BIOS
+        OR      A       		; Carry ruecksetzen fuer Subtraktion
+        SBC     HL,DE   		; Subtraktion
+        LD      B,H     		; umzuladende Laenge nach BC 
+        LD      C,L
+        POP     HL      		; Offset im File (Quelladresse CCP)
+        LDIR            		; Umladen
+        JP      BIOS    		; BIOS Kaltstart
+        DEFS    3,0
+CCPKOP  equ     $       		; Hier Kopie des CCP
+        END
+        
