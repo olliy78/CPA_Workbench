@@ -46,6 +46,15 @@ Durch die automatisierte Erstellung und das Schreiben von bootfähigen Systemdis
 
 **Status:** Initiale Version – erste öffentliche Version mit grundlegender Build-Funktionalität.
 
+## Variante `gide_a5120` (GIDE-CP/A für A5120 / K8924)
+
+CP/A von Klaus Wilfling (Stand 31.07.2025) mit **fest im BIOS eingebautem GIDE-Treiber** (bis 8 Laufwerke zu 8 MB, Plattenformat nach
+Heiko Poppe), RTC 72421 der GUN-Karte, Farb-BWS (Heiko Poppe) oder K7024. Die Einstellungen der `SETUP.MAC` (Bildschirmkarte, Anzahl
+Floppy-/GIDE-Laufwerke, GIDE-Basisadresse, RTC, CCP-Nachladen) stehen im Systemmenü. Beim Bauen entsteht zusätzlich
+`build/k2526ul4.bin`, der **Urlader-EPROM** für die ZRE K2526 (2708), mit dem der A5120 nach der Diskette von der GIDE-Platte bootet
+(Quelle `src/gide_a5120/urlader/`). Das System schreibt `SYSWRCPA.COM` in die Systemspuren des ersten GIDE-Laufwerks; die Werkzeuge liegen
+in `additions/gide_a5120/`. Der Bau ist bitgleich zu den Originaldateien (`@os.com`, `k2526ul4.bin`).
+
 ## Installationsanleitung
 
 ### Voraussetzungen (alle Betriebssysteme)

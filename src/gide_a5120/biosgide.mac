@@ -1,0 +1,399 @@
+;BIOSGIDE.MAC
+;
+;---------------------------------------
+;original Quellen Timann Reh, Heiko Poppe
+;---------------------------------------
+;
+; 30.11.2018 Klaus Wilfling
+; - GIDE Treiber für CP/A angepasst 
+; - GIDE Basisadresse wird in SETUP.MAC festgelegt          
+; - defaul ist aktuelles Laufwerk (in Adresse 0004h)  
+;
+; 05.01.2019
+; - Konstante GIDE in GIDEADR geändert (nach Heiko)
+; - Variable bootrive durch die schon vorhandene clddev ersetzt
+;
+; 13.01.2019
+; - RAM-Floppy kann nun zusammen mit GIDE verwendet werden
+; - Achtung: RAM-Floppy ist immer Laufwerk M: !!!!!  
+;   
+;
+ndisk     equ 15               ; maximale Anzahl Laufwerke
+          ;
+          ; Definition der GIDE I/O Addressen:
+          ;
+IdeDOR    equ       GIDEADR+6    ; Digital Output Register
+IdeDat    equ       GIDEADR+8    ; Data Register
+IdeErr    equ       GIDEADR+9    ; Error Register
+IdeWrPc   equ       IdeErr    	 ; Write Precomp Register
+IdeSCnt   equ       GIDEADR+0Ah  ; Sector Count
+IdeSNum   equ       GIDEADR+0Bh  ; Sector Number
+IdeCLo    equ       GIDEADR+0Ch  ; Cylinder Low
+IdeCHi    equ       GIDEADR+0Dh  ; Cylinder High
+IdeSDH    equ       GIDEADR+0Eh  ; Drive and thead
+IdeCmd    equ       GIDEADR+0Fh  ; Command
+IdeStat   equ       GIDEADR+0Fh  ; Status
+          ;
+          ; Kommandos fuer IDE Laufwerke:
+          ;
+CmdRd     equ       20h       ; Read Sector
+CmdWr     equ       30h       ; Write Sector
+CmdInit   equ       91h       ; Initialize Drive Params
+          ;
+          ;
+          ;bdos constants on entry to write (passed in C)
+          ;
+wrall     equ       0         ; write to allocated
+wrdir     equ       1         ; write to directory
+wrual     equ       2         ; write to unallocated
+          ;
+		      ;
+;#############################################################
+;
+;GIDE ROUTINEN 
+;
+;*************************************************************        
+;BIOS-Routinen mit Ergaenzung 
+;der Disk-Routinen fuer GIDE
+;*************************************************************        
+          ;
+          ;KOPF AUF SPUR NULL SETZEN
+          ;
+h_home:   call      chkhrd              ;is it our disk?
+          jp        z,home              ;no, jump to Floppy
+          xor       a                   ;0 in A
+          ld        hl,hhstact          ; HL points to host active
+          or        (hl)                ;set flags
+          ret       z                   ;return if host is not active
+          inc       hl                  ;bump to hstwrt
+          xor       a                   ;0 in A
+          or        (hl)                ;set flagz
+          ret       nz                  ;return if pending write
+          dec       hl                  ;bump back down to hstact
+          ld        (hl),a              ; else clear host active flag
+          ret                           ;and done
+          ;         
+          ;LAUFWERK AUSWAEHLEN;INP:C=LW-NUMMER
+          ;OUT:HL=DPH VEKTOR
+          ;
+h_seldsk: ld 				a,c                 ;LW-Nummer
+			
+					;Test auf RAM-Floppy
+          if ramfl    
+            cp      0ch									;ist LW M: ausgewählt ?
+            jp      z,rafsel						;dann weiter mit floppyauswahl
+          endif
+      
+          cp 				ndisk               ;Vergleich mit max. LW-Anz.
+          jr 				nc,errsel           ;Fehler, wenn Wert >NDISK
+          call 			mkesel              ;holt Wert aus Disk-Tabelle
+          inc 			a                   ;Test auf 0FFh
+          jr 				z,errsel            ;wenn Z=1, keine Disk
+          dec 			a                   ;Wert wiederherstellen
+          rlca                          ;Test auf Bit 7
+          rrca                          ;in Carry
+          jr 				c,idesel            ;Bit 7 = IDE-Disk
+          ;
+rafsel:   ld 				c,a                 ;floppy disk, put back in C
+          xor 			a                   ;0 in A
+          ld 				(hdisk),a           ;hdisk=0
+          jp 				seldsk              ;weiter zur Floppyauswahl
+          ;
+idesel:   ld        (hdisk),a           ;flag as our disk
+          ld        h,0                 ;make sure H=0
+          and       0Fh                 ;HD-Nummer maskieren
+          ld        l,a                 ;and put in L
+          ld        a,c                 ;get disk number again
+          ld        (hsekdsk),a          ;save disk number
+          add       hl,hl               ;*2
+          add       hl,hl               ;*4
+          add       hl,hl               ;*8
+          add       hl,hl               ;*16
+          ld        de,hdpbase          ;get base of hard disk dph's
+          add       hl,de               ;make pointer to DPH for drive
+          ret                           ;and go back
+          ;
+errsel:   ld        hl,0000h            ;0 in HL
+          ld        a,(defaul)          ;get current disk
+          sub       c                   ;same as selected?
+          ret       nz                  ;wasn't same
+          ;
+          ld 				a,(clddev)  				;Kaltstart-Laufwerk
+          ld        (defaul),a          ;else force drive A current
+          xor				a										;Z Flag setzen
+          ret                           ;and return with error
+          ;
+mkesel:   ld        b,0                 ;0 in B
+          ld        hl,lwtab            ;base of select array in HL
+          add       hl,bc               ;make pointer to select data
+          ld        a,(hl)              ;get the select data
+          ret
+          ;
+          ;SECTORTRANSFORMATION;INP:BC=LOG.SECTOR
+          ;    DE=ADR.TABELLE
+          ;
+h_sectran: call     chkhrd  	           ;is it our disk?
+          jp        z,sectran            ;not our disk, jump to FBIOS
+          ;
+          ld        l,c                  ;L=C
+          ld        h,b                  ;H=B (no translation)
+          ret                            ;and we're done     
+          ;
+          ;
+          ;SEKTOR EINSTELLEN
+          ;INP: C = SEC.NUMMER
+          ;OUT: (SEC1) = C
+          ;
+h_setsec:  call     chkhrd               ;is it our disk?
+          jp        z,setsec             ;not our disk.  Jump to FBIOS
+          ;
+          ld        (hseksec),bc         ;save sector to seek
+          ret
+          ;
+          ;SPURWAHL
+          ;INP:C=SPURNUMMER
+          ;OUT:(TRACK)=C
+          ;
+h_settrk: call      chkhrd               ;is it our disk?
+          jp        z,settrk             ;no, jump to Fbios
+          ;
+          ld        (hsektrk),bc         ;save it
+          ret                            ;and done
+          ;         
+          ;DMA SETZEN
+          ;INP: BC = DMA
+          ;
+h_setdma: ld        (hdmaadr),bc         ;set it here
+                                         ;and let FBIOS set it as well.
+          LD        (DMA),BC
+          jp        setdma               ;für Floppy
+          ;
+          ;LESEN EINES SEKTORS ZU 128 BYTE
+          ;
+h_read:   call      chkhrd               ;is it our disk?
+          jp        z,read               ;no, jump to Floppy
+          ;
+ 	        LD        A,wrual              ;treat as write to unallocated
+          LD        (hwrtype),A          ;store at WRTYPE
+          LD        (hreadop),A          ;indicate a read (READOP)
+alloc0:   XOR       A                    ;0 in A
+          LD        (hunacnt),A          ;clear unacnt
+alloc1:   INC       A                    ;bump to 1
+          ;
+noovf1:   LD        (hrsflag),A          ;flag a rd(!0) or wr(0) (rsflag)
+;
+; calculate host sector...
+;
+hrwoper:  ld        a,(HSecShf)          ;get sector shift
+          ld        b,a                  ;into B
+          or        a                    ;check for 0
+          ld        hl,(hseksec)         ;get sector
+          jr        z,hrwope1            ;jr if 0 (don't shift)
+hrwope0:  or        a                    ;clear carry
+          rr        h                    ;shift sector right H:0->carry
+          rr        l                    ;shift sector right carry->L:7
+          djnz      hrwope0              ;until found
+hrwope1:  ld        (hsekhst),HL         ;store host sector to seek
+          XOR       A                    ;0 in A
+          LD        (herflag),A          ;no errors (yet)
+          LD        HL,hhstact           ;point at hstact
+          OR        (HL)                 ;OR in the host active flag
+          LD        (HL),1               ;always becomes 1
+          JR        Z,hfilhst            ;JR IF was not already 1 (filhst)
+          ;
+          LD        HL,hsekhst           ;HL points to SEKHST
+          LD        DE,hhstsec           ;DE points HSTSEC
+          LD        BC,5                 ;length to move/compare in BC
+          call      strcmp               ;compare
+          JR        Z,hmatch             ;jrif same buffer, disk, track
+;nomatch:
+          LD        A,(hhstwrt)          ;match, host written?
+          OR        A                    ;
+          CALL      NZ,wrhst             ;flush pending write
+          ;
+hfilhst:  LD        HL,hsekhst           ;point at 
+          LD        DE,hhstsec           ;point to HSTSEC stuff
+          LD        BC,5                 ;count of data to move
+          LDIR                           ;set up HSTDSK
+          LD        A,(hrsflag)          ;GET RSFLAG
+          OR        A                    ;Need to read?
+          CALL      NZ,rdhst             ;rdhst
+          XOR       A                    ;0 in A
+          LD        (hhstwrt),A          ;no pending write
+          ;
+hmatch:   LD        HL,(HSecMsk)         ;get mask value in L
+          LD        A,(hseksec)          ;get SEKSEC
+          AND       L                    ;mask with L (A has sector offset)
+          LD        BC,00080H            ;sector size in BC
+          LD        HL,hdbuf             ;buffer base in HL?
+          RRA                            ;A /= 2 (transfer A:0 to Carry)
+          LD        D,A                  ;in D  (make high byte of offset)
+          LD        E,B                  ;0 in E
+          RR        E                    ;E /= 2   (rotate Carry into E:7)
+          ADD       HL,DE                ;make address of CP/M sector in HL
+          LD        DE,(hdmaadr)         ;get DMA address in DE
+          LD        A,(hreadop)          ;get READOP
+          OR        A                    ;is this a READ?
+          JR        NZ,hrwmove           ;yes, skip
+          EX        DE,HL                ;no, swap pointers
+          INC       A                    ;
+          LD        (hhstwrt),A          ;hstwrt = 1
+hrwmove:  LDIR                           ;move data to/from host buffer
+          LD        A,(hwrtype)          ;get WRTYPE
+          DEC       A                    ;bump down
+          LD        A,(herflag)          ;get erflag?
+          RET       NZ                   ;return if WRTYPE was wrall or wrual
+          OR        A                    ;was wrdir, errors?
+          RET       NZ                   ; return if errors
+          LD        (hhstwrt),A          ;no errors, mark buffer written
+          jp        wrhst                ;and go to wrhst sector...
+          ;
+          ;SCHREIBEN EINES BLOCKS
+          ;
+h_write:  call      chkhrd               ;is it our disk?
+          jp        z,write              ;no, jump to Floppy
+          ;
+          XOR       A                    ;0 in A
+          LD        (hreadop),A          ;indicate a write operation (READOP)
+          LD        A,C                  ;get the write type in A
+          LD        (hwrtype),A          ;store at WRTYP
+          CP        wrual                ;is it write to unallocated?
+          JR        NZ,hchkuna           ;no, jump over (to chkuna)
+          ;
+          LD        HL,hsekdsk           ;point to SEKDSK
+          LD        DE,hunadsk           ;set pointer to UNADSK
+          LD        BC,005H              ;count of data to move
+          LDIR                           ;copy SEKDSK --> UNADSK
+          LD        A,(HDBLM)            ;get BLM  
+          INC       A                    ;bump up by 1
+          LD        (hunacnt),A          ;set up unacnt
+hchkuna:  LD        HL,hunacnt           ;point at unacnt
+          XOR       A                    ;0 in A
+          CP        (HL)                 ;any more unallocated sectors?
+          JP        Z,alloc1             ;JRIF no more (alloc1)
+          DEC       (HL)                 ;--unacnt
+          LD        HL,hsekdsk           ;HL points to SEKDSK
+          LD        DE,hunadsk           ;point to unadsk disk data
+          LD        BC,005H              ;count of data to move/compare
+          CALL      strcmp               ;compare with SEKDSK
+          JP        NZ,alloc0            ;JRIF not same disk (alloc0)
+          ;
+          LD        HL,(hunasec)         ;get unasec
+          INC       HL                   ;bump up 1 
+          LD        (hunasec),HL         ;put it back
+          LD        DE,(DPBHD)           ;get cp/m sec/trk
+          or        a                    ;clear carry
+          sbc       hl,de                ;check for overflow
+          JR        C,noovf0             ;JRIF no overflow 
+          ;
+          ld        hl,0000              ;overflow, 0 in HL
+          LD        (hunasec),HL         ;reset unasec to 0
+          LD        HL,(hunatrk)         ;get UNATRK
+          INC       HL                   ;bump to next track
+          LD        (hunatrk),HL         ;and put it back
+noovf0:   XOR       A                    ;0 in A
+          JP        noovf1               ; and do a write
+          ;
+          ;
+;*************************************************************
+;Function:  wrhst
+;Purpose:   Do physical write to IDE drive
+;Entry:     hstdsk, hsttrk, hstdsk set up
+;Exit:      sector in hdbuf written to disk
+;Used:      all
+;
+wrhst:    call      tfset               ;set up Task File
+          ld        a,CmdWr             ;get a write command
+          out       (IdeCmd),a          ;send it to Task File
+          call      wtrdy               ;wait for data
+          otir
+          otir                          ;write 512 bytes
+          jr        chkerr              ;check for/report errors
+          ;
+;*************************************************************
+;Function:  rdhst
+;Purpose:   Do physical read of IDE drive
+;Entry:     hstdsk, hsttrk, hstdsk set up
+;Exit:      sector read into hdbuf
+;Used:      all
+;
+rdhst:    call      tfset               ;set up Task File
+rdhs1:    ld        a,CmdRd             ;get a read command
+          out       (IdeCmd),a          ;send to task file
+          call      wtrdy               ;wait for data
+          inir
+          inir                          ;read 512 bytes
+chkerr:   
+          in        a,(IdeStat)         ;get status
+          and       1                   ;check error bit
+          ld        (herflag),a          ;save as error flag
+          ret                           ;return error/no error
+          ;
+;*************************************************************
+;Function:  tfset
+;Purpose:   send host parms to IDE Task File registers
+;Entry:     hstdsk, hsttrk, hstsec set up
+;Exit:      Task file registers set up.  HL points to hdbuf,
+;             BC has count, data port address
+;
+tfset:    in        a,(IdeStat)         ;get status
+          rla                           ;BSY bit to Carry
+          jr        c,tfset             ;loop until not BUSY
+          ;
+          ld        a,1                 ;1-sector transfer
+          out       (IdeSCnt),a         ;tell IDE drive
+          ld        a,(hhstsec)          ;get host sector number
+          inc       a                   ;bump up to 1
+          out       (IdeSNum),a         ;send to Task File
+          ld        hl,(hhsttrk)         ;get host track
+          ld        a,l                 ;get low order byte
+          out       (IdeCLo),a          ;send to Task File
+          ld        a,h                 ;get high-order byte
+          out       (IdeCHi),a          ;send to task file
+          ld        a,(hhstdsk)          ;get host disk number
+          ld        c,a                 ;put in c
+          call      mkesel              ;get the select data in A
+          out       (IdeSDH),a          ;send to drive!
+          ;
+          ld        hl,hdbuf            ;HL points to host buffer
+          ld        bc,IdeDat           ;BC has count, port
+          ret                           ;and go back
+          ;         
+;*************************************************************
+;Function:  chkhrd
+;Purpose:   check if disk operation is for hard disk or floppy
+;Entry:     "ourdisk" is set for hard disk, clear for floppy
+;Exit:      Z set if floppy operation, clear if hard disk
+;Uses:      AF
+;
+chkhrd:   ld        a,(hdisk)           ;is it our disk?
+          or        a                   ;set flagz
+          ret                           ;and done
+          ;
+;*************************************************************
+;Function:  wtrdy
+;Purpose:   Wait until data available or ready for data
+;Entry:     None
+;Exit:      None
+;Uses:      AF
+;
+Wtrdy:    in        a,(IdeCmd)
+          bit       3,a
+          jr        z,wtrdy
+          ret
+          ;
+;*************************************************************
+;Function:  strcmp
+;Purpose:   Compare two strings [(SEK|UNA|HST)TRK]
+;Entry:     HL, DE have addresses of strings, BC = length
+;Exit:        Z set if strings are the same, clear if different
+;                   P/V flag clear if entire string checked
+;Uses:        AF, BC, DE, HL
+;
+strcmp:
+          LD        A,(DE)              ;get a byte from (DE)
+          CPI                           ;compare A-(HL++), BC--
+          RET       NZ                  ;return if no match
+          RET       PO                  ;return if string exhausted
+          INC       DE                  ;else bump to next source byte
+          JR        strcmp              ;and repeat comparison

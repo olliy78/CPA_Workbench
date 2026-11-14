@@ -1,0 +1,1 @@
+GIDE-CP/A fuer A5120/K8924 (Klaus Wilfling, Stand 31.07.2025): GIDE-Treiber + RTC im BIOS, Farb-BWS (Heiko Poppe) oder K7024, bootet von Diskette oder (mit Urlader K2526UL4) von der GIDE-Platte

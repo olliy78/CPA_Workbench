@@ -1,0 +1,310 @@
+;BIOSGIPB.MAC
+;---------------------------------------
+;
+;BIOS Erweiterung mit GIDE
+;Tabellen
+;DPH DPB für GIDE
+;
+;---------------------------------------
+;original Quellen Timann Reh, Heiko Poppe
+;---------------------------------------
+;
+; 30.11.2018 Klaus Wilfling
+; - Anpassungen an CP/A 
+;
+; 22.12.2018 Klaus Wilfling
+; - DIRBF war doppelt, DIRBUF von Floppy wird jetzt benutzt
+; - kleine Korrekturen
+; - Ergaenzung zur Auswahl der Anzahl (1-8) GIDE-LW
+; - Ergaenzung zur Auswahl der Anzahl (1-4) Floppy-LW
+; 
+; 31.07.2025
+; - bei 1 Floppy Laufwerk soll das erste GIDE-LW mind. C: oder größer sein
+;   (B: wird dann auch zu A:)
+;--------------------------------------- 
+;
+;lwtab -- array of select values for mapping the disk number
+;         passed to SELDSK to either the floppy-disk bios or the
+;         hard disk bios--selecting which disk to use.
+;
+;         00-0F = Disk im BIOS installiert
+;         A0-AF = Master IDE drive
+;         B0-BF = Slave IDE drive
+;         FF    = Laufwerk nicht installiert
+;
+;if anzdisk eq 1   ;bei 1 Floppy-Laufwerk
+;lwtab:    db      0                   ;A: = 1. Floppy
+;          db      0A0h                ;B: = 1. IDE Disk (Kopf 0)
+;          db      0A1h                ;C: = 2. IDE DIsk (Kopf 1)
+;          db      0A2h                ;D: = 3. IDE Disk (Kopf 2)
+;          db      0A3h                ;E: = 4. IDE Disk (Kopf 3)
+;          db      0A4h                ;F: = 5. IDE Disk (Kopf 4)
+;          db      0A5h                ;G: = 6. IDE Disk (Kopf 5)
+;          db      0A6h                ;H: = 7. IDE Disk (Kopf 6)
+;          db      0A7h                ;I: = 8. IDE Disk (Kopf 7)
+;          db			 0ffh								 ;J: = FFh kein Laufwerk
+;          db      0ffh                ;K: ...
+;          db      0ffh                ;L: ...
+;          db      0ffh                ;M: ...
+;          db      0ffh                ;N: ...
+;          db      0ffh                ;O: ...
+;          db			 0ffh								 ;P: ...
+;endif   
+
+if anzdisk eq 1   ;bei 1 Floppy-Laufwerk
+lwtab:    db      0                   ;A: = 1. Floppy
+          db      0ffh                ;B: = FFh kein Laufwerk
+          db      0A0h                ;C: = 1. IDE Disk (Kopf 0)
+          db      0A1h                ;D: = 2. IDE DIsk (Kopf 1)
+          db      0A2h                ;E: = 3. IDE Disk (Kopf 2)
+          db      0A3h                ;F: = 4. IDE Disk (Kopf 3)
+          db      0A4h                ;G: = 5. IDE Disk (Kopf 4)
+          db      0A5h                ;H: = 6. IDE Disk (Kopf 5)
+          db      0A6h                ;I: = 7. IDE Disk (Kopf 6)
+          db      0A7h                ;J: = 8. IDE Disk (Kopf 7)
+          db      0ffh                ;K: = FFh kein Laufwerk
+          db      0ffh                ;L: ...
+          db      0ffh                ;M: ...
+          db      0ffh                ;N: ...
+          db      0ffh                ;O: ...  
+          db      0ffh								;P: ...
+endif               
+if anzdisk eq 2   ;bei 2 Floppy-Laufwerken
+lwtab:    db      0                   ;A: = 1. Floppy
+          db      1                   ;B: = 2. Floppy
+          db      0A0h                ;C: = 1. IDE Disk (Kopf 0)
+          db      0A1h                ;D: = 2. IDE DIsk (Kopf 1)
+          db      0A2h                ;E: = 3. IDE Disk (Kopf 2)
+          db      0A3h                ;F: = 4. IDE Disk (Kopf 3)
+          db      0A4h                ;G: = 5. IDE Disk (Kopf 4)
+          db      0A5h                ;H: = 6. IDE Disk (Kopf 5)
+          db      0A6h                ;I: = 7. IDE Disk (Kopf 6)
+          db      0A7h                ;J: = 8. IDE Disk (Kopf 7)
+          db      0ffh                ;K: = FFh kein Laufwerk
+          db      0ffh                ;L: ...
+          db      0ffh                ;M: ...
+          db      0ffh                ;N: ...
+          db      0ffh                ;O: ...  
+          db      0ffh								;P: ...
+endif               
+if anzdisk eq 3   ;bei 3 Floppy-Laufwerken
+  lwtab:  db      0                   ;A: = 1. Floppy
+          db      1                   ;B: = 2. Floppy
+          db      2										;C: = 3. Floppy	
+          db      0A0h                ;D: = 1. IDE Disk (Kopf 0)
+          db      0A1h                ;E: = 2. IDE DIsk (Kopf 1)
+          db      0A2h                ;F: = 3. IDE Disk (Kopf 2)
+          db      0A3h                ;G: = 4. IDE Disk (Kopf 3)
+          db      0A4h                ;H: = 5. IDE Disk (Kopf 4)
+          db      0A5h                ;I: = 6. IDE Disk (Kopf 5)
+          db      0A6h                ;J: = 7. IDE Disk (Kopf 6) 
+          db      0A7h                ;K: = 8. IDE Disk (Kopf 7)
+          db      0ffh                ;L: = FFh kein Laufwerk
+          db      0ffh                ;M: ...
+          db      0ffh                ;N: ...
+          db      0ffh                ;O: ...
+          db      0ffh                ;P: ...
+endif          
+if anzdisk eq 4   ;bei 4 Floppy-Laufwerken
+  lwtab:  db      0                   ;A: = 1. Floppy
+          db      1                   ;B: = 2. Floppy
+          db      2										;C: = 3. Floppy	
+          db      3                		;D: = 4. Floppy
+          db      0A0h                ;E: = 1. IDE DIsk (Kopf 1)
+          db      0A1h                ;F: = 2. IDE Disk (Kopf 2)
+          db      0A2h                ;G: = 3. IDE Disk (Kopf 3)
+          db      0A3h                ;H: = 4. IDE Disk (Kopf 4)
+          db      0A4h                ;I: = 5. IDE Disk (Kopf 5)
+          db      0A5h                ;J: = 6. IDE Disk (Kopf 6) 
+          db      0A6h                ;K: = 7. IDE Disk (Kopf 7)
+          db      0A7h                ;L: = 8. IDE Disk (Kopf 8)
+          db      0ffh                ;M: = FFh kein Laufwerk
+          db      0ffh                ;N: ...
+          db      0ffh                ;O: ...
+          db      0ffh                ;P: ...
+endif
+;
+hdisk:    ds      1         ;flag if disk operation is for us.
+;
+; DO NOT CHANGE THE ORDER OF THESE DATA AREAS!!!
+;
+hhstsec:   ds      2                   ;host sector
+hhstdsk:   ds      1                   ;host disk
+hhsttrk:   ds      2                   ;host track
+hsekhst:   ds      2                   ;host sector to seek
+hsekdsk:   ds      1                   ;disk to seek
+hsektrk:   ds      2                   ;track to seek
+hseksec:   ds      2                   ;sector to seek
+hunadsk:   ds      1                   ;unallocated disk
+hunatrk:   ds      2                   ;unallocated track
+hunasec:   ds      2                   ;unallocated sector
+hunacnt:   ds      1                   ;unallocated sector count
+hhstact:   ds      1                   ;host active flag
+hhstwrt:   ds      1                   ;host written flag
+herflag:   ds      1                   ;error reporting flag
+hrsflag:   ds      1                   ;read sector flag
+hreadop:   db      0
+hwrtype:   db      0
+hdmaadr:   dw      0
+          ;
+;-------------------------------------------------------------
+; DPH und DPB GIDE
+;-------------------------------------------------------------
+          ;
+          ;DPH fuer IDE-Laufwerke
+          ;
+HDPBASE:
+HDPH0:    dw      0000                ;XLT0
+          dw      0000
+          dw      0000, 0000          ;scratch
+          dw      DIRBUF
+          dw      DPBHD0
+          dw      CSV0
+          dw      ALV0
+          ;
+if anzgide gt 1          
+HDPH1:    dw      0000                ;XLT1
+          dw      0000
+          dw      0000, 0000          ;scratch
+          dw      DIRBUF
+          dw      DPBHD
+          dw      CSV1
+          dw      ALV1
+endif          
+          ;
+if anzgide gt 2                
+HDPH2:    dw      0000                ;XLT2
+          dw      0000
+          dw      0000, 0000          ;scratch
+          dw      DIRBUF
+          dw      DPBHD
+          dw      CSV2
+          dw      ALV2
+endif          
+          ;
+if anzgide gt 3       
+HDPH3:    dw      0000                ;XLT3
+          dw      0000
+          dw      0000, 0000          ;scratch
+          dw      DIRBUF
+          dw      DPBHD
+          dw      CSV3
+          dw      ALV3
+endif          
+          ;
+if anzgide gt 4      
+HDPH4:    dw      0000                ;XLT4
+          dw      0000
+          dw      0000, 0000          ;scratch
+          dw      DIRBUF
+          dw      DPBHD
+          dw      CSV4
+          dw      ALV4
+endif          
+					;
+if anzgide gt 5      
+HDPH5:    dw      0000                ;XLT5
+          dw      0000
+          dw      0000, 0000          ;scratch
+          dw      DIRBUF
+          dw      DPBHD
+          dw      CSV5
+          dw      ALV5
+endif
+          ;
+if anzgide gt 6                
+HDPH6:		dw			0000								;XLT6
+					dw			0000
+					dw			0000, 0000					;scratch
+					dw			DIRBUF
+					dw			DPBHD
+					dw			CSV6
+					dw			ALV6
+endif					
+					;
+if anzgide gt 7      
+HDPH7:		dw			0000								;XLT7
+					dw			0000
+					dw			0000, 0000					;scratch
+					dw			DIRBUF
+					dw			DPBHD
+					dw			CSV7
+					dw			ALV7          
+endif					
+          ;
+          ;Host Parameters for 64MB IDE drive...
+          ;
+HSecMsk:   db      3                   ;512/128 - 1
+HSecshf:   db      2                   ;log_2(512/128)
+          ;
+          ;Disk Parameter Block fuer 8MB Laufwerke mit 8 kB Bloecken
+          ;Erster DPB fuer erstes LW mit 2 Systemspuren
+          ;
+DPBHD0:   dw      128       ;SPT 2    ;32x4 CP/M Sectors/track (128 Byte)
+          db      6         ;BSH 1    ;Block Shift Factor (Anz. 128 Byte je Block, 2_log)
+          db      63        ;BLM 1    ;Block Mask
+          db      3         ;EXM 1    ;Extent Mask
+          dw      3E3h      ;DSM 2    ;996 blocks
+          dw      3FFh      ;DRM 2    ;1024 directory entries
+          dw      0FFh      ;ALL 2    ;8 blocks of directory !!!
+          dw      0         ;CKS 2    ;Check Area Size (0 for HDD)
+          dw      2         ;OFF 2    ;2 tracks offset (2 Systemspuren)
+          ;
+          ;Zweiter DPB fuer weitere LW ohne Systemspuren
+          ;
+DPBHD:    dw      128       ;SPT 2    ;32x4 CP/M Sectors/track (128 Byte)
+          db      6         ;BSH 1    ;Block Shift Factor (Anz. 128 Byte je Block, 2_log)
+HDBLM:    db      63        ;BLM 1    ;Block Mask
+          db      3         ;EXM 1    ;Extent Mask
+          dw      3E7h      ;DSM 2    ;1000 blocks        (500 Zylinder/Sektoren)
+          dw      3FFh      ;DRM 2    ;1024 directory entries
+          dw      0FFh      ;ALL 2    ;8 blocks of directory !!!
+          dw      0         ;CKS 2    ;Check Area Size (0 for HDD)
+          dw      0         ;OFF 2    ;2 tracks offset
+          ;
+          defm 'CSV+ALV'
+          ;
+CSV0:     db      0
+ALV0:     ds      128
+          ;
+if anzgide gt 1      
+CSV1:     db      0
+ALV1:     ds      128
+endif
+          ;
+if anzgide gt 2      
+CSV2:     db      0
+ALV2:     ds      128
+endif
+          ;
+if anzgide gt 3   
+CSV3:     db      0
+ALV3:     ds      128
+endif
+          ;
+if anzgide gt 4   
+CSV4:     db      0
+ALV4:     ds      128
+endif
+          ;
+if anzgide gt 5   
+CSV5:     db      0
+ALV5:     ds      128
+endif
+          ;
+if anzgide gt 6             
+CSV6:			db		 	0
+ALV6:			ds			128
+endif
+					;
+if anzgide gt 7   
+CSV7:			db		 	0
+ALV7:			ds			128
+endif 
+          ;
+DMA:      DW      80H
+          ;
+          ;HD-BUFFER 512 Byte
+          ;
+hdbuf:    DS      512       ;Lesepuffer HDD
+          ;
